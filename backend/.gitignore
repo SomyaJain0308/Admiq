@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+
+.DS_Store
+.vscode/
+*.swp
+EOF
