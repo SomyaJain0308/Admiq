@@ -4,6 +4,7 @@ DROP TABLE IF EXISTS messages CASCADE;
 DROP TABLE IF EXISTS documents CASCADE;
 DROP TABLE IF EXISTS whatsapp_numbers CASCADE;
 DROP TABLE IF EXISTS students CASCADE;
+DROP TABLE IF EXISTS staff_colleges CASCADE;
 DROP TABLE IF EXISTS college_staff CASCADE;
 DROP TABLE IF EXISTS colleges CASCADE;
 
@@ -19,22 +20,30 @@ CREATE TABLE colleges (
 );
 
 CREATE TABLE whatsapp_numbers (
-    number_id        SERIAL PRIMARY KEY,
-    college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    phone_number_id  TEXT UNIQUE NOT NULL,
-    display_number   TEXT,
-    verified_at      TIMESTAMP,
-    created_at       TIMESTAMP DEFAULT NOW()
+    number_id                       SERIAL PRIMARY KEY,
+    college_id                      INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    phone_number_id                 TEXT UNIQUE NOT NULL,
+    display_number                  TEXT,
+    verified_at                     TIMESTAMP,
+    created_at                      TIMESTAMP DEFAULT NOW(),
+    whatsapp_business_account_id    TEXT NOT NULL
 );
 
 CREATE TABLE college_staff (
     staff_id        SERIAL PRIMARY KEY,
-    college_id      INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     staff_name      TEXT NOT NULL,
     staff_email     TEXT UNIQUE NOT NULL,
     hashed_password TEXT NOT NULL,
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at      TIMESTAMP DEFAULT NOW(),
+    created_at      TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE staff_colleges (
+    staff_id    INT REFERENCES college_staff(staff_id) ON DELETE CASCADE,
+    college_id  INT REFERENCES colleges(college_id) ON DELETE CASCADE,
+    created_at  TIMESTAMP DEFAULT NOW(),
+
+    PRIMARY KEY (staff_id, college_id),
     UNIQUE (college_id, staff_id)
 );
 
@@ -42,28 +51,37 @@ CREATE TABLE students (
     student_id       SERIAL PRIMARY KEY,
     college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     student_phone    TEXT NOT NULL,
+    whatsapp_user_id TEXT NOT NULL,
     student_name     TEXT,
     course_interest  TEXT,
-    academic_scores  JSONB,
+    academic_scores  JSONB,  -- e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
     summary          TEXT,
-    student_status   TEXT DEFAULT 'new' CHECK (student_status IN ('new', 'contacted', 'interested', 'enrolled', 'not_interested')),
+    student_status   TEXT DEFAULT 'new' CHECK (student_status IN ('new', 'contacted', 'interested', 'enrolled', 'not_interested')), -- Add more later if required
     assigned_to      INT,
     internal_notes   TEXT,
     created_at       TIMESTAMP DEFAULT NOW(),
+
     UNIQUE (college_id, student_phone),
     UNIQUE (college_id, student_id),
-    FOREIGN KEY (college_id, assigned_to) REFERENCES college_staff(college_id, staff_id)
+    UNIQUE (college_id, whatsapp_user_id),
+    FOREIGN KEY (college_id, assigned_to) REFERENCES staff_colleges(college_id, staff_id)
 );
 
 CREATE TABLE messages (
-    message_id     SERIAL PRIMARY KEY,
-    college_id     INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    student_id     INT NOT NULL,
-    messager_role  TEXT NOT NULL CHECK (messager_role IN ('student', 'assistant')),
-    content        TEXT NOT NULL,
-    sources        JSONB,
-    feedback       BOOLEAN,
-    created_at     TIMESTAMP DEFAULT NOW(),
+    message_id              SERIAL PRIMARY KEY,
+    college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    student_id              INT NOT NULL,
+    messager_role           TEXT NOT NULL CHECK (messager_role IN ('student', 'assistant')),
+    content                 TEXT NOT NULL,
+    sources                 JSONB,
+    feedback                BOOLEAN,
+    created_at              TIMESTAMP DEFAULT NOW(),
+    whatsapp_message_id     TEXT,
+    whatsapp_timestamp      TIMESTAMP,
+    message_type            TEXT NOT NULL DEFAULT 'text',
+    raw_payload             JSONB,
+
+    UNIQUE (college_id, whatsapp_message_id),
     UNIQUE (college_id, message_id),
     CHECK (feedback IS NULL OR messager_role = 'assistant'),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
@@ -81,8 +99,9 @@ CREATE TABLE documents (
     error             TEXT,
     uploaded_by       INT NOT NULL,
     created_at        TIMESTAMP DEFAULT NOW(),
+
     UNIQUE (college_id, document_id),
-    FOREIGN KEY (college_id, uploaded_by) REFERENCES college_staff(college_id, staff_id)
+    FOREIGN KEY (college_id, uploaded_by) REFERENCES staff_colleges(college_id, staff_id)
 );
 
 CREATE TABLE low_confidence_queries (
@@ -90,17 +109,19 @@ CREATE TABLE low_confidence_queries (
     college_id           INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     student_id           INT NOT NULL,
     question_message_id  INT NOT NULL,
-    answer_message_id    INT NOT NULL UNIQUE,
+    answer_message_id    INT NOT NULL,
     similarity_score     NUMERIC(5,4),
     resolved             BOOLEAN DEFAULT FALSE,
     resolved_by          INT,
     resolved_at          TIMESTAMP,
     flagged_at           TIMESTAMP DEFAULT NOW(),
+
     UNIQUE (college_id, query_id),
+    UNIQUE (college_id, answer_message_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE,
     FOREIGN KEY (college_id, question_message_id) REFERENCES messages(college_id, message_id) ON DELETE CASCADE,
     FOREIGN KEY (college_id, answer_message_id) REFERENCES messages(college_id, message_id) ON DELETE CASCADE,
-    FOREIGN KEY (college_id, resolved_by) REFERENCES college_staff(college_id, staff_id)
+    FOREIGN KEY (college_id, resolved_by) REFERENCES staff_colleges(college_id, staff_id)
 );
 
 CREATE TABLE chunks (
@@ -149,3 +170,5 @@ CREATE INDEX ON messages (college_id, created_at);
 CREATE INDEX ON low_confidence_queries (college_id, resolved);
 CREATE INDEX ON low_confidence_queries (student_id);
 CREATE INDEX ON whatsapp_numbers (college_id);
+CREATE INDEX ON staff_colleges (college_id);
+CREATE INDEX ON staff_colleges (staff_id);
