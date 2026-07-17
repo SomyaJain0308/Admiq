@@ -1,6 +1,6 @@
 from typing import List
 from langchain_core.documents import Document
-from rag.vectordb import similarity_search
+from backend.rag.vectordb import similarity_search
 
 SYSTEM_PROMPT = """You are a study assistant for college students in India. You answer \
 questions using ONLY the context provided below, which comes from documents the institution has \
@@ -25,9 +25,9 @@ Context:
 """
 
 
-def retrieve_context(query: str, k: int = 4) -> List[Document]:
+def retrieve_context(db, query: str, college_id, k: int = 4) -> List[Document]:
     # Semantic search over pgvector. Returns the top-k most relevant chunks.
-    return similarity_search(query, k=k)
+    return similarity_search(db, college_id=college_id, query=query, k=k)
 
 
 def format_context(documents: List[Document]) -> str:
@@ -43,10 +43,7 @@ def format_context(documents: List[Document]) -> str:
     return "\n\n---\n\n".join(blocks)
 
 
-def build_system_prompt(query: str, k: int = 4) -> tuple[str, List[Document]]:
-    """One-shot helper: retrieves + formats + fills the prompt template.
-    Returns (system_prompt, retrieved_documents) — keep the documents around
-    so you can report sources back to the frontend alongside the answer."""
-    documents = retrieve_context(query, k=k)
+def build_system_prompt(db, query: str, college_id: int, k: int = 4) -> tuple[str, List[Document]]:
+    documents = retrieve_context(db, query=query, college_id=college_id, k=k)
     context = format_context(documents)
     return SYSTEM_PROMPT.format(context=context), documents

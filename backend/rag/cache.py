@@ -17,8 +17,8 @@ class ResponseCache:
         normalized = str(query).lower().strip() # "What is the Fee?" & "   What is the fee?   " should be considered same
         return hashlib.sha256(normalized.encode()).hexdigest() # encode: text -> bytes, hashlib.sha256: passes bytes to sha256 (hashed), hexdigest: hash -> text SOLVES SECURITY AND SPEED
     
-    def get(self, query: str) -> Optional[str]:
-        key = self._make_key(query)
+    def get(self, cache_input: str) -> Optional[str]:
+        key = self._make_key(cache_input)
 
         if key in self._cache:
             entry = self._cache[key]
@@ -31,12 +31,12 @@ class ResponseCache:
         self._misses += 1 
         return None
         
-    def set(self, query: str, response: str) -> None: # Cache a Response
-        key = self._make_key(query)
+    def set(self, cache_input: str, response: str) -> None: # Cache a Response
+        key = self._make_key(cache_input)
         self._cache[key] = {
             "response": response,
             "timestamp": time.time(),
-            "query": query,
+            "query": cache_input,
         }
 
     @property

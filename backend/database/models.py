@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from database.database import Base
+from backend.database.database import Base
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Integer, Numeric, UniqueConstraint, func, Text

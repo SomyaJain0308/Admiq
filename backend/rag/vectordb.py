@@ -1,70 +1,55 @@
-import os
-import logging
-from typing import List, Optional
-from dotenv import load_dotenv
-from rag.chunking import get_embeddings
-
-from langchain_core.documents import Document
-from langchain_postgres import PGEngine, PGVectorStore
-
-load_dotenv()
+from backend.rag.chunking import get_embeddings
+from sqlalchemy import select
+from langchain_core.documents import Document as LangChainDocument
+from backend.database import models
 
 
-logger = logging.getLogger("vector_store")
-
-VECTOR_SIZE = 768
-TABLE_NAME = "document_chunks"
-
-CONNECTION_STRING = os.getenv("DATABASE_URL")
-
-_engine: Optional[PGEngine] = None
-_vector_store: Optional[PGVectorStore] = None
-
-
-
-def get_engine() -> PGEngine:
-    global _engine
-    if _engine is None:
-        _engine = PGEngine.from_connection_string(url=CONNECTION_STRING)
-    return _engine
-
-
-def init_vector_store_table():
-    # Run this ONCE (e.g. a setup script) before your app goes live — creates the Postgres table with the right schema for this embedding size. Safe to call again later — if the table already exists, this just logs that and moves on instead of crashing.
-    engine = get_engine()
-    try:
-        engine.init_vectorstore_table(
-            table_name=TABLE_NAME,
-            vector_size=VECTOR_SIZE,
-        )
-        logger.info(f"Vector store table '{TABLE_NAME}' created.")
-    except Exception as e:
-        if "already exists" in str(e).lower():
-            logger.info(f"Vector store table '{TABLE_NAME}' already exists — skipping.")
-        else:
-            raise
-
-def get_vector_store() -> PGVectorStore:
-    global _vector_store
-    if _vector_store is None:
-        _vector_store = PGVectorStore.create_sync(
-            engine=get_engine(),
-            table_name=TABLE_NAME,
-            embedding_service=get_embeddings(),
-        )
-    return _vector_store
-
-
-def add_documents(documents: List[Document]) -> List[str]:
-    """Embeds and stores chunks. Returns the generated Postgres row IDs."""
-    if not documents:
+def add_document_chunks(db, document_id, college_id, chunks: list[LangChainDocument]) -> list[models.Chunk]:
+    if not chunks:
         return []
-    store = get_vector_store()
-    return store.add_documents(documents)
+    
+    texts = [chunk.page_content for chunk in chunks]
+    embeddings = get_embeddings().embed_documents(texts)
+    
+    chunk_rows = []
+
+    for index, chunk in enumerate(chunks):
+        chunk_row = models.Chunk(
+            document_id=document_id,
+            college_id=college_id,
+            chunk_content=chunk.page_content,
+            embedding=embeddings[index],
+            chunk_index=index,
+            source_type="document",
+            source_query_id=None,
+            expires_at=None,
+        )
+        chunk_rows.append(chunk_row)
+        
+    db.add_all(chunk_rows)
+    db.commit()
+
+    for chunk_row in chunk_rows:
+        db.refresh(chunk_row)
+
+    return chunk_rows
 
 
-def similarity_search(query: str, k: int = 5) -> List[Document]:
-    """Embeds the query and returns the k most similar chunks, each with
-    its original metadata (source filename, etc) attached."""
-    store = get_vector_store()
-    return store.similarity_search(query, k=k)
+
+
+def similarity_search(db, query: str, college_id: int, k: int = 5) -> list[LangChainDocument]:
+    query_embedding = get_embeddings().embed_query(query)
+    chunks = db.execute(select(models.Chunk).where(models.Chunk.college_id == college_id).order_by(models.Chunk.embedding.cosine_distance(query_embedding)).limit(k)).scalars().all()
+    return [LangChainDocument(
+        page_content=chunk.chunk_content,
+        metadata={
+            "chunk_id": chunk.chunk_id,
+            "document_id": chunk.document_id,
+            "college_id": chunk.college_id,
+            "source_type": chunk.source_type,
+            "source_query_id": chunk.source_query_id,
+            "source": f"chunk:{chunk.chunk_id}",
+            },
+        )
+        for chunk in chunks
+    ]

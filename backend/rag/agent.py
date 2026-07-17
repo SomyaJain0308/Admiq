@@ -4,15 +4,17 @@ from langgraph.graph.message import add_messages
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langsmith import traceable
-from rag.config import get_settings
-from rag.retrieval import retrieve_context, format_context, SYSTEM_PROMPT
-from rag.checkpointer import get_checkpointer
+from backend.rag.config import get_settings
+from backend.rag.retrieval import retrieve_context, format_context, SYSTEM_PROMPT
+from backend.rag.checkpointer import get_checkpointer
 
 
 RAG_CONTEXT_MESSAGE_ID = "rag_context" # Fixed id so add_messages can overwrite it instead of stacking a new system prompt every message
 
 
 class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
+    db: object
+    college_id: int
     messages: Annotated[list[BaseMessage], add_messages]
     error: Optional[str]
     retry_count: int
@@ -77,7 +79,7 @@ class ProductionAgent:
             query = self._extract_text(latest_message.content)
 
             try:
-                documents = retrieve_context(query, k=self.retrieval_k)
+                documents = retrieve_context(state["db"], query, college_id=state["college_id"], k=self.retrieval_k)
             except Exception as e:
                 documents = []
             
@@ -171,9 +173,11 @@ class ProductionAgent:
         return graph.compile(checkpointer=self.checkpointer)
     
     @traceable(name="production_agent_invoke")
-    def invoke(self, message: str, thread_id: str = "default") -> dict:
+    def invoke(self, db, message: str, college_id: int, thread_id: str = "default") -> dict:
         result = self.graph.invoke({ # Look inside of self.graph and then invoke the graph(nodes) starting from graph = StateGraph(AgentState)
             "messages": [HumanMessage(content=message)],
+            "db": db,
+            "college_id": college_id,
             "error": None,
             "retry_count": 0,
             "model_used": "0",

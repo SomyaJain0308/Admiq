@@ -20,7 +20,9 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     max_retries: int = 3
 
-
+    # Whatsapp Webhook
+    whatsapp_verify_token: str
+    meta_app_secret: str
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

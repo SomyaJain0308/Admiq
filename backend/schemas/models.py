@@ -8,6 +8,7 @@ class ChatRequest(BaseModel):
         max_length=10000,
         description="The student's message to the llm"
     )
+    college_id: int
     thread_id: str = Field(
         default="default",
         description="Conversation thread ID"

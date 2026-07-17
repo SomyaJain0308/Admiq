@@ -1,0 +1,2 @@
+def process_student_message(db, message: str, college_id: int, thread_id: str, security, cache, agent, metrics, logger) -> dict:
+    

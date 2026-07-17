@@ -1,6 +1,7 @@
 from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+
 class Student(BaseModel):
     model_config = ConfigDict(from_attributes=True) #  Teaches Pydantic how to read data from a database object (using dot notation, like student.name) instead of just a standard dictionary (like student['name']).
     student_id: int # What we use internally to identify a student in the database.

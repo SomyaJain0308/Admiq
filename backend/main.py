@@ -1,27 +1,26 @@
-import os, shutil, uuid
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from typing import List
 
 
-from fastapi import FastAPI, Request, HTTPException, File, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Request, HTTPException, Depends, Query
+from fastapi.responses import JSONResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from langsmith import traceable
+from sqlalchemy.orm import Session
 
 
-from rag.config import get_settings
-from rag.models import (ChatRequest, ChatResponse, HealthResponse, MetricsResponse, ErrorResponse)
-from rag.security import SecurityPipeline
-from rag.cache import ResponseCache
-from rag.monitoring import get_logger, MetricsCollector, RequestTimer
-from rag.agent import ProductionAgent
-from rag.document_processor import process_uploaded_files
-from rag.chunking import chunk_markdown
-from rag.vectordb import add_documents
+from backend.database.database import get_db
+from backend.rag.config import get_settings
+from backend.rag.security import SecurityPipeline
+from backend.rag.cache import ResponseCache
+from backend.rag.monitoring import get_logger, MetricsCollector, RequestTimer
+from backend.rag.agent import ProductionAgent
+from backend.services.tenant_service import extract_whatsapp_message_events, get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message
+from backend.schemas.models import (ChatRequest, ChatResponse, HealthResponse, MetricsResponse, ErrorResponse)
+from backend.services.webhook_security import verify_meta_signature
 
 
 
@@ -82,12 +81,107 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         "detail": "Too many requests. Please slow down.",
     })
 
+    
+@app.get("/webhooks/whatsapp")
+async def verify_whatsapp_webhook(
+    hub_verify_token: str | None = Query(None, alias="hub.verify_token"),
+    hub_mode: str | None = Query(None, alias="hub.mode"),
+    hub_challenge: str | None = Query(None, alias="hub.challenge"),
+):
+    if hub_mode == "subscribe" and hub_verify_token == get_settings().whatsapp_verify_token:
+        return PlainTextResponse(hub_challenge or "")
+    
+    raise HTTPException(status_code=403, detail="Invalid verification token")
+
+
+@app.post("/webhooks/whatsapp")
+@limiter.limit(get_settings().rate_limit)
+@traceable(name="whatsapp_chat_endpoint")
+async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
+
+    raw_body = await request.body()
+    signature_header = request.headers.get("x-hub-signature-256")
+
+    if not verify_meta_signature(raw_body=raw_body, signature_header=signature_header, app_secret=get_settings().meta_app_secret):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
+    payload = await request.json()
+    events = extract_whatsapp_message_events(payload)
+
+    for event in events:
+        college_id = resolve_college_from_phone_number_id(db, event.phone_number_id)
+        student = get_or_create_student(db, college_id=college_id, student_phone=event.student_phone, whatsapp_user_id=event.whatsapp_user_id, student_name=event.student_name)
+        save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload)
+        thread_id = f"whatsapp:{college_id}:{student.student_id}"
+        security_notes = []
+        
+        # Pass user input through the Security Layer
+        with RequestTimer() as timer:
+            is_allowed, cleaned_message, notes = security.check_input(event.content)
+            security_notes.extend(notes)
+            cache_key = None
+
+            if not is_allowed:
+                logger.warning("Incoming WhatsApp message blocked by security", extra={"extra_data": {"reason": notes, "college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id,}})
+                metrics.record_request(latency_ms=timer.elapsed_ms,error=True)
+                response_text = "Sorry, I can't help with that message. It is blocked by our security filter."
+                model_used = "security_block"
+                sources = []
+            else:
+
+                # Check if Cached Response is available
+                cache_key = f"college:{college_id}:message:{cleaned_message}"
+                cached_response = cache.get(cache_key)
+                if cached_response is not None:
+                    response_text = cached_response
+                    model_used = "cache"
+                    sources = []
+                    metrics.record_request(latency_ms=timer.elapsed_ms, cache_hit=True)
+                    logger.info("Cache hit", extra={"extra_data": {"thread_id": thread_id, "college_id": college_id, "student_id": student.student_id}})
+                else:
+
+                    # If not cached Invoke langGraph agent.
+                    try:
+                        result = agent.invoke(db, cleaned_message, college_id=college_id, thread_id=thread_id)
+                        response_text = result["response"]
+                        model_used = result["model_used"]
+                        sources = result.get("sources", [])
+                    except Exception as e:
+                        logger.error(f"Agent invocation failed {e}", extra={"extra_data": {"thread_id": thread_id, "college_id": college_id, "student_id": student.student_id, "error": str(e)}})
+                        metrics.record_request(latency_ms=timer.elapsed_ms, error=True)
+                        response_text = "Sorry, I am having trouble answering right now. Please try again in a moment."
+                        model_used = "error"
+                        sources = []
+
+            response_text, output_warnings = security.check_output(response_text)
+            security_notes.extend(output_warnings)
+
+            if model_used not in ("cache", "security_block", "error") and cache_key is not None:
+                cache.set(cache_key, response_text)
+
+            if model_used not in ("cache", "security_block", "error"):
+                input_tokens = int(len(cleaned_message.split()) * 1.4)
+                output_tokens = int(len(response_text.split()) * 1.4)
+                metrics.record_request(
+                    latency_ms=timer.elapsed_ms,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cache_hit=False,
+                )
+
+            save_assistant_message(db=db, college_id=college_id, student_id=student.student_id, content=response_text, sources=sources)
+            if security_notes:
+                logger.info("Security notes", extra={"extra_data": {"notes": security_notes, "thread_id": thread_id, "college_id": college_id, "student_id": student.student_id}})
+    return {"status": "ok", "messages_processed": len(events)}
+ 
+
+                    
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 @limiter.limit(get_settings().rate_limit)
 @traceable(name="chat_endpoint")
-async def chat(request: Request, body: ChatRequest):
-    
+async def chat(request: Request, body: ChatRequest, db: Session = Depends(get_db)):    
     # Pass user input through the Security Layer
     with RequestTimer() as timer:
         security_notes = []
@@ -105,7 +199,8 @@ async def chat(request: Request, body: ChatRequest):
             )
         
     # Check if Cached Response is available
-    cached_response = cache.get(cleaned_message)
+    cache_key = f"college:{body.college_id}:message:{cleaned_message}"
+    cached_response = cache.get(cache_key)
     if cached_response is not None:
         metrics.record_request(latency_ms=0, cache_hit=True)
         logger.info("Cache hit", extra={"extra_data": {
@@ -122,7 +217,7 @@ async def chat(request: Request, body: ChatRequest):
 
     # If not cached Invoke langGraph agent. As we set the graphs in agent.py, it will automatically decide which model to use
     try:
-        result = agent.invoke(cleaned_message, thread_id=body.thread_id)
+        result = agent.invoke(db, cleaned_message, college_id=body.college_id, thread_id=body.thread_id)
     except Exception as e:
         logger.error(f"Agent invocation failed {e}", extra={"extra_data": {
             "thread_id": body.thread_id,
@@ -142,7 +237,7 @@ async def chat(request: Request, body: ChatRequest):
     security_notes.extend(output_warnings)
 
     # Cache this Request for future
-    cache.set(cleaned_message, validated_response)
+    cache.set(cache_key, validated_response)
 
     # Log and Record Metrics
     input_tokens = int(len(cleaned_message.split()) * 1.4)
@@ -176,20 +271,9 @@ async def chat(request: Request, body: ChatRequest):
 @app.get("/api/health", response_model=HealthResponse)
 async def health():
     settings = get_settings()
-
-    checks = {
-        "agent": agent is not None,
-        "security": security is not None,
-        "cache": cache is not None,
-    }
-
+    checks = {"agent": agent is not None, "security": security is not None, "cache": cache is not None}
     all_healthy = all(checks.values())
-
-    return HealthResponse(
-        status="healthy" if all_healthy else "degraded",
-        environment=settings.app_env,
-        checks=checks,
-    )
+    return HealthResponse(status="healthy" if all_healthy else "degraded", environment=settings.app_env, checks=checks)
 
 
 @app.get("/api/metrics", response_model=MetricsResponse)
@@ -201,52 +285,3 @@ async def get_metrics():
 @app.get("/api/cache/stats")
 async def cache_stats():
     return cache.stats
-
-# Get pdfs
-UPLOAD_DIR = "pdf_uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-@app.post("/api/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
-    saved_paths = []
-    for file in files:
-        file_id=str(uuid.uuid4())
-        temp_path = os.path.join(UPLOAD_DIR, f"{file_id}_{file.filename}")
-        with open(temp_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-        saved_paths.append(temp_path)
-
-    conversation_results = process_uploaded_files(saved_paths)
-
-    response = []
-    for result in conversation_results:
-        if not result["success"]:
-            response.append({
-                "filename": result["filename"],
-                "status": "failed",
-                "error": result["error"]
-            })
-            continue
-
-        chunks = chunk_markdown(
-            markdown_text=result["markdown"],
-            filename=result["filename"],
-            extra_metadata={
-                "extraction_method": result["method"],
-                "quality_score": result["quality_score"],
-            },
-        )
-
-        add_documents(chunks)
-
-        response.append({
-            "filename": result["filename"],
-            "status": "success",
-            "method": result["method"],
-            "quality_score": result["quality_score"],
-            "num_chunks": len(chunks),
-            "warnings": result["warnings"],
-        })
-    for path in saved_paths:
-        os.remove(path)
-    return {"results": response}
