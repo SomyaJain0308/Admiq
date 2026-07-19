@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # Whatsapp Webhook
     whatsapp_verify_token: str
     meta_app_secret: str
+    whatsapp_access_token: str
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

@@ -21,6 +21,7 @@ from backend.rag.agent import ProductionAgent
 from backend.services.tenant_service import extract_whatsapp_message_events, get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message
 from backend.schemas.models import (ChatRequest, ChatResponse, HealthResponse, MetricsResponse, ErrorResponse)
 from backend.services.webhook_security import verify_meta_signature
+from backend.services.whatsapp_service import send_whatsapp_text_message
 
 
 
@@ -170,6 +171,14 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                 )
 
             save_assistant_message(db=db, college_id=college_id, student_id=student.student_id, content=response_text, sources=sources)
+            send_result = send_whatsapp_text_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, message=response_text, access_token=get_settings().whatsapp_access_token)
+            if not send_result["ok"]:
+                logger.error("Failed to send Whatsapp reply", extra={"extra_data": {
+                    "college_id": college_id,
+                    "student_id": student.student_id,
+                    "whatsapp_message_id": event.whatsapp_message_id,
+                    "meta_response": send_result,
+                }})
             if security_notes:
                 logger.info("Security notes", extra={"extra_data": {"notes": security_notes, "thread_id": thread_id, "college_id": college_id, "student_id": student.student_id}})
     return {"status": "ok", "messages_processed": len(events)}
