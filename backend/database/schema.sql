@@ -7,6 +7,7 @@ DROP TABLE IF EXISTS students CASCADE;
 DROP TABLE IF EXISTS staff_colleges CASCADE;
 DROP TABLE IF EXISTS college_staff CASCADE;
 DROP TABLE IF EXISTS colleges CASCADE;
+DROP TABLE IF EXISTS student_sessions CASCADE;
 
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
@@ -67,6 +68,21 @@ CREATE TABLE students (
     FOREIGN KEY (college_id, assigned_to) REFERENCES staff_colleges(college_id, staff_id)
 );
 
+CREATE TABLE student_sessions (
+    session_id       SERIAL PRIMARY KEY,
+    college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    student_id       INT NOT NULL,
+    started_at       TIMESTAMP DEFAULT NOW(),
+    last_message_at  TIMESTAMP DEFAULT NOW(),
+    ended_at         TIMESTAMP,
+    session_status   TEXT NOT NULL DEFAULT 'active' CHECK (session_status IN ('active', 'closed')),
+    session_summary  TEXT,
+    profile_processed BOOLEAN NOT NULL DEFAULT FALSE,
+
+    UNIQUE (college_id, session_id),
+    FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
+);
+
 CREATE TABLE messages (
     message_id              SERIAL PRIMARY KEY,
     college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
@@ -80,10 +96,12 @@ CREATE TABLE messages (
     whatsapp_timestamp      TIMESTAMP,
     message_type            TEXT NOT NULL DEFAULT 'text',
     raw_payload             JSONB,
+    session_id              INT,
 
     UNIQUE (college_id, whatsapp_message_id),
     UNIQUE (college_id, message_id),
     CHECK (feedback IS NULL OR messager_role = 'assistant'),
+    FOREIGN KEY (college_id, session_id) REFERENCES student_sessions(college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
 );
 
@@ -165,6 +183,9 @@ CREATE INDEX ON chunks (document_id);
 CREATE INDEX ON documents (college_id);
 CREATE INDEX ON students (college_id);
 CREATE INDEX ON students (college_id, student_status);
+CREATE INDEX ON student_sessions (college_id, student_id, session_status);
+CREATE INDEX ON student_sessions (last_message_at);
+CREATE INDEX ON messages (college_id, session_id);
 CREATE INDEX ON messages (student_id, created_at);
 CREATE INDEX ON messages (college_id, created_at);
 CREATE INDEX ON low_confidence_queries (college_id, resolved);

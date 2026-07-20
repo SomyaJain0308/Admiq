@@ -26,7 +26,7 @@ class College(Base):
     staff_memberships: Mapped[list["StaffCollege"]] = relationship(back_populates="college", cascade="all, delete-orphan")
     messages: Mapped[list["Message"]] = relationship(back_populates="college", cascade="all, delete-orphan")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="college", cascade="all, delete-orphan")
-
+    sessions: Mapped[list["StudentSession"]] = relationship(back_populates="college", cascade="all, delete-orphan")
 
 
 class WhatsAppNumber(Base):
@@ -108,6 +108,35 @@ class Student(Base):
     messages: Mapped[list["Message"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     low_confidence_queries: Mapped[list["LowConfidenceQuery"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     assigned_staff_membership: Mapped["StaffCollege | None"] = relationship("StaffCollege", primaryjoin=("and_(Student.college_id == StaffCollege.college_id, " "Student.assigned_to == StaffCollege.staff_id)"), foreign_keys="[Student.college_id, Student.assigned_to]", viewonly=True)
+    sessions: Mapped["StudentSession"] = relationship(back_populates="students", cascade="all, delete-orphan")
+
+
+
+class StudentSession(Base):
+    __tablename__ = "student_sessions"
+
+    session_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    college_id: Mapped[int] = mapped_column(Integer, ForeignKey("colleges.college_id", ondelete="CASCADE"), nullable=False)
+    student_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, server_default=func.now())
+    last_message_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, server_default=func.now())
+    ended_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
+    session_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
+    session_summary: Mapped[str | None] = mapped_column(Text)
+    profile_processed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
+
+    student: Mapped["Student"] = relationship(back_populates="sessions")
+    college: Mapped["College"] = relationship(back_populates="sessions")
+    messages: Mapped["Message"] = relationship(back_populates="session")
+
+    __table_args__ = (
+        CheckConstraint("session_status IN ('active', 'closed')"),
+        ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
+        UniqueConstraint("college_id", "session_id"),
+        Index("ix_sessions_college_id_student_id_session_status", "college_id", "student_id", "session_status"), 
+        Index("ix_sessions_last_message_at", "last_message_at"), 
+    )
 
 
 
@@ -126,9 +155,11 @@ class Message(Base):
     whatsapp_timestamp: Mapped[datetime | None] = mapped_column(TIMESTAMP)
     message_type: Mapped[str] = mapped_column(Text, server_default="text", nullable=False)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB)
+    session_id: Mapped[int | None] = mapped_column(Integer)
 
     student: Mapped["Student"] = relationship(back_populates="messages")
     college: Mapped["College"] = relationship(back_populates="messages")
+    session: Mapped["StudentSession"] = relationship(back_populates="messages")
 
 
     __table_args__ = (
@@ -136,9 +167,11 @@ class Message(Base):
         CheckConstraint("feedback IS NULL OR messager_role = 'assistant'", name="messages_feedback_assistant_check"),
         Index("ix_messages_student_id_created_at", "student_id", "created_at"), 
         Index("ix_messages_college_id_created_at", "college_id", "created_at"),
+        Index("ix_messages_college_id_session_id", "college_id", "session_id"), 
         UniqueConstraint("college_id", "whatsapp_message_id"),
         UniqueConstraint("college_id", "message_id"),
-        ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE")
+        ForeignKeyConstraint(["college_id", "session_id"], ["student_sessions.college_id", "student_sessions.session_id"]),
+        ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
     )
 
 
