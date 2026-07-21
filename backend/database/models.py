@@ -108,7 +108,7 @@ class Student(Base):
     messages: Mapped[list["Message"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     low_confidence_queries: Mapped[list["LowConfidenceQuery"]] = relationship(back_populates="student", cascade="all, delete-orphan")
     assigned_staff_membership: Mapped["StaffCollege | None"] = relationship("StaffCollege", primaryjoin=("and_(Student.college_id == StaffCollege.college_id, " "Student.assigned_to == StaffCollege.staff_id)"), foreign_keys="[Student.college_id, Student.assigned_to]", viewonly=True)
-    sessions: Mapped["StudentSession"] = relationship(back_populates="students", cascade="all, delete-orphan")
+    sessions: Mapped[list["StudentSession"]] = relationship(back_populates="student", cascade="all, delete-orphan")
 
 
 
@@ -128,12 +128,13 @@ class StudentSession(Base):
 
     student: Mapped["Student"] = relationship(back_populates="sessions")
     college: Mapped["College"] = relationship(back_populates="sessions")
-    messages: Mapped["Message"] = relationship(back_populates="session")
+    messages: Mapped[list["Message"]] = relationship(back_populates="session")
 
     __table_args__ = (
         CheckConstraint("session_status IN ('active', 'closed')"),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
         UniqueConstraint("college_id", "session_id"),
+        Index("one_active_session_per_student", "college_id", "student_id", unique=True, postgresql_where=(session_status == "active")),
         Index("ix_sessions_college_id_student_id_session_status", "college_id", "student_id", "session_status"), 
         Index("ix_sessions_last_message_at", "last_message_at"), 
     )

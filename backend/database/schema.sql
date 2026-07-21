@@ -177,12 +177,37 @@ SELECT cron.schedule(
   $$
 );
 
+
+DO $$
+BEGIN
+    PERFORM cron.unschedule('close-expired-student-sessions');
+EXCEPTION WHEN OTHERS THEN
+    NULL;
+END;
+$$;
+
+SELECT cron.schedule(
+  'close-expired-student-sessions',
+  '*/5 * * * *',
+  $$
+  UPDATE student_sessions
+  SET
+    session_status = 'closed',
+    ended_at = NOW()
+  WHERE session_status = 'active'
+    AND last_message_at <= NOW() - INTERVAL '30 minutes';
+  $$
+);
+
+
+
 CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX ON chunks (college_id);
 CREATE INDEX ON chunks (document_id);
 CREATE INDEX ON documents (college_id);
 CREATE INDEX ON students (college_id);
 CREATE INDEX ON students (college_id, student_status);
+CREATE UNIQUE INDEX one_active_session_per_student ON student_sessions (college_id, student_id) WHERE session_status = 'active';
 CREATE INDEX ON student_sessions (college_id, student_id, session_status);
 CREATE INDEX ON student_sessions (last_message_at);
 CREATE INDEX ON messages (college_id, session_id);

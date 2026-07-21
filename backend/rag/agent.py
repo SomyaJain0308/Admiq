@@ -1,25 +1,14 @@
-from typing import Optional, TypedDict, Annotated, List
 from langgraph.graph import StateGraph, START, END
-from langgraph.graph.message import add_messages
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, AIMessage, BaseMessage, SystemMessage
 from langsmith import traceable
 from backend.rag.config import get_settings
 from backend.rag.retrieval import retrieve_context, format_context, SYSTEM_PROMPT
 from backend.rag.checkpointer import get_checkpointer
-
+from backend.schemas.models import AgentState, AgentTurnOutput
+import json
 
 RAG_CONTEXT_MESSAGE_ID = "rag_context" # Fixed id so add_messages can overwrite it instead of stacking a new system prompt every message
-
-
-class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
-    db: object
-    college_id: int
-    messages: Annotated[list[BaseMessage], add_messages]
-    error: Optional[str]
-    retry_count: int
-    model_used: str
-    sources: List[str]
 
 
 
@@ -46,6 +35,17 @@ class ProductionAgent:
             api_key=settings.gemini_api_key, # IN PRODUCTION CHANGE TO ANOTHER MODEL
         )
     
+    @staticmethod
+    def _parse_turn_output(text: str) -> AgentTurnOutput:
+        try:
+            data = json.loads(text)
+            return AgentTurnOutput(**data)
+        except Exception:
+            return AgentTurnOutput(
+                reply=text,
+                updated_session_summary="",
+            )
+
     @staticmethod
     def _extract_text(content) -> str:
         if isinstance(content, str):
@@ -84,8 +84,7 @@ class ProductionAgent:
                 documents = []
             
             context = format_context(documents)
-            system_content = SYSTEM_PROMPT.format(context=context)
-
+            system_content = SYSTEM_PROMPT.format(student_summary=state.get("student_summary") or "No long-term student summary yet.", session_summary=state.get("session_summary") or "No current session summary yet.", context=context)
             sources = [] # If two chunks have the same source don't mention the source more than once
             for doc in documents:
                 source = doc.metadata.get("source")
@@ -173,7 +172,7 @@ class ProductionAgent:
         return graph.compile(checkpointer=self.checkpointer)
     
     @traceable(name="production_agent_invoke")
-    def invoke(self, db, message: str, college_id: int, thread_id: str = "default") -> dict:
+    def invoke(self, db, message: str, college_id: int, thread_id: str = "default", student_summary: str | None = None, session_summary: str | None = None) -> dict:
         result = self.graph.invoke({ # Look inside of self.graph and then invoke the graph(nodes) starting from graph = StateGraph(AgentState)
             "messages": [HumanMessage(content=message)],
             "db": db,
@@ -182,12 +181,18 @@ class ProductionAgent:
             "retry_count": 0,
             "model_used": "0",
             "sources": [],
+            "student_summary": student_summary,
+            "session_summary": session_summary,
         },
         config={"configurable": {"thread_id": thread_id}}
         )
 
+        raw_response = self._extract_text(result["messages"][-1].content)
+        parsed = self._parse_turn_output(raw_response)
+
         return {
-            "response": self._extract_text(result["messages"][-1].content),
+            "response": parsed.reply,
+            "updated_session_summary": parsed.updated_session_summary,
             "model_used": result.get("model_used", "unknown"),
             "error": result.get("error"),
             "sources": result.get("sources", []),

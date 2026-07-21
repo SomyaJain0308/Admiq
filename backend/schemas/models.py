@@ -1,5 +1,26 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
+from typing import Optional, TypedDict, Annotated, List
+from langgraph.graph.message import add_messages
+from langchain_core.message import BaseMessage
+
+
+class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
+    db: object
+    college_id: int
+    messages: Annotated[list[BaseMessage], add_messages]
+    error: Optional[str]
+    retry_count: int
+    model_used: str
+    sources: List[str]
+    student_summary: str | None
+    session_summary: str | None
+
+
+class AgentTurnOutput(BaseModel):
+    reply: str
+    updated_session_summary: str
+
 
 class ChatRequest(BaseModel):
     message: str = Field(
@@ -34,7 +55,6 @@ class MetricsResponse(BaseModel):
     total_errors: int
     error_rate: str
     avg_latency_ms: float
-    cache_hit_rate: str
     total_input_tokens: int
     total_output_tokens: int
 

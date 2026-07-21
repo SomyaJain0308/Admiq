@@ -56,7 +56,7 @@ def get_or_create_student(db, college_id, student_phone, whatsapp_user_id, stude
 
 
 
-def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload) -> models.Message:
+def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload, session_id: int | None = None) -> models.Message:
     message = db.execute(select(models.Message).where(models.Message.college_id == college_id, models.Message.whatsapp_message_id == whatsapp_message_id)).scalars().first()
 
     if message is not None:
@@ -65,6 +65,7 @@ def save_inbound_message(db, college_id, student_id, whatsapp_message_id, conten
     new_message = models.Message(
         college_id=college_id,
         student_id=student_id,
+        session_id=session_id,
         messager_role="student",
         whatsapp_message_id=whatsapp_message_id,
         content=content,
@@ -108,10 +109,11 @@ def extract_whatsapp_message_events(payload) -> list[InboundWhatsAppMessage]:
     
     return [event]    
 
-def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None) -> models.Message:
+def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> models.Message:
     message = models.Message(
         college_id=college_id,
         student_id=student_id,
+        session_id=session_id,
         messager_role="assistant",
         content=content,
         sources={"sources": sources or []},

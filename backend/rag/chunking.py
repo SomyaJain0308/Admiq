@@ -40,7 +40,4 @@ def chunk_markdown(markdown_text: str, filename: str, extra_metadata: Dict = Non
 
 
 def get_embeddings() -> GoogleGenerativeAIEmbeddings:
-    return GoogleGenerativeAIEmbeddings(
-        model=EMBEDDING_MODEL,
-        output_dimensionality=VECTOR_SIZE,
-    )
+    return GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL, output_dimensionality=VECTOR_SIZE)
