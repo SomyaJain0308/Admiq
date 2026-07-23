@@ -1,5 +1,5 @@
 from backend.database import models
-from backend.schemas.whatsapp import InboundWhatsAppMessage
+from backend.schemas.models import InboundWhatsAppMessage
 from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy import select

@@ -18,7 +18,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     rate_limit: str = "20/minute"
     cache_ttl_seconds: int = 300
-    max_retries: int = 3
+    max_primary_retries: int = 2
+    max_fallback_retries: int = 2
+    session_token_budget: int = 100000
 
     # Whatsapp Webhook
     whatsapp_verify_token: str

@@ -1,9 +1,18 @@
-from typing import List
-from langchain_core.documents import Document
-from backend.rag.vectordb import similarity_search
+from sqlalchemy import select
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from backend.database import models
+import logging
+import time
+from langsmith import traceable
+
+
+
+logger = logging.getLogger(__name__)
+
+
 
 SYSTEM_PROMPT = """
-You are Admiq, the WhatsApp pre-admission automation assistant for an Indian private college.
+You are Admiq, the WhatsApp pre-admission automation assistant for {college_name} Indian college.
 
 Your job is to help prospective students move through the pre-admission cycle:
 - understand courses, fees, eligibility, scholarships, placements, hostel, documents, deadlines, and next steps
@@ -11,7 +20,7 @@ Your job is to help prospective students move through the pre-admission cycle:
 - guide the student one small step closer to admission readiness
 - make the college look strong using only supported facts
 
-Conversation memory:
+
 Long-term student summary:
 {student_summary}
 
@@ -19,7 +28,18 @@ Current session summary:
 {session_summary}
 
 Official college context:
-{context}
+{college_context}
+(Core Mission: Highlight the college's strengths and advantages enthusiastically to build a positive and welcoming image.Handling Negative FeedbackNever volunteer disadvantages: Do not bring up any flaws, complaints, or weaknesses on your own.Acknowledge without agreeing: If a student brings up a specific disadvantage, do not validate it ("Yes, that is true") or flatly reject it ("No, that is completely false").Pivot to strengths: Gently shift the conversation toward a related advantage to counter the negative point. This should feel like a natural conversation, not an argument.💡 Examples in ActionStudent: "I heard the campus is located far away from the city center."Assistant response: "Our campus offers a peaceful, self-contained environment that is perfect for focusing on your studies. Plus, we provide free daily shuttle services to the city center, giving you the best of both worlds."Student: "Your tuition fees seem higher than other colleges."Assistant response: "We invest heavily in our students' futures. That investment goes directly into our state-of-the-art labs, top-tier faculty, and a robust career services department that boasts a x% job placement rate.(obv replace x with the og number from the context if that is an advantage of the clg.)")
+
+Previous Assistant reply for Context:
+{previous_assistant_message}
+
+Student Query:
+{query}
+
+Relevant College Documents:
+{relevant_documents}
+
 
 Rules:
 1. Answer the student's direct question first.
@@ -46,13 +66,8 @@ Bad behavior:
 - Do not say "according to the context" or "based on the documents."
 - Do not mention internal summaries, chunks, sources, or retrieval.
 
-You must respond as valid JSON only.
-
-Return exactly this shape:
-{
-  "reply": "The WhatsApp message to send to the student.",
-  "updated_session_summary": "A concise updated summary of the current active session."
-}
+You will produce two fields: "response" (the WhatsApp message to send to the student) and
+"updated_session_summary" (a concise updated summary of the current active session).
 
 Rules for updated_session_summary:
 - Use the previous current session summary plus the latest student message and your reply.
@@ -60,30 +75,71 @@ Rules for updated_session_summary:
 - Do not include small talk.
 - Do not include information that was not stated or strongly implied.
 
-The reply field is the only text the student will see.
+The response field is the only text the student will see.
 The updated_session_summary field is internal and must not be mentioned to the student.
 """
 
 
-def retrieve_context(db, query: str, college_id, k: int = 4) -> List[Document]:
-    # Semantic search over pgvector. Returns the top-k most relevant chunks.
-    return similarity_search(db, college_id=college_id, query=query, k=k)
 
-
-def format_context(documents: List[Document]) -> str:
-    # Turns retrieved chunks into a labeled block the LLM can cite from.
-    if not documents:
-        return "(No relevant documents were found for this query.)"
-
+@traceable(name="embed_and_retrieve_chunks", run_type="retriever")
+def get_relevant_documents(db, query: str, college_id: int, k: int = 5) -> str:
+    start = time.perf_counter()
+    try:
+        query_embedding = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", output_dimensionality=768).embed_query(query)
+    except Exception as e:
+        logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
+        raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.
+    try:
+        chunks = db.execute(select(models.Chunk).where(models.Chunk.college_id == college_id).order_by(models.Chunk.embedding.cosine_distance(query_embedding)).limit(k)).scalars().all()
+    except Exception as e:
+        logger.error("chunk retrieval query failed college_id=%s k=%s error=%s", college_id, k, e, exc_info=True)
+        raise
+    elapsed = time.perf_counter() - start
+    if not chunks:
+        logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], elapsed * 1000)
+        return "No relevant documents were found for this query."
     blocks = []
-    for doc in documents:
-        source = doc.metadata.get("source", "unknown file")
-        blocks.append(f"[Source: {source}]\n{doc.page_content}")
+    for chunk in chunks:
+        try:
+            if chunk.source_type == "document":
+                source = chunk.document.filename
+            else:
+                source = chunk.source_query.query_text if chunk.source_query else "Staff answer"
+        except Exception as e:
+            logger.warning("Skipping chunk with unresolved source college_id=%s chunk_id=%s error=%s", college_id, getattr(chunk, "chunk_id", "unknown"), e)
+            continue
+        block = f"Source: {source}\nContent: {chunk.chunk_content}"
+        if chunk.chunk_context:
+            block += f"\nContext: {chunk.chunk_context}"
+        blocks.append(block)
+        logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(blocks), len(chunks), college_id, elapsed * 1000)
+        if not blocks:
+            return "No relevant documents were found for this query."
+    return "\n---\n".join(blocks)
 
-    return "\n\n---\n\n".join(blocks)
+    
 
-
-def build_system_prompt(db, query: str, college_id: int, k: int = 4) -> tuple[str, List[Document]]:
-    documents = retrieve_context(db, query=query, college_id=college_id, k=k)
-    context = format_context(documents)
-    return SYSTEM_PROMPT.format(student_summary="No long-term student summary yet.", session_summary="No current session summary yet.", context=context), documents
+@traceable(name="build_system_prompt")
+def build_system_prompt(db, query: str, college_id: int, student_id: int, session_id: int, k: int = 5) -> str:
+    start = time.perf_counter()
+    try:
+        relevant_documents = get_relevant_documents(db, query=query, college_id=college_id, k=k)
+        college_name = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1)).scalars().first()
+        student_summary = db.execute(select(models.Student.summary).where(models.Student.college_id == college_id, models.Student.student_id == student_id).limit(1)).scalars().first()
+        session_summary = db.execute(select(models.StudentSession.session_summary).where(models.StudentSession.college_id == college_id, models.StudentSession.student_id == student_id, models.StudentSession.session_id == session_id).limit(1)).scalars().first()
+        college_context = db.execute(select(models.College.college_context).where(models.College.college_id == college_id).limit(1)).scalars().first()
+        previous_assistant_message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
+    except Exception as e:
+        logger.error("build_system_prompt failed college_id=%s student_id=%s session_id=%s error=%s", college_id, student_id, session_id, e, exc_info=True)
+        raise
+    prompt = SYSTEM_PROMPT.format(
+        college_name=college_name,
+        student_summary=student_summary or "No long-term student summary yet.",
+        session_summary=session_summary or "No current session summary yet.",
+        college_context=college_context or "No college-context was added by the college.",
+        previous_assistant_message=previous_assistant_message or "This is the start of the conversation, no previous message yet.",
+        query=query,
+        relevant_documents=relevant_documents,
+    )
+    logger.debug("System prompt built college_id=%s student_id=%s session_id=%s elapsed_ms=%.0f", college_id, student_id, session_id, (time.perf_counter() - start) * 1000,)
+    return prompt

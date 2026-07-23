@@ -17,6 +17,7 @@ class College(Base):
     college_name: Mapped[str] = mapped_column(Text, nullable=False)
     college_phone: Mapped[str] = mapped_column(Text, nullable=False)
     college_email: Mapped[str] = mapped_column(Text, nullable=False)
+    college_context: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     students: Mapped[list["Student"]] = relationship(back_populates="college", cascade="all, delete-orphan")
@@ -124,6 +125,7 @@ class StudentSession(Base):
     session_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
     session_summary: Mapped[str | None] = mapped_column(Text)
     profile_processed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    total_tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
     student: Mapped["Student"] = relationship(back_populates="sessions")
@@ -244,6 +246,7 @@ class Chunk(Base):
     document_id: Mapped[int | None] = mapped_column(Integer)
     college_id: Mapped[int] = mapped_column(Integer, ForeignKey("colleges.college_id", ondelete="CASCADE"), nullable=False)
     chunk_content: Mapped[str] = mapped_column(Text, nullable=False)
+    chunk_context: Mapped[str | None] = mapped_column(Text) # If u change this change rag/retrieval.py 
     embedding: Mapped[list[float]] = mapped_column(Vector(768), nullable=False)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     source_type: Mapped[str] = mapped_column(Text, nullable=False)

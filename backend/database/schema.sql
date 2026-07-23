@@ -17,6 +17,7 @@ CREATE TABLE colleges (
     college_name    TEXT NOT NULL,
     college_phone   TEXT NOT NULL,
     college_email   TEXT NOT NULL,
+    college_context         JSONB,
     created_at      TIMESTAMP DEFAULT NOW()
 );
 
@@ -78,6 +79,7 @@ CREATE TABLE student_sessions (
     session_status   TEXT NOT NULL DEFAULT 'active' CHECK (session_status IN ('active', 'closed')),
     session_summary  TEXT,
     profile_processed BOOLEAN NOT NULL DEFAULT FALSE,
+    total_tokens_used INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE (college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
@@ -147,6 +149,7 @@ CREATE TABLE chunks (
     document_id      INT,
     college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     chunk_content    TEXT NOT NULL,
+    chunk_context    TEXT,
     embedding        vector(768) NOT NULL,
     chunk_index      INT NOT NULL,
     source_type      TEXT NOT NULL CHECK (source_type IN ('document', 'staff_answer')),

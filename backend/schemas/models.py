@@ -1,25 +1,68 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
-from typing import Optional, TypedDict, Annotated, List
-from langgraph.graph.message import add_messages
-from langchain_core.message import BaseMessage
+from typing import Optional, TypedDict
+
+
+
+class InboundWhatsAppMessage(BaseModel):
+    whatsapp_business_account_id: str
+    phone_number_id: str
+    display_phone_number: str
+    whatsapp_user_id: str
+    student_name: str | None = None
+    student_phone: str
+    whatsapp_message_id: str
+    whatsapp_timestamp: datetime
+    message_type: str
+    content: str
+    raw_payload: dict
+
 
 
 class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
-    db: object
-    college_id: int
-    messages: Annotated[list[BaseMessage], add_messages]
+    db: object # USED
+    college_id: int #USED
+    student_id: int # USED
+    session_id: int # USED
+    request_id: int
+    input_tokens: int
+    output_tokens: int
+    query: str # USED
+    prompt: str # USED
+    response: str # USED
+    updated_session_summary: str # USED
+    sources: str # USED
     error: Optional[str]
-    retry_count: int
+    error_type: Optional[str]
+    retrieval_degraded: bool
+    primary_retry_count: int
+    fallback_retry_count: int
     model_used: str
-    sources: List[str]
     student_summary: str | None
     session_summary: str | None
 
 
-class AgentTurnOutput(BaseModel):
-    reply: str
+
+class AgentTurnOutput(BaseModel): # What the assistant sends back
+    response: str
     updated_session_summary: str
+    sources: str = Field(default="", description=("""Comma-separated list of source document titles or IDs cited in the response, e.g. 'admissions_faq.pdf, tuition_2026.pdf'. Use an empty string if no sources were used. Do not use any other delimiter. Only list Unique chunks never add repetetive chunks."""))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 class ChatRequest(BaseModel):

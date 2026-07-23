@@ -25,3 +25,15 @@ def update_session_summary(db, session, session_summary: str):
     db.commit()
     db.refresh(session)
     return session
+
+
+
+def is_session_budget_exceeded(session, max_tokens: int) -> bool:
+    return session.total_tokens_used >= max_tokens
+
+def record_session_tokens(db, session, input_tokens: int, output_tokens: int):
+    session.total_tokens_used += (input_tokens + output_tokens)
+    session.last_message_at = func.now()
+    db.commit()
+    db.refresh(session)
+    return session
