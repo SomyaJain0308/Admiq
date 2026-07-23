@@ -55,8 +55,6 @@ INVOKE_LATENCY = Histogram("agent_invoke_latency_seconds", "End-to-end latency o
 
 SOURCES_PER_RESPONSE = Histogram("agent_sources_per_response", "Number of sources cited per successful response (retrieval quality signal)", ["model_used"])
 
-STUDENTS_TRACKED_ACTIVE = Gauge("agent_students_traced_active", "Number of distinct students with token usage inside the current rate-limit window (memory-size sanity check)")
-
 METRICS_CONTENT_TYPE = CONTENT_TYPE_LATEST
 
 def get_metrics_text() -> bytes:

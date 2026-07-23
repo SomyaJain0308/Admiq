@@ -207,6 +207,7 @@ SELECT cron.schedule(
 CREATE INDEX ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX ON chunks (college_id);
 CREATE INDEX ON chunks (document_id);
+CREATE INDEX ON chunks (chunk_content);
 CREATE INDEX ON documents (college_id);
 CREATE INDEX ON students (college_id);
 CREATE INDEX ON students (college_id, student_status);

@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from sqlite3 import IntegrityError
+from sqlalchemy.exc import IntegrityError
 from dotenv import load_dotenv
 
 
@@ -16,12 +16,11 @@ from backend.rag.security import SecurityPipeline
 from backend.rag.monitoring import get_logger, MetricsCollector, RequestTimer
 from backend.rag.agent import ProductionAgent
 from backend.services.tenant_service import extract_whatsapp_message_events, get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message
-from backend.schemas.models import (ChatRequest, ChatResponse, HealthResponse, MetricsResponse, ErrorResponse)
 from backend.services.webhook_security import verify_meta_signature
 from backend.services.whatsapp_service import send_whatsapp_text_message
 from backend.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
 from backend.rag.monitoring import get_metrics_text, METRICS_CONTENT_TYPE
-
+from backend.rag.monitoring import STUDENT_TOKEN_BUDGET_REJECTIONS
 
 
 load_dotenv()
@@ -117,8 +116,9 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
                 model_used = "security_block"
                 sources = []
             elif is_session_budget_exceeded(session, get_settings().session_token_budget):
-                logger.warning("Session token budget exceeded", extra={"extra_data": {"session_id": session.session_id, "student_id": student.student_id}})
-                metrics.record_request(latency_ms=timer.elapsed_ms, error=True)
+                logger.warning("Session token budget exceeded", extra={"extra_data": {"session_id": session.session_id, "student_id": student.student_id, "college_id": college_id}})
+                STUDENT_TOKEN_BUDGET_REJECTIONS.inc()
+                metrics.record_request(latency_ms=timer.elapsed_ms, error=True, model_used="budget_exceeded")
                 response_text = "You've reached the message limit for this converstaion. Please wait about 30 minutes and try again. or contact the college directly."
                 model_used = "budget_exceeded"
                 sources = []
@@ -140,7 +140,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             response_text, output_warnings = security.check_output(response_text)
             security_notes.extend(output_warnings)
 
-            if model_used not in ("security_block", "error"):
+            if model_used not in ("security_block", "error", "budget_exceeded"):
                 input_tokens = result.get("input_tokens", 0)
                 output_tokens = result.get("output_tokens", 0)
                 metrics.record_request(latency_ms=timer.elapsed_ms, input_tokens=input_tokens, output_tokens=output_tokens)
@@ -154,15 +154,6 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
             if security_notes:
                 logger.info("Security notes", extra={"extra_data": {"notes": security_notes, "college_id": college_id, "student_id": student.student_id}})
     return {"status": "ok", "messages_processed": len(events)}
-
-    
-
-@app.get("/api/health", response_model=HealthResponse)
-async def health():
-    settings = get_settings()
-    checks = {"agent": agent is not None, "security": security is not None}
-    all_healthy = all(checks.values())
-    return HealthResponse(status="healthy" if all_healthy else "degraded", environment=settings.app_env, checks=checks)
 
 
 

@@ -265,5 +265,6 @@ class Chunk(Base):
         CheckConstraint("source_type = 'staff_answer' OR expires_at IS NULL", name="chunks_document_no_expiry_check"),
         Index("ix_chunks_embedding_hnsw", "embedding", postgresql_using="hnsw", postgresql_ops={"embedding": "vector_cosine_ops"}),
         Index("ix_chunks_college_id", "college_id"),
-        Index("ix_chunks_document_id", "document_id")
+        Index("ix_chunks_document_id", "document_id"),
+        Index("ix_chunk_content", "chunk_content"),
     )

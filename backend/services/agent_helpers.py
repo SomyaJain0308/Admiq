@@ -22,10 +22,3 @@ def extract_token_usage(raw_message) -> tuple[int, int]: # Meta data can be insi
     usage = getattr(raw_message, "response_metadata", {}) or {}
     token_usage = usage.get("usage_metadata") or usage.get("token_usage") or {}
     return (token_usage.get("prompt_token_count", token_usage.get("input_tokens", 0)) or 0, token_usage.get("candidates_token_count", token_usage.get("output_tokens", 0)) or 0)
-
-
-def parse_source_csv(sources: str) -> list[str]:
-    if not sources:
-        return []
-    for source in sources.split(","):
-        return [source.strip()]
