@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     gemini_api_key: str
     primary_model: str = "gemini-3.5-flash"
     fallback_model: str = "gemini-2.5-flash"
+    query_model: str = "gemini-2.5-flash"
 
     # LangSmith
     langchain_tracing_v2: bool = True
@@ -20,7 +21,9 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     max_primary_retries: int = 2
     max_fallback_retries: int = 2
+    max_retrieval_retries: int = 2
     session_token_budget: int = 100000
+    retrieval_distance_threshold: float = 0.45
 
     # Whatsapp Webhook
     whatsapp_verify_token: str

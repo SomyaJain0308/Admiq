@@ -80,9 +80,37 @@ The updated_session_summary field is internal and must not be mentioned to the s
 """
 
 
+RESOLVE_QUERY_PROMPT = """You are rewriting a student's WhatsApp message into a focused search query for a college-admissions document retrieval system.
+
+Previous assistant reply for context:
+{previous_assistant_message}
+
+Student's latest message:
+{query}
+
+If the student's query is in any other language than english make sure to convert it to english first.
+
+Rewrite this into a single, specific search query that will retrieve the most relevant college-admissions documents (fees, eligibility, scholarships, placements, hostel, documents, deadlines). Resolve pronouns/references using the previous reply. If the message is already specific, return it mostly unchanged. Return only the search query text. The student might be replying to the student's previous followup so keep in mind that you have to write the query mostly from that is that's true"""
+
+RE_QUERY_PROMPT = """A search for college-admissions documents did not return sufficiently relevant results.
+
+Student's original question:
+{original_query}
+
+Search query that was tried and failed to retrieve good matches:
+{failed_search_query}
+
+Previous assistant reply for context:
+{previous_assistant_message}
+
+If the student's query is in any other language than english make sure to convert it to english first.
+
+Rewrite the search query with different phrasing, broader or more specific terms, or synonyms closer to how official documents describe this topic. Return only the new search query text."""
+
+
 
 @traceable(name="embed_and_retrieve_chunks", run_type="retriever")
-def get_relevant_documents(db, query: str, college_id: int, k: int = 5) -> str:
+def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -> str:
     start = time.perf_counter()
     try:
         query_embedding = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", output_dimensionality=768).embed_query(query)
@@ -90,16 +118,17 @@ def get_relevant_documents(db, query: str, college_id: int, k: int = 5) -> str:
         logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
         raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.
     try:
-        chunks = db.execute(select(models.Chunk).where(models.Chunk.college_id == college_id).order_by(models.Chunk.embedding.cosine_distance(query_embedding)).limit(k)).scalars().all()
+        results = db.execute(select(models.Chunk, models.Chunk.embedding.cosine_distance(query_embedding).label("distance")).where(models.Chunk.college_id == college_id).order_by("distance").limit(k)).all()
     except Exception as e:
         logger.error("chunk retrieval query failed college_id=%s k=%s error=%s", college_id, k, e, exc_info=True)
         raise
     elapsed = time.perf_counter() - start
-    if not chunks:
+    if not results:
         logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], elapsed * 1000)
-        return "No relevant documents were found for this query."
+        return "No relevant documents were found for this query.", 1.0
     blocks = []
-    for chunk in chunks:
+    distances = []
+    for chunk, distance in results:
         try:
             if chunk.source_type == "document":
                 source = chunk.document.filename
@@ -112,26 +141,34 @@ def get_relevant_documents(db, query: str, college_id: int, k: int = 5) -> str:
         if chunk.chunk_context:
             block += f"\nContext: {chunk.chunk_context}"
         blocks.append(block)
-        logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(blocks), len(chunks), college_id, elapsed * 1000)
-        if not blocks:
-            return "No relevant documents were found for this query."
-    return "\n---\n".join(blocks)
+        distances.append(distance)
+    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(blocks), len(results), college_id, elapsed * 1000)
+    if not blocks:
+        return "No relevant documents were found for this query.", 1.0
+    return "\n---\n".join(blocks), min(distances)
 
-    
+
+
+def get_prompt_context(db, college_id: int, student_id: int) -> dict:
+    college_name = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1)).scalars().first()
+    college_context = db.execute(select(models.College.college_id).where(models.College.college_id == college_id).limit(1)).scalars().first()
+    previous_assistant_message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
+    return {"college_name": college_name or "an", "college_context": college_context or "No college-context was added by the college.", "previous_assistant_message": previous_assistant_message or "This is the start of the converstaion, no previous message yet."}
+
+
+
+
 
 @traceable(name="build_system_prompt")
-def build_system_prompt(db, query: str, college_id: int, student_id: int, session_id: int, k: int = 5) -> str:
+def build_system_prompt(db, query: str, college_id: int, student_id: int, session_id: int, relevant_documents: str, student_summary: str | None = None, session_summary: str | None = None) -> str:
     start = time.perf_counter()
     try:
-        relevant_documents = get_relevant_documents(db, query=query, college_id=college_id, k=k)
         college_name = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1)).scalars().first()
-        student_summary = db.execute(select(models.Student.summary).where(models.Student.college_id == college_id, models.Student.student_id == student_id).limit(1)).scalars().first()
-        session_summary = db.execute(select(models.StudentSession.session_summary).where(models.StudentSession.college_id == college_id, models.StudentSession.student_id == student_id, models.StudentSession.session_id == session_id).limit(1)).scalars().first()
         college_context = db.execute(select(models.College.college_context).where(models.College.college_id == college_id).limit(1)).scalars().first()
         previous_assistant_message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
     except Exception as e:
         logger.error("build_system_prompt failed college_id=%s student_id=%s session_id=%s error=%s", college_id, student_id, session_id, e, exc_info=True)
-        raise
+        raise  # intentionally raised — caller (agent.py's build_prompt node) must catch this and fall back to a default SYSTEM_PROMPT.
     prompt = SYSTEM_PROMPT.format(
         college_name=college_name,
         student_summary=student_summary or "No long-term student summary yet.",

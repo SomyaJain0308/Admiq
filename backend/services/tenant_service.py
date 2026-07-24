@@ -109,6 +109,7 @@ def extract_whatsapp_message_events(payload) -> list[InboundWhatsAppMessage]:
     
     return [event]    
 
+
 def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> models.Message:
     message = models.Message(
         college_id=college_id,
@@ -119,9 +120,14 @@ def save_assistant_message(db, college_id: int, student_id: int, content: str, s
         sources={"sources": sources or []},
         message_type="text",
     )
-
     db.add(message)
     db.commit()
     db.refresh(message)
-
     return message
+
+
+def flag_low_confidence_query(db, college_id, student_id, question_message_id, answer_message_id, similarity_score):
+    entry = models.LowConfidenceQuery(college_id=college_id, student_id=student_id, question_message_id=question_message_id, answer_message_id=answer_message_id, similarity_score=similarity_score)
+    db.add(entry)
+    db.commit()
+    return entry

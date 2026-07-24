@@ -20,88 +20,56 @@ class InboundWhatsAppMessage(BaseModel):
 
 
 class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
-    db: object # USED
-    college_id: int #USED
-    student_id: int # USED
-    session_id: int # USED
-    request_id: int
-    input_tokens: int
-    output_tokens: int
-    query: str # USED
-    prompt: str # USED
-    response: str # USED
-    updated_session_summary: str # USED
-    sources: str # USED
-    error: Optional[str]
-    error_type: Optional[str]
-    retrieval_degraded: bool
+    db: object
+    college_id: int
+    student_id: int
+    session_id: int
+    query: str
+
+    # load_context
+    college_name: str
+    college_context: str
+    previous_assistant_message: str
+
+    # resolve_query / re_query
+    search_query: str
+    retrieval_retry_count: int
+
+    # retrieve
+    relevant_documents: str
+    best_distance: float
+
+    # flag_low_confidence
+    needs_human_review: bool
+
+    # build_prompt
+    prompt: str
+
+    # process / try_fallback
     primary_retry_count: int
     fallback_retry_count: int
+    response: str
+    updated_session_summary: str
+    sources: str
+    wants_human_handoff: bool
+    error: Optional[str]
     model_used: str
-    student_summary: str | None
-    session_summary: str | None
 
+    # token accounting, threaded through every LLM-calling node
+    input_tokens: int 
+    output_tokens: int
+
+    # carried through from main.py, read by build_prompt
+    student_summary: str | None 
+    session_summary: str | None
 
 
 class AgentTurnOutput(BaseModel): # What the assistant sends back
     response: str
     updated_session_summary: str
     sources: str = Field(default="", description=("""Comma-separated list of source document titles or IDs cited in the response, e.g. 'admissions_faq.pdf, tuition_2026.pdf'. Use an empty string if no sources were used. Do not use any other delimiter. Only list Unique chunks never add repetetive chunks."""))
+    wants_human_handoff: bool = Field(default=False)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-class ChatRequest(BaseModel):
-    message: str = Field(
-        ...,
-        min_length=1,
-        max_length=10000,
-        description="The student's message to the llm"
-    )
-    college_id: int
-    thread_id: str = Field(
-        default="default",
-        description="Conversation thread ID"
-    ) 
-
-class ChatResponse(BaseModel):
-    response: str
-    thread_id: str
-    model_used: str
-    sources: list[str] = []
-    cached: bool = False
-    processing_time_ms: float
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class HealthResponse(BaseModel):
-    status: str = "Healthy"
-    environment: str
-    version: str = "1.0.0"
-    checks: dict = {}
-
-class MetricsResponse(BaseModel):
-    total_requests: int
-    total_errors: int
-    error_rate: str
-    avg_latency_ms: float
-    total_input_tokens: int
-    total_output_tokens: int
-
-class ErrorResponse(BaseModel):
-    error: str
-    detail: str | None = None
-    request_id: str | None = None
+class QueryRewrite(BaseModel):
+    search_query: str

@@ -15,7 +15,7 @@ from backend.rag.config import get_settings
 from backend.rag.security import SecurityPipeline
 from backend.rag.monitoring import get_logger, MetricsCollector, RequestTimer
 from backend.rag.agent import ProductionAgent
-from backend.services.tenant_service import extract_whatsapp_message_events, get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message
+from backend.services.tenant_service import extract_whatsapp_message_events, get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.services.webhook_security import verify_meta_signature
 from backend.services.whatsapp_service import send_whatsapp_text_message
 from backend.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
@@ -97,7 +97,7 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
         student = get_or_create_student(db, college_id=college_id, student_phone=event.student_phone, whatsapp_user_id=event.whatsapp_user_id, student_name=event.student_name)
         session = get_or_create_active_session(db=db, college_id=college_id, student_id=student.student_id)
         try:
-            save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id)
+            inbound = save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id)
         except IntegrityError:
             db.rollback()
             logger.info("Duplicate whatsapp redelivery, skipping", extra={"extra_data": {"whatsapp_message_id": event.whatsapp_message_id}})
@@ -139,15 +139,17 @@ async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
 
             response_text, output_warnings = security.check_output(response_text)
             security_notes.extend(output_warnings)
-
+            assistant_msg = save_assistant_message(db=db, college_id=college_id, student_id=student.student_id, content=response_text, sources=sources, session_id=session.session_id)
             if model_used not in ("security_block", "error", "budget_exceeded"):
                 input_tokens = result.get("input_tokens", 0)
                 output_tokens = result.get("output_tokens", 0)
                 metrics.record_request(latency_ms=timer.elapsed_ms, input_tokens=input_tokens, output_tokens=output_tokens)
+                if result.get("wants_human_handoff"):
+                    flag_low_confidence_query(db, college_id=college_id, student_id=student.student_id, question_message_id=inbound.message_id, answer_message_id=assistant_msg.message_id, similarity_score=result.get("best_distance"))
+                
 
             if new_session_summary:
                 update_session_summary(db=db, session=session, session_summary=new_session_summary)
-            save_assistant_message(db=db, college_id=college_id, student_id=student.student_id, content=response_text, sources=sources, session_id=session.session_id)
             send_result = send_whatsapp_text_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, message=response_text, access_token=get_settings().whatsapp_access_token)
             if not send_result["ok"]:
                 logger.error("Failed to send Whatsapp reply", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": send_result}})
