@@ -26,18 +26,16 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
     session_id: int
     query: str
 
-    # load_context
-    college_name: str
-    college_context: str
-    previous_assistant_message: str
-
     # resolve_query / re_query
+    needs_retrieval: bool
     search_query: str
     retrieval_retry_count: int
+    previous_assistant_message: str | None
 
     # retrieve
     relevant_documents: str
     best_distance: float
+    passing_chunk_count: int
 
     # flag_low_confidence
     needs_human_review: bool
@@ -56,13 +54,12 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
     model_used: str
 
     # token accounting, threaded through every LLM-calling node
-    input_tokens: int 
+    input_tokens: int
     output_tokens: int
 
-    # carried through from main.py, read by build_prompt
-    student_summary: str | None 
+    # carried through from main.py, read by build_system_prompt
+    student_summary: str | None
     session_summary: str | None
-
 
 class AgentTurnOutput(BaseModel): # What the assistant sends back
     response: str
@@ -72,4 +69,5 @@ class AgentTurnOutput(BaseModel): # What the assistant sends back
 
 
 class QueryRewrite(BaseModel):
-    search_query: str
+    needs_retrieval: bool = Field(description="False for greetings, thanks, acknowledgments, or small talk that don't need document lookup. True for anything asking about fees, courses, eligibility, deadlines, hostel, placements, documents, or admissions process.")
+    search_query: str = Field(default="", description="Empty if needs_retrieval is False.")

@@ -4,9 +4,9 @@ from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION CHANGE TO DeepSeek too
 from langsmith import traceable
 from backend.rag.config import get_settings
-from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_prompt_context
+from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
 from backend.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
-from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE
+from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE
 from backend.services.agent_helpers import extract_token_usage, classify_error
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ class ProductionAgent:
     def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
             settings = get_settings()
+            self.min_relevant_chunks = settings.min_relevant_chunks
             self.max_primary_retries = settings.max_primary_retries
             self.max_fallback_retries = settings.max_fallback_retries
             self.max_retrieval_retries = settings.max_retrieval_retries
@@ -37,28 +38,49 @@ class ProductionAgent:
         def resolve_query(state: AgentState) -> dict:
             start = time.perf_counter()
             try:
+                previous_assistant_message = get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"])
+            except Exception as e:
+                logger.warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                previous_assistant_message = "This is the start of the conversation, no previous messages yet."
+            try:
                 result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=state.get("previous_assistant_message") or "This is the start of the converstaion."))
-                input_tokens, output_tokens =extract_token_usage(result["raw"])
+                input_tokens, output_tokens = extract_token_usage(result["raw"])
+                needs_retrieval = result["parsed"].needs_retrieval
                 search_query = result["parsed"].search_query or state["query"]
             except Exception as e:
                 logger.warning("resolve_query failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 search_query, input_tokens, output_tokens = state["query"], 0, 0
+                needs_retrieval = True
             STAGE_LATENCY.labels(stage="resolve_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(output_tokens)
-            return {"search_query": search_query, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
+            result_dict = {"search_query": search_query, "needs_retrieval": needs_retrieval, "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
+            if not needs_retrieval:
+                result_dict["relevant_documents"] = "No document lookup needed - this is a greeting, thanks, or small talk, not an admissions question."
+            return result_dict
 
 
         def retrieve(state: AgentState) -> dict: # Retrieve k(5) relevant chunks with distances and send them to check_distance
             start = time.perf_counter()
             try:
-                relevant_documents, best_distance = get_relevant_documents_scored(db=state["db"], query=state["search_query"], college_id=state["college_id"], k=self.retrieval_k)
+                scored_chunks = get_relevant_documents_scored(db=state["db"], query=state["search_query"], college_id=state["college_id"], k=self.retrieval_k)
+                for _, dist in scored_chunks:
+                    RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <=self.retrieval_distance_threshold).lower()).observe(dist)
+                passing_chunks = [(block, distance) for block, distance in scored_chunks if distance <= self.retrieval_distance_threshold]
+                if passing_chunks:
+                    relevant_documents = "\n---\n".join(block for block, _ in passing_chunks)
+                    best_distance = min((distance for _, distance in passing_chunks), default=1.0)
+                else:
+                    relevant_documents = "No relevant documents were found for this query."
+                    best_distance = min((distance for _, distance in scored_chunks), default=1.0)
+
+                passing_chunk_count = len(passing_chunks)
             except Exception as e:
                 logger.warning("Retrieval failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
-                relevant_documents, best_distance = "No relevant documents were found for this query.", 1.0
+                relevant_documents, best_distance, passing_chunk_count = "No relevant documents were found for this query.", 1.0, 0
             finally:
                 RETRIEVAL_LATENCY.observe(time.perf_counter() - start)
-            return {"relevant_documents": relevant_documents, "best_distance": best_distance}
+            return {"relevant_documents": relevant_documents, "best_distance": best_distance, "passing_chunk_count": passing_chunk_count}
 
 
         def re_query(state: AgentState):
@@ -111,6 +133,9 @@ class ProductionAgent:
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(output_tokens)
                 STAGE_LATENCY.labels(stage="primary", model_used=self.primary_llm_name).observe(time.perf_counter() - start)
                 logger.info("Primary model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
+                if not parsed_response.response.strip().endswith("?"):
+                    AGENT_MISSING_FOLLOWUP.labels(model_used="primary").inc()
+                    logger.info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
                 return {"response": parsed_response.response, "updated_session_summary": parsed_response.updated_session_summary, "sources": parsed_response.sources, "error": None, "model_used": "primary", "input_tokens": total_input, "output_tokens": total_output, "wants_human_handoff": parsed_response.wants_human_handoff or state.get("needs_human_review", False)}
             except Exception as e:
                 call_input_tokens = 0
@@ -147,6 +172,9 @@ class ProductionAgent:
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(output_tokens)
                 STAGE_LATENCY.labels(stage="fallback", model_used=self.fallback_llm_name).observe(time.perf_counter() - start)
                 logger.info("Fallback model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
+                if not parsed_response.response.strip().endswith("?"):
+                    AGENT_MISSING_FOLLOWUP.labels(model_used="fallback").inc()
+                    logger.info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
                 return {"response": parsed_response.response, "updated_session_summary": parsed_response.updated_session_summary, "sources": parsed_response.sources, "error": None, "model_used": "fallback", "input_tokens": total_input, "output_tokens": total_output, "wants_human_handoff": parsed_response.wants_human_handoff or state.get("needs_human_review", False)}
             except Exception as e:
                 call_input_tokens = 0
@@ -167,10 +195,14 @@ class ProductionAgent:
         def handle_error(state: AgentState) -> dict: # If this needs a comment then print("hello world") does too
             logger.error("Both primary and fallback exhausted session_id=%s college_id=%s student_id=%s primary_attempts=%s fallback_attempts=%s last_error=%s", state["session_id"], state["college_id"], state["student_id"], state["primary_retry_count"], state["fallback_retry_count"], state.get("error"))
             return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "sources": "", "model_used": "error_handler", "input_tokens": state.get("input_tokens", 0), "output_tokens": state.get("output_tokens", 0)}
+
+
+        def route_after_resolve(state: AgentState) -> str:
+            return "retrieve" if state["needs_retrieval"] else "skip_retrieval"
         
 
-        def route_after_retrieve(state: AgentState):
-            if state["best_distance"] <= self.retrieval_distance_threshold:
+        def route_after_retrieve(state: AgentState) -> str:
+            if state["passing_chunk_count"] >= self.min_relevant_chunks:
                 return "generate"
             elif state["retrieval_retry_count"] < self.max_retrieval_retries:
                 return "re_query"
@@ -208,7 +240,7 @@ class ProductionAgent:
         graph.add_node("error", handle_error)
 
         graph.add_edge(START, "resolve_query")
-        graph.add_edge("resolve_query", "retrieve")
+        graph.add_conditional_edges("resolve_query", route_after_resolve, {"retrieve": "retrieve", "skip_retrieval": "build_prompt"})
         graph.add_conditional_edges("retrieve", route_after_retrieve, {"generate": "build_prompt", "re_query": "re_query", "flag_and_generate": "flag_low_confidence"})
         graph.add_edge("re_query", "retrieve")
         graph.add_edge("flag_low_confidence", "build_prompt")

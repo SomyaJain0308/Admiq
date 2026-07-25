@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     max_retrieval_retries: int = 2
     session_token_budget: int = 100000
     retrieval_distance_threshold: float = 0.45
+    min_relevant_chunks: int = 2
 
     # Whatsapp Webhook
     whatsapp_verify_token: str

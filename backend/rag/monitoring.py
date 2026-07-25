@@ -45,6 +45,8 @@ LLM_OUTPUT_TOKENS = Counter("agent_llm_output_tokens", "Total output/response to
 
 STUDENT_TOKEN_BUDGET_REJECTIONS = Counter("agent_students_token_budget_rejections_total", "Total requests rejected because the requesting student's rolling token budget was exceeded")
 
+AGENT_MISSING_FOLLOWUP = Counter("agent_missing_followup_total", "Total successful responses that didn't end with a question — rule 11 (always end with a follow-up) was not followed", ["model_used"])
+
 REQUEST_LATENCY_MS = Histogram("api_request_latency_ms", "End-toend request latency in ms", ["model_used"])
 
 STAGE_LATENCY = Histogram("agent_stage_latency_seconds", "Latency per llm call, labled by stage and model", ["stage", "model_used"])
@@ -54,6 +56,8 @@ RETRIEVAL_LATENCY = Histogram("agent_retrieval_latency", "Latency of the retriev
 INVOKE_LATENCY = Histogram("agent_invoke_latency_seconds", "End-to-end latency of a full agent invocation")
 
 SOURCES_PER_RESPONSE = Histogram("agent_sources_per_response", "Number of sources cited per successful response (retrieval quality signal)", ["model_used"])
+
+RETRIEVAL_DISTANCE = Histogram("agent_retrieval_chunk_distance", "Cosine distance of each retrieved chunk against the query — use this to tune retrieval_distance_threshold and min_relevant_chunks off real data", ["passed_threshold"], buckets=[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.85, 1.0])
 
 METRICS_CONTENT_TYPE = CONTENT_TYPE_LATEST
 

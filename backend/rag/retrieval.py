@@ -80,6 +80,8 @@ The updated_session_summary field is internal and must not be mentioned to the s
 """
 
 
+
+
 RESOLVE_QUERY_PROMPT = """You are rewriting a student's WhatsApp message into a focused search query for a college-admissions document retrieval system.
 
 Previous assistant reply for context:
@@ -88,9 +90,14 @@ Previous assistant reply for context:
 Student's latest message:
 {query}
 
-If the student's query is in any other language than english make sure to convert it to english first.
+First decide: does this message need a document lookup? Greetings ("hi", "hello"), thanks, acknowledgments ("ok", "got it"), or small talk do NOT need retrieval. Questions about fees, courses, eligibility, scholarships, placements, hostel, documents, or deadlines DO need retrieval.
 
-Rewrite this into a single, specific search query that will retrieve the most relevant college-admissions documents (fees, eligibility, scholarships, placements, hostel, documents, deadlines). Resolve pronouns/references using the previous reply. If the message is already specific, return it mostly unchanged. Return only the search query text. The student might be replying to the student's previous followup so keep in mind that you have to write the query mostly from that is that's true"""
+If retrieval is needed, rewrite the message into a single, specific search query, resolving pronouns/references using the previous reply. If retrieval is not needed, leave the search query empty.
+
+If the student's query is in any other language than English, convert it to English first."""
+
+
+
 
 RE_QUERY_PROMPT = """A search for college-admissions documents did not return sufficiently relevant results.
 
@@ -110,7 +117,7 @@ Rewrite the search query with different phrasing, broader or more specific terms
 
 
 @traceable(name="embed_and_retrieve_chunks", run_type="retriever")
-def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -> str:
+def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -> list[tuple[str, float]]:
     start = time.perf_counter()
     try:
         query_embedding = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", output_dimensionality=768).embed_query(query)
@@ -125,8 +132,8 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -
     elapsed = time.perf_counter() - start
     if not results:
         logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], elapsed * 1000)
-        return "No relevant documents were found for this query.", 1.0
-    blocks = []
+        return []
+    scored_blocks = []
     distances = []
     for chunk, distance in results:
         try:
@@ -140,23 +147,15 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -
         block = f"Source: {source}\nContent: {chunk.chunk_content}"
         if chunk.chunk_context:
             block += f"\nContext: {chunk.chunk_context}"
-        blocks.append(block)
-        distances.append(distance)
-    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(blocks), len(results), college_id, elapsed * 1000)
-    if not blocks:
-        return "No relevant documents were found for this query.", 1.0
-    return "\n---\n".join(blocks), min(distances)
+        scored_blocks.append((block, distance))
+    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored_blocks), len(results), college_id, elapsed * 1000)
+    return scored_blocks
 
 
 
-def get_prompt_context(db, college_id: int, student_id: int) -> dict:
-    college_name = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1)).scalars().first()
-    college_context = db.execute(select(models.College.college_id).where(models.College.college_id == college_id).limit(1)).scalars().first()
-    previous_assistant_message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
-    return {"college_name": college_name or "an", "college_context": college_context or "No college-context was added by the college.", "previous_assistant_message": previous_assistant_message or "This is the start of the converstaion, no previous message yet."}
-
-
-
+def get_previous_assistant_message(db, college_id: int, student_id: int) -> str:
+    message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
+    return message or "This is the start of the conversation, no previous message yet."
 
 
 @traceable(name="build_system_prompt")
