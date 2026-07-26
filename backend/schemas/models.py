@@ -36,7 +36,6 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
     # retrieve
     relevant_documents: str
     best_distance: float
-    passing_chunk_count: int
 
     # flag_low_confidence
     needs_human_review: bool
@@ -71,8 +70,4 @@ class AgentTurnOutput(BaseModel): # What the assistant sends back
 
 class QueryRewrite(BaseModel):
     needs_retrieval: bool = Field(description="False for greetings, thanks, acknowledgments, or small talk that don't need document lookup. True for anything asking about fees, courses, eligibility, deadlines, hostel, placements, documents, or admissions process.")
-    search_query: str = Field(default_factiry=list, description="1-4 focused search queries. Use 1 for a single-topic question. Only split into multiple when the student is genuinely asking about multiple distinct topics/courses/comparisons in one message (e.g. 'compare CSE and ECE fees' -> 2 queries, one per course). Empty if needs_retrieval is False.")
-
-
-class RetryQueries(BaseModel):
-    search_queries: list[str] = Field(description="Rewritten search queries, one per failed query, in the same order as given.")
+    search_queries: list[str] = Field(default_factory=list, description="1-4 focused search queries. Use 1 for a single-topic question. Only split into multiple when the student is genuinely asking about multiple distinct topics/courses/comparisons in one message (e.g. 'compare CSE and ECE fees' -> 2 queries, one per course). Empty if needs_retrieval is False.")

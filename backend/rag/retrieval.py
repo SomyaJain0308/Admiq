@@ -101,20 +101,22 @@ If retrieval is needed, produce 1 to 4 focused search queries. Use exactly 1 for
 
 
 
-RE_QUERY_PROMPT = """A search for college-admissions documents did not return sufficiently relevant results.
+RE_QUERY_PROMPT = """
+A search for college-admissions documents did not return sufficiently relevant results.
 
 Student's original question:
 {original_query}
 
-Search query that was tried and failed to retrieve good matches:
-{failed_search_query}
-
 Previous assistant reply for context:
 {previous_assistant_message}
 
-If the student's query is in any other language than english make sure to convert it to english first.
+Search queries that were tried and failed to retrieve good matches (one per line):
+{failed_queries}
 
-Rewrite the search query with different phrasing, broader or more specific terms, or synonyms closer to how official documents describe this topic. Return only the new search query text."""
+If the student's query is in any other language than English, convert it to English first.
+
+Rewrite each failed query with different phrasing, broader or more specific terms, or synonyms closer to how official documents describe the topic. Return exactly one rewritten query per failed query, in the same order.
+"""
 
 
 

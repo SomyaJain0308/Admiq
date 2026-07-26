@@ -59,6 +59,12 @@ SOURCES_PER_RESPONSE = Histogram("agent_sources_per_response", "Number of source
 
 RETRIEVAL_DISTANCE = Histogram("agent_retrieval_chunk_distance", "Cosine distance of each retrieved chunk against the query — use this to tune retrieval_distance_threshold and min_relevant_chunks off real data", ["passed_threshold"], buckets=[0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.6, 0.7, 0.85, 1.0])
 
+QUERY_DECOMPOSITION_SIZE = Histogram("agent_query_decomposition_size", "Number of sub-queries split a student message into", buckets=[1, 2, 3, 4])
+
+RETRIEVAL_ROUNDS_TO_RESOLVE = Histogram("agent_retrieval_rounds_to_resolve", "How many rounds (0 = resolved on first try) it took before all sub-queries were covered", buckets=[0, 1, 2, 3])
+
+SUBQUERIES_UNRESOLVED = Histogram("agent_subqueries_unresolved_at_handoff", "Number of sub queries still unresolved when retries were exhausted and the turn was flagged low-confidence", buckets=[0, 1, 2, 3, 4])
+
 METRICS_CONTENT_TYPE = CONTENT_TYPE_LATEST
 
 def get_metrics_text() -> bytes:

@@ -6,7 +6,7 @@ from langsmith import traceable
 from backend.rag.config import get_settings
 from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
 from backend.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
-from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE
+from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
 from backend.services.agent_helpers import extract_token_usage, classify_error
 
 logger = logging.getLogger(__name__)
@@ -42,18 +42,20 @@ class ProductionAgent:
                 logger.warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
             try:
-                result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=state.get("previous_assistant_message") or "This is the start of the converstaion."))
+                result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message))
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
                 needs_retrieval = result["parsed"].needs_retrieval
-                search_query = result["parsed"].search_query or state["query"]
+                search_queries = result["parsed"].search_queries or [state["query"]]
+                if needs_retrieval:
+                    QUERY_DECOMPOSITION_SIZE.observe(len(search_queries))
             except Exception as e:
                 logger.warning("resolve_query failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
-                search_query, input_tokens, output_tokens = state["query"], 0, 0
+                search_queries, input_tokens, output_tokens = [state["query"]], 0, 0
                 needs_retrieval = True
             STAGE_LATENCY.labels(stage="resolve_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(output_tokens)
-            result_dict = {"search_query": search_query, "needs_retrieval": needs_retrieval, "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
+            result_dict = {"pending_queries": search_queries if needs_retrieval else [], "needs_retrieval": needs_retrieval, "resolved_chunks": [], "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
             if not needs_retrieval:
                 result_dict["relevant_documents"] = "No document lookup needed - this is a greeting, thanks, or small talk, not an admissions question."
             return result_dict
@@ -74,7 +76,7 @@ class ProductionAgent:
                 pending = state["pending_queries"]
                 k = _k_for_query_count(len(pending))
                 already_seen_ids = {chunk_id for chunk_id, _, _ in state.get("resolved_chunks", [])}
-                newly_resolved = list[state.get("resolved_chunks", [])]
+                newly_resolved = list(state.get("resolved_chunks", []))
                 still_pending = []
                 for sub_query in pending:
                     scored = get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k)
@@ -124,6 +126,7 @@ class ProductionAgent:
 
         def flag_low_confidence(state: AgentState) -> dict:
             logger.warning("Retrieval exhausted retries college_id=%s student_id=%s session_id=%s query=%r best_distance=%.3f", state["college_id"], state["student_id"], state["session_id"], state["query"], state["best_distance"])
+            SUBQUERIES_UNRESOLVED.observe(len(state["pending_queries"]))
             return {"needs_human_review": True}
 
 
@@ -224,7 +227,8 @@ class ProductionAgent:
         
 
         def route_after_retrieve(state: AgentState) -> str:
-            if state["pending_queries"]:
+            if not state["pending_queries"]:
+                RETRIEVAL_ROUNDS_TO_RESOLVE.observe(state["retrieval_retry_count"])
                 return "generate"
             elif state["retrieval_retry_count"] < self.max_retrieval_retries:
                 return "re_query"
