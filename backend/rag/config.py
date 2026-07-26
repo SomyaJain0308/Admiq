@@ -8,11 +8,22 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     primary_model: str = "gemini-3.5-flash" # NOTE: In production change to deepseek.
     fallback_model: str = "gemini-3.5-flash"
     query_model: str = "gemini-2.5-flash" # NOTE: In production change to deepseek.
+    contextual_retrieval_model: str = "gemini-3.5-flash"
+    embedding_model: str = "models/gemini-embedding-001"
 
     # LangSmith
     langchain_tracing_v2: bool = True
     langchain_api_key: str = ""
     langchain_project: str = "CollegeChatbot"
+
+    # Retrieval
+    vector_size: int = 768
+    min_cache_tokens: int = 4096
+    chunk_size: int = 1000
+    chunk_overlap: int = 150
+    batch_size: int = 25
+    cache_ttl: str = "600s"
+
 
     # Application
     app_env: str = "development"

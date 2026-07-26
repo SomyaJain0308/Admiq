@@ -147,8 +147,6 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> li
             logger.warning("Skipping chunk with unresolved source college_id=%s chunk_id=%s error=%s", college_id, getattr(chunk, "chunk_id", "unknown"), e)
             continue
         block = f"Source: {source}\nContent: {chunk.chunk_content}"
-        if chunk.chunk_context:
-            block += f"\nContext: {chunk.chunk_context}"
         scored.append((chunk.chunk_id, block, distance))
     logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored), len(results), college_id, (time.perf_counter() - start) * 1000)
     return scored
