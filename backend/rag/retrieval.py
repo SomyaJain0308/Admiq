@@ -1,6 +1,6 @@
 from sqlalchemy import select
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from backend.database import models
+from database import models
 import logging
 import time
 from langsmith import traceable
@@ -133,9 +133,8 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> li
     except Exception as e:
         logger.error("chunk retrieval query failed college_id=%s k=%s error=%s", college_id, k, e, exc_info=True)
         raise
-    elapsed = time.perf_counter() - start
     if not results:
-        logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], elapsed * 1000)
+        logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], (time.perf_counter() - start) * 1000)
         return []
     scored= []
     for chunk, distance in results:
@@ -151,7 +150,7 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> li
         if chunk.chunk_context:
             block += f"\nContext: {chunk.chunk_context}"
         scored.append((chunk.chunk_id, block, distance))
-    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored), len(results), college_id, elapsed * 1000)
+    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored), len(results), college_id, (time.perf_counter() - start) * 1000)
     return scored
 
 

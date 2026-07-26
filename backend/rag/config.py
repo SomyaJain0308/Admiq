@@ -1,13 +1,13 @@
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
-class Settings(BaseSettings):
+class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetched from .env
 
     # LLM Configuration
-    gemini_api_key: str
-    primary_model: str = "gemini-3.5-flash"
-    fallback_model: str = "gemini-2.5-flash"
-    query_model: str = "gemini-2.5-flash"
+    gemini_api_key: str = ""
+    primary_model: str = "gemini-3.5-flash" # NOTE: In production change to deepseek.
+    fallback_model: str = "gemini-3.5-flash"
+    query_model: str = "gemini-2.5-flash" # NOTE: In production change to deepseek.
 
     # LangSmith
     langchain_tracing_v2: bool = True
@@ -17,12 +17,10 @@ class Settings(BaseSettings):
     # Application
     app_env: str = "development"
     log_level: str = "INFO"
-    rate_limit: str = "20/minute"
-    cache_ttl_seconds: int = 300
     max_primary_retries: int = 2
     max_fallback_retries: int = 2
     max_retrieval_retries: int = 2
-    session_token_budget: int = 100000
+    session_token_budget: int = 200000
     retrieval_distance_threshold: float = 0.45
 
     # Whatsapp Webhook

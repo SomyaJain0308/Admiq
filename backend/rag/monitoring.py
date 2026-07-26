@@ -1,32 +1,10 @@
-import logging
-import json
-import time
+import logging, json, time
 from datetime import datetime, timezone
-from functools import wraps
-from typing import Any, Callable
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
-
-# The sole purpose of this file is logging
-
-class JSONFormatter(logging.Formatter):
-
-    def format(self, record):
-        log_obj = {"timestamp": datetime.now(timezone.utc).isoformat(), "level": record.levelname, "message": record.getMessage(), "module": record.module, "funtion": record.funcName}
-        if hasattr(record, "extra_data"):
-            log_obj.update(record.extra_data)
-        return json.dumps(log_obj)
-    
-
-def get_logger(name: str = "production-api") -> logging.Logger: # Adding permanent comments since I keep forgetting this cryptic code
-    logger = logging.getLogger(name) # Check if we alr have a logger (postoffice)
-    if not logger.handlers: # Check if we alr have a log handler (postman)
-        handler = logging.StreamHandler() # Assign a handler (postman) if not available alr
-        handler.setFormatter(JSONFormatter()) # Pack the log (package) from plain text to json
-        logger.addHandler(handler) # Connect the log and the handler
-        logger.setLevel(logging.INFO) # Only process messages that are info, warning or error level
-    return logger
+from prometheus_client import Counter, Histogram, CONTENT_TYPE_LATEST
 
 
+
+# For observability used in agent.py.
 REQUESTS_TOTAL = Counter("api_requests_total", "Total chat requests handled", ["model_used", "outcome"])
 
 INPUT_TOKENS_TOTAL = Counter("api_input_tokens_total", "Total input tokens processed, for cost tracking", ["model_used"])
@@ -67,8 +45,25 @@ SUBQUERIES_UNRESOLVED = Histogram("agent_subqueries_unresolved_at_handoff", "Num
 
 METRICS_CONTENT_TYPE = CONTENT_TYPE_LATEST
 
-def get_metrics_text() -> bytes:
-    return generate_latest()
+
+
+class JSONFormatter(logging.Formatter):
+
+    def format(self, record):
+        log_obj = {"timestamp": datetime.now(timezone.utc).isoformat(), "level": record.levelname, "message": record.getMessage(), "module": record.module, "funtion": record.funcName}
+        if hasattr(record, "extra_data"):
+            log_obj.update(record.extra_data)
+        return json.dumps(log_obj)
+    
+
+def get_logger(name: str = "production-api") -> logging.Logger: # Adding permanent comments since I keep forgetting this block of very cryptic code
+    logger = logging.getLogger(name)             # Check if we alr have a logger (postoffice)
+    if not logger.handlers:                      # Check if we alr have a log handler (postman)
+        handler = logging.StreamHandler()        # Assign a handler (postman) if not available alr
+        handler.setFormatter(JSONFormatter())    # Pack the log (package) from plain text to json
+        logger.addHandler(handler)               # Connect the log and the handler
+        logger.setLevel(logging.INFO)            # Only process messages that are info, warning or error level
+    return logger
 
 
 

@@ -6,7 +6,7 @@ import os
 
 # Securely get DATABASE_URL
 BASE_DIR = Path(__file__).resolve().parent
-env_path = BASE_DIR / "../../.env"
+env_path = BASE_DIR / "../.env"
 load_dotenv(dotenv_path=env_path)  # Load environment variables from .env file
 DATABASE_URL = os.getenv("DATABASE_URL")
 

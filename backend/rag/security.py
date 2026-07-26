@@ -1,5 +1,4 @@
 import re 
-import trace
 from typing import Optional
 from langsmith import traceable
 

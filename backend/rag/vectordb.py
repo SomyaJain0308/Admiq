@@ -1,7 +1,7 @@
-from backend.rag.chunking import get_embeddings
+from rag.chunking import get_embeddings
 from sqlalchemy import select
 from langchain_core.documents import Document as LangChainDocument
-from backend.database import models
+from database import models
 
 
 def add_document_chunks(db, document_id, college_id, chunks: list[LangChainDocument]) -> list[models.Chunk]:

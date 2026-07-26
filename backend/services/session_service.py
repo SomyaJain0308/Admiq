@@ -1,6 +1,7 @@
 from sqlalchemy import select, func
+from database import models
 
-from backend.database import models
+
 
 def get_or_create_active_session(db, college_id, student_id) -> models.StudentSession:
     existing_session = db.execute(select(models.StudentSession).where(models.StudentSession.college_id == college_id, models.StudentSession.student_id == student_id, models.StudentSession.session_status == "active")).scalars().first()
@@ -18,7 +19,6 @@ def get_or_create_active_session(db, college_id, student_id) -> models.StudentSe
     return new_student_session
 
 
-
 def update_session_summary(db, session, session_summary: str):
     session.session_summary = session_summary
     session.last_message_at = func.now()
@@ -27,9 +27,9 @@ def update_session_summary(db, session, session_summary: str):
     return session
 
 
-
 def is_session_budget_exceeded(session, max_tokens: int) -> bool:
     return session.total_tokens_used >= max_tokens
+
 
 def record_session_tokens(db, session, input_tokens: int, output_tokens: int):
     session.total_tokens_used += (input_tokens + output_tokens)

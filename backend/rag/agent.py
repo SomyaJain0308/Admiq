@@ -3,11 +3,11 @@ import logging
 from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION CHANGE TO DeepSeek too
 from langsmith import traceable
-from backend.rag.config import get_settings
-from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
-from backend.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
-from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
-from backend.services.agent_helpers import extract_token_usage, classify_error
+from rag.config import get_settings
+from rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
+from schemas.models import AgentState, AgentTurnOutput, QueryRewrite
+from rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
+from services.agent_helpers import extract_token_usage, classify_error
 
 logger = logging.getLogger(__name__)
 
@@ -15,18 +15,22 @@ logger = logging.getLogger(__name__)
 class ProductionAgent:
     def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
-            settings = get_settings()
-            self.max_primary_retries = settings.max_primary_retries
-            self.max_fallback_retries = settings.max_fallback_retries
-            self.max_retrieval_retries = settings.max_retrieval_retries
-            self.retrieval_distance_threshold = settings.retrieval_distance_threshold
-            self.retrieval_k = getattr(settings, "retrieval_k", 5)
-            self.primary_llm = ChatGoogleGenerativeAI(model=settings.primary_model, temperature=0, timeout=30, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(AgentTurnOutput, method="json_schema", include_raw=True) # NOTE: IN PRODUCTION CHANGE TO DeepSeek  # We handle retries ourselves inside .env
-            self.fallback_llm = ChatGoogleGenerativeAI(model=settings.fallback_model, temperature=0, timeout=30, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(AgentTurnOutput, method="json_schema", include_raw=True)
-            self.query_llm = ChatGoogleGenerativeAI(model=settings.query_model, temperature=0, timeout=15, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(QueryRewrite, method="json_schema", include_raw=True) # NOTE: IN PRODUCTION CHANGE TO DeepSeek 
+            settings = get_settings() # Defined in rag/config (values set in .env)
+
             self.primary_llm_name = settings.primary_model
+            self.primary_llm = ChatGoogleGenerativeAI(model=settings.primary_model, temperature=0, timeout=30, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(AgentTurnOutput, method="json_schema", include_raw=True) # NOTE: IN PRODUCTION CHANGE TO DeepSeek  # We handle retries ourselves inside .env
+            self.max_primary_retries = settings.max_primary_retries
+
             self.fallback_llm_name = settings.fallback_model
+            self.fallback_llm = ChatGoogleGenerativeAI(model=settings.fallback_model, temperature=0, timeout=30, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(AgentTurnOutput, method="json_schema", include_raw=True)
+            self.max_fallback_retries = settings.max_fallback_retries
+
             self.query_llm_name = settings.query_model
+            self.query_llm = ChatGoogleGenerativeAI(model=settings.query_model, temperature=0, timeout=15, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(QueryRewrite, method="json_schema", include_raw=True) # NOTE: IN PRODUCTION CHANGE TO DeepSeek 
+            self.max_retrieval_retries = settings.max_retrieval_retries
+
+            self.retrieval_distance_threshold = settings.retrieval_distance_threshold
+
             self.graph = self._build_graph()
         except Exception:
             logger.critical("ProductionAgent failed to initialize", exc_info=True)
@@ -34,18 +38,22 @@ class ProductionAgent:
 
 
     def _build_graph(self): # LangGraph state machine
-        def resolve_query(state: AgentState) -> dict:
+        def resolve_query(state: AgentState) -> dict: # Pass the initial query to llm it will decide wheather to retrieve or not, if true then rewrite the query for perfect retrieval which is determined by route_after_resolve
             start = time.perf_counter()
+            # A little off the topic but let's first store the previous_assitant_message
             try:
-                previous_assistant_message = get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"])
+                previous_assistant_message = get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"]) # Defined in rag/retrieval.py
             except Exception as e:
                 logger.warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
+
             try:
-                result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message))
+                result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message)) # Prompt present in rag/retrieval.py
+
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
                 needs_retrieval = result["parsed"].needs_retrieval
                 search_queries = result["parsed"].search_queries or [state["query"]]
+
                 if needs_retrieval:
                     QUERY_DECOMPOSITION_SIZE.observe(len(search_queries))
             except Exception as e:
@@ -55,13 +63,14 @@ class ProductionAgent:
             STAGE_LATENCY.labels(stage="resolve_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(output_tokens)
+
             result_dict = {"pending_queries": search_queries if needs_retrieval else [], "needs_retrieval": needs_retrieval, "resolved_chunks": [], "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
             if not needs_retrieval:
                 result_dict["relevant_documents"] = "No document lookup needed - this is a greeting, thanks, or small talk, not an admissions question."
             return result_dict
 
 
-        def _k_for_query_count(n: int) -> int:
+        def _k_for_query_count(n: int) -> int: # Determine how many chunks per sub query to fetch by looking at number of sub queries.
             if n <= 1:
                 return 3
             elif n <= 3:
@@ -70,7 +79,7 @@ class ProductionAgent:
                 return 1
 
 
-        def retrieve(state: AgentState) -> dict:
+        def retrieve(state: AgentState) -> dict: # If needs_retrieve = True then search k chunks for each sub-query with their cosine distance if > retrieval_distance_threshold disregard those queries then send to resolve_after_resolve
             start = time.perf_counter()
             try:
                 pending = state["pending_queries"]
@@ -79,12 +88,12 @@ class ProductionAgent:
                 newly_resolved = list(state.get("resolved_chunks", []))
                 still_pending = []
                 for sub_query in pending:
-                    scored = get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k)
+                    scored = get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
                     for chunk_id, _, dist in scored:
                         RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <= self.retrieval_distance_threshold).lower()).observe(dist)
                     passing = [(chunk_id, block, distance) for chunk_id, block, distance in scored if distance <= self.retrieval_distance_threshold and chunk_id not in already_seen_ids]
                     if passing:
-                        for chunk_id, block, dist in passing:
+                        for chunk_id, _, dist in passing:
                             already_seen_ids.add(chunk_id)
                         newly_resolved.extend(passing)
                     else:

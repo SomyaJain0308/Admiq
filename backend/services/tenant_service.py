@@ -1,6 +1,4 @@
-from backend.database import models
-from backend.schemas.models import InboundWhatsAppMessage
-from datetime import datetime, timezone
+from database import models
 from fastapi import HTTPException, status
 from sqlalchemy import select
 
@@ -79,35 +77,7 @@ def save_inbound_message(db, college_id, student_id, whatsapp_message_id, conten
     db.refresh(new_message)
 
     return new_message
-
-
-
-def extract_whatsapp_message_events(payload) -> list[InboundWhatsAppMessage]:
-    value = payload["entry"][0]["changes"][0]["value"]
-    messages = value.get("messages", [])
-    if not messages:
-        return []
-
-    if payload["entry"][0]["changes"][0]["value"]["messages"][0]["type"] != "text":
-        return []
-
-    event = InboundWhatsAppMessage(
-    whatsapp_business_account_id = payload["entry"][0]["id"],
-    phone_number_id = value["metadata"]["phone_number_id"],
-    display_phone_number = value["metadata"]["display_phone_number"],
-    
-    whatsapp_user_id = value["contacts"][0]["wa_id"],
-    student_name = value["contacts"][0]["profile"]["name"],
-    student_phone = value["messages"][0]["from"],
-    whatsapp_message_id = value["messages"][0]["id"],
-    whatsapp_timestamp = datetime.fromtimestamp(int(value["messages"][0]["timestamp"]), tz=timezone.utc,),
-    message_type = value["messages"][0]["type"],
-    content = value["messages"][0]["text"]["body"],
-    
-    raw_payload = payload,
-    )
-    
-    return [event]    
+  
 
 
 def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> models.Message:
