@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Optional, TypedDict
 
 
@@ -28,7 +28,8 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
 
     # resolve_query / re_query
     needs_retrieval: bool
-    search_query: str
+    pending_queries: list[str]
+    resolved_chunks: list
     retrieval_retry_count: int
     previous_assistant_message: str | None
 
@@ -70,4 +71,8 @@ class AgentTurnOutput(BaseModel): # What the assistant sends back
 
 class QueryRewrite(BaseModel):
     needs_retrieval: bool = Field(description="False for greetings, thanks, acknowledgments, or small talk that don't need document lookup. True for anything asking about fees, courses, eligibility, deadlines, hostel, placements, documents, or admissions process.")
-    search_query: str = Field(default="", description="Empty if needs_retrieval is False.")
+    search_query: str = Field(default_factiry=list, description="1-4 focused search queries. Use 1 for a single-topic question. Only split into multiple when the student is genuinely asking about multiple distinct topics/courses/comparisons in one message (e.g. 'compare CSE and ECE fees' -> 2 queries, one per course). Empty if needs_retrieval is False.")
+
+
+class RetryQueries(BaseModel):
+    search_queries: list[str] = Field(description="Rewritten search queries, one per failed query, in the same order as given.")

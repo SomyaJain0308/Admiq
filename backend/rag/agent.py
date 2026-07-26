@@ -16,7 +16,6 @@ class ProductionAgent:
     def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
             settings = get_settings()
-            self.min_relevant_chunks = settings.min_relevant_chunks
             self.max_primary_retries = settings.max_primary_retries
             self.max_fallback_retries = settings.max_fallback_retries
             self.max_retrieval_retries = settings.max_retrieval_retries
@@ -60,44 +59,67 @@ class ProductionAgent:
             return result_dict
 
 
-        def retrieve(state: AgentState) -> dict: # Retrieve k(5) relevant chunks with distances and send them to check_distance
+        def _k_for_query_count(n: int) -> int:
+            if n <= 1:
+                return 3
+            elif n <= 3:
+                return 2
+            else:
+                return 1
+
+
+        def retrieve(state: AgentState) -> dict:
             start = time.perf_counter()
             try:
-                scored_chunks = get_relevant_documents_scored(db=state["db"], query=state["search_query"], college_id=state["college_id"], k=self.retrieval_k)
-                for _, dist in scored_chunks:
-                    RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <=self.retrieval_distance_threshold).lower()).observe(dist)
-                passing_chunks = [(block, distance) for block, distance in scored_chunks if distance <= self.retrieval_distance_threshold]
-                if passing_chunks:
-                    relevant_documents = "\n---\n".join(block for block, _ in passing_chunks)
-                    best_distance = min((distance for _, distance in passing_chunks), default=1.0)
+                pending = state["pending_queries"]
+                k = _k_for_query_count(len(pending))
+                already_seen_ids = {chunk_id for chunk_id, _, _ in state.get("resolved_chunks", [])}
+                newly_resolved = list[state.get("resolved_chunks", [])]
+                still_pending = []
+                for sub_query in pending:
+                    scored = get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k)
+                    for chunk_id, _, dist in scored:
+                        RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <= self.retrieval_distance_threshold).lower()).observe(dist)
+                    passing = [(chunk_id, block, distance) for chunk_id, block, distance in scored if distance <= self.retrieval_distance_threshold and chunk_id not in already_seen_ids]
+                    if passing:
+                        for chunk_id, block, dist in passing:
+                            already_seen_ids.add(chunk_id)
+                        newly_resolved.extend(passing)
+                    else:
+                        still_pending.append(sub_query)
+                if newly_resolved:
+                    relevant_documents = "\n---\n".join(block for _, block, _ in newly_resolved)
+                    best_distance = min(dist for _, _, dist in newly_resolved)
                 else:
                     relevant_documents = "No relevant documents were found for this query."
-                    best_distance = min((distance for _, distance in scored_chunks), default=1.0)
-
-                passing_chunk_count = len(passing_chunks)
+                    best_distance = 1.0
             except Exception as e:
                 logger.warning("Retrieval failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
-                relevant_documents, best_distance, passing_chunk_count = "No relevant documents were found for this query.", 1.0, 0
+                newly_resolved, still_pending = state.get("resolved_chunks", []), state.get("pending_queries", [])
+                relevant_documents, best_distance = "No relevant documents were found for this query.", 1.0
             finally:
                 RETRIEVAL_LATENCY.observe(time.perf_counter() - start)
-            return {"relevant_documents": relevant_documents, "best_distance": best_distance, "passing_chunk_count": passing_chunk_count}
+            return {"resolved_chunks": newly_resolved, "pending_queries": still_pending, "relevant_documents": relevant_documents, "best_distance": best_distance}
 
 
         def re_query(state: AgentState):
             attempt = state["retrieval_retry_count"] + 1
             start = time.perf_counter()
+            failed = state["pending_queries"]
             try:
-                result = self.query_llm.invoke(RE_QUERY_PROMPT.format(original_query=state["query"], failed_search_query=state["search_query"], previous_assistant_message=state["previous_assistant_message"]))
+                result = self.query_llm.invoke(RE_QUERY_PROMPT.format(original_query=state["query"], failed_queries="\n".join(failed), previous_assistant_message=state["previous_assistant_message"]))
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
-                new_query = result["parsed"].search_query or state["search_query"]
+                new_queries = result["parsed"].search_queries
+                if len(new_queries) != len(failed):
+                    new_queries = failed
             except Exception as e:
                 logger.warning("re-query failed college_id=%s studnet_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
-                new_query, input_tokens, output_tokens = state["search_query"], 0, 0
+                new_queries, input_tokens, output_tokens = failed, 0, 0
             STAGE_LATENCY.labels(stage="re_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(output_tokens)
-            logger.info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], state["search_query"], new_query)
-            return {"search_query": new_query, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
+            logger.info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], failed, new_queries)
+            return {"pending_queries": new_queries, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
 
 
         def flag_low_confidence(state: AgentState) -> dict:
@@ -202,7 +224,7 @@ class ProductionAgent:
         
 
         def route_after_retrieve(state: AgentState) -> str:
-            if state["passing_chunk_count"] >= self.min_relevant_chunks:
+            if state["pending_queries"]:
                 return "generate"
             elif state["retrieval_retry_count"] < self.max_retrieval_retries:
                 return "re_query"

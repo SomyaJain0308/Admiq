@@ -82,7 +82,8 @@ The updated_session_summary field is internal and must not be mentioned to the s
 
 
 
-RESOLVE_QUERY_PROMPT = """You are rewriting a student's WhatsApp message into a focused search query for a college-admissions document retrieval system.
+RESOLVE_QUERY_PROMPT = """
+You are rewriting a student's WhatsApp message into focused search queries for a college-admissions document retrieval system.
 
 Previous assistant reply for context:
 {previous_assistant_message}
@@ -90,11 +91,12 @@ Previous assistant reply for context:
 Student's latest message:
 {query}
 
+If the student's query is in any other language than English, convert it to English first.
+
 First decide: does this message need a document lookup? Greetings ("hi", "hello"), thanks, acknowledgments ("ok", "got it"), or small talk do NOT need retrieval. Questions about fees, courses, eligibility, scholarships, placements, hostel, documents, or deadlines DO need retrieval.
 
-If retrieval is needed, rewrite the message into a single, specific search query, resolving pronouns/references using the previous reply. If retrieval is not needed, leave the search query empty.
-
-If the student's query is in any other language than English, convert it to English first."""
+If retrieval is needed, produce 1 to 4 focused search queries. Use exactly 1 for a single-topic question (this is the common case). Only produce more than 1 if the student is genuinely asking about multiple distinct topics or comparing multiple courses/programs in the same message (e.g. "compare CSE and ECE fees and placements" -> separate queries for CSE fees, ECE fees, CSE placements, ECE placements). Resolve pronouns/references using the previous reply. If retrieval is not needed, return an empty list.
+"""
 
 
 
@@ -117,7 +119,7 @@ Rewrite the search query with different phrasing, broader or more specific terms
 
 
 @traceable(name="embed_and_retrieve_chunks", run_type="retriever")
-def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -> list[tuple[str, float]]:
+def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> list[tuple[int, str, float]]:
     start = time.perf_counter()
     try:
         query_embedding = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", output_dimensionality=768).embed_query(query)
@@ -133,8 +135,7 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -
     if not results:
         logger.info("No chunks found college_id=%s query=%r elapsed_ms=%.0f", college_id, query[:200], elapsed * 1000)
         return []
-    scored_blocks = []
-    distances = []
+    scored= []
     for chunk, distance in results:
         try:
             if chunk.source_type == "document":
@@ -147,9 +148,9 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int = 5) -
         block = f"Source: {source}\nContent: {chunk.chunk_content}"
         if chunk.chunk_context:
             block += f"\nContext: {chunk.chunk_context}"
-        scored_blocks.append((block, distance))
-    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored_blocks), len(results), college_id, elapsed * 1000)
-    return scored_blocks
+        scored.append((chunk.chunk_id, block, distance))
+    logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored), len(results), college_id, elapsed * 1000)
+    return scored
 
 
 
