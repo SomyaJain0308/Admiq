@@ -1,4 +1,4 @@
-from database import models
+from backend.database import models
 from fastapi import HTTPException, status
 from sqlalchemy import select
 

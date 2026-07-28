@@ -1,17 +1,15 @@
 import logging
 from typing import List, Dict
 from pydantic import BaseModel, Field
-# Only used for cache deletion
-from google import genai as _raw_genai
+from google import genai as _raw_genai # Only used for cache deletion
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter, RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from langchain_google_genai.chat_models import create_context_cache
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI, create_context_cache
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from rag.config import get_settings
-
+from backend.rag.config import get_settings
+from backend.database import models
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -114,3 +112,17 @@ def ingest_markdown(markdown_text: str, filename: str, college_id: str, extra_me
     texts = [c.page_content for c in contextualized_chunks]
     vectors = embedder.embed_documents(texts)
     return contextualized_chunks, vectors
+
+
+def insert_chunks_to_db(db, document_id: int, college_id: int, chunks: list, vectors: list) -> list[models.Chunk]:
+    if not chunks:
+        return []
+    chunk_rows = [
+        models.Chunk(document_id=document_id, college_id=college_id, chunk_content=chunk.page_content, embedding=vector, chunk_index=index, source_type="document", source_query_id=None, expires_at=None)
+        for index, (chunk, vector) in enumerate(zip(chunks, vectors))
+    ]
+    db.add_all(chunk_rows)
+    db.commit()
+    for row in chunk_rows:
+        db.refresh(row)
+    return chunk_rows

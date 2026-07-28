@@ -1,5 +1,11 @@
 from pydantic_settings import BaseSettings
+
 from functools import lru_cache
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / "../.env"
 
 class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetched from .env
 
@@ -35,11 +41,17 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     retrieval_distance_threshold: float = 0.45
 
     # Whatsapp Webhook
-    whatsapp_verify_token: str
-    meta_app_secret: str
-    whatsapp_access_token: str
+    whatsapp_verify_token: str = ""
+    meta_app_secret: str = ""
+    whatsapp_access_token: str = ""
 
-    model_config = {"env_file": ".env", "extra": "ignore"}
+    # Database
+    redis_url: str = ""
+    supabase_url: str = ""
+    supabase_service_role_key: str = "" # Server-side only, bypasses RLS - never expose this to a frontend
+    storage_bucket: str = "college_documents"
+    
+    model_config = {"env_file": ENV_PATH, "extra": "ignore"}
 
     @property
     def is_production(self) -> bool:

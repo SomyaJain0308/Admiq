@@ -1,8 +1,8 @@
-import requests
-import hashlib
-import hmac
-from schemas.models import InboundWhatsAppMessage
+import requests, hashlib, hmac
 from datetime import datetime, timezone
+
+from backend.schemas.models import InboundWhatsAppMessage
+
 
 
 def send_whatsapp_text_message(phone_number_id: str, to: str, message: str, access_token: str) -> dict:

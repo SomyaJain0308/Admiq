@@ -1,10 +1,12 @@
+from backend.rag.config import get_settings
+from backend.database import models
+
 from sqlalchemy import select
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from database import models
-import logging
-import time
 from langsmith import traceable
 
+import logging
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -118,13 +120,15 @@ If the student's query is in any other language than English, convert it to Engl
 Rewrite each failed query with different phrasing, broader or more specific terms, or synonyms closer to how official documents describe the topic. Return exactly one rewritten query per failed query, in the same order.
 """
 
+settings = get_settings()
+
 
 
 @traceable(name="embed_and_retrieve_chunks", run_type="retriever")
 def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> list[tuple[int, str, float]]:
     start = time.perf_counter()
     try:
-        query_embedding = GoogleGenerativeAIEmbeddings(model="models/gemini-embedding-001", output_dimensionality=768).embed_query(query)
+        query_embedding = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, output_dimensionality=settings.vector_size).embed_query(query)
     except Exception as e:
         logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
         raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.

@@ -3,11 +3,11 @@ import logging
 from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION CHANGE TO DeepSeek too
 from langsmith import traceable
-from rag.config import get_settings
-from rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
-from schemas.models import AgentState, AgentTurnOutput, QueryRewrite
-from rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
-from services.agent_helpers import extract_token_usage, classify_error
+from backend.rag.config import get_settings
+from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
+from backend.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
+from backend.rag.monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
+from backend.services.agent_helpers import extract_token_usage, classify_error
 
 logger = logging.getLogger(__name__)
 

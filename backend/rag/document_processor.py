@@ -1,5 +1,5 @@
 """
-This is the only file in this project that was AI generated I didn't write it myself because Document Processors keep advancing at this time i found docling was the best so i just used it.
+This is the only file in this project that was AI generated, I didn't write it myself because Document Processors keep advancing at this time I found docling was the best so I just used it.
 """
 
 import io
