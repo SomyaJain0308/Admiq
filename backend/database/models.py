@@ -106,10 +106,10 @@ class Student(Base):
     )
 
     college: Mapped["College"] = relationship(back_populates="students")
-    messages: Mapped[list["Message"]] = relationship(back_populates="student", cascade="all, delete-orphan")
-    low_confidence_queries: Mapped[list["LowConfidenceQuery"]] = relationship(back_populates="student", cascade="all, delete-orphan")
+    messages: Mapped[list["Message"]] = relationship(back_populates="student", cascade="all, delete-orphan", overlaps="messages")
+    low_confidence_queries: Mapped[list["LowConfidenceQuery"]] = relationship(back_populates="student", cascade="all, delete-orphan", overlaps="low_confidence_queries")
     assigned_staff_membership: Mapped["StaffCollege | None"] = relationship("StaffCollege", primaryjoin=("and_(Student.college_id == StaffCollege.college_id, " "Student.assigned_to == StaffCollege.staff_id)"), foreign_keys="[Student.college_id, Student.assigned_to]", viewonly=True)
-    sessions: Mapped[list["StudentSession"]] = relationship(back_populates="student", cascade="all, delete-orphan")
+    sessions: Mapped[list["StudentSession"]] = relationship(back_populates="student", cascade="all, delete-orphan", overlaps="sessions")
 
 
 
@@ -128,9 +128,9 @@ class StudentSession(Base):
     total_tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 
-    student: Mapped["Student"] = relationship(back_populates="sessions")
-    college: Mapped["College"] = relationship(back_populates="sessions")
-    messages: Mapped[list["Message"]] = relationship(back_populates="session")
+    student: Mapped["Student"] = relationship(back_populates="sessions", overlaps="sessions")
+    college: Mapped["College"] = relationship(back_populates="sessions", overlaps="sessions,student")
+    messages: Mapped[list["Message"]] = relationship(back_populates="session", overlaps="messages,messages")
 
     __table_args__ = (
         CheckConstraint("session_status IN ('active', 'closed')"),
@@ -160,9 +160,9 @@ class Message(Base):
     raw_payload: Mapped[dict | None] = mapped_column(JSONB)
     session_id: Mapped[int | None] = mapped_column(Integer)
 
-    student: Mapped["Student"] = relationship(back_populates="messages")
-    college: Mapped["College"] = relationship(back_populates="messages")
-    session: Mapped["StudentSession"] = relationship(back_populates="messages")
+    student: Mapped["Student"] = relationship(back_populates="messages", overlaps="messages,messages")
+    college: Mapped["College"] = relationship(back_populates="messages", overlaps="messages,messages,student")
+    session: Mapped["StudentSession"] = relationship(back_populates="messages", overlaps="college,messages,messages,student")
 
 
     __table_args__ = (
@@ -220,8 +220,8 @@ class LowConfidenceQuery(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
     flagged_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
-    college: Mapped["College"] = relationship(back_populates="low_confidence_queries")
-    student: Mapped["Student"] = relationship(back_populates="low_confidence_queries")
+    college: Mapped["College"] = relationship(back_populates="low_confidence_queries", overlaps="low_confidence_queries")
+    student: Mapped["Student"] = relationship(back_populates="low_confidence_queries", overlaps="college,low_confidence_queries")
     question_message: Mapped["Message"] = relationship("Message", primaryjoin=("and_(LowConfidenceQuery.college_id == Message.college_id, " "LowConfidenceQuery.question_message_id == Message.message_id)"), foreign_keys="[LowConfidenceQuery.college_id, LowConfidenceQuery.question_message_id]", viewonly=True)
     answer_message: Mapped["Message"] = relationship("Message", primaryjoin=("and_(LowConfidenceQuery.college_id == Message.college_id, " "LowConfidenceQuery.answer_message_id == Message.message_id)"), foreign_keys="[LowConfidenceQuery.college_id, LowConfidenceQuery.answer_message_id]", viewonly=True)
     resolved_by_membership: Mapped["StaffCollege | None"] = relationship("StaffCollege", primaryjoin=("and_(LowConfidenceQuery.college_id == StaffCollege.college_id, " "LowConfidenceQuery.resolved_by == StaffCollege.staff_id)"), foreign_keys="[LowConfidenceQuery.college_id, LowConfidenceQuery.resolved_by]", viewonly=True,)

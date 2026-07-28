@@ -299,7 +299,7 @@ def convert_single_pdf(pdf_path: str) -> Dict:
             doc = conv.convert(str(path)).document
             text = doc.export_to_markdown()
             score = assess_text_quality(text)
-            result["num_pages"] = getattr(doc, "num_pages", None)
+            result["num_pages"] = doc.num_pages() if hasattr(doc, "num_pages") else None
             logger.info(f"[{path.name}] Tier 1 (Docling standard) quality: {score}")
             if score > best_score:
                 best_text, best_score, best_method = text, score, "docling_standard"
@@ -314,7 +314,7 @@ def convert_single_pdf(pdf_path: str) -> Dict:
             doc = conv.convert(str(path)).document
             text = doc.export_to_markdown()
             score = assess_text_quality(text)
-            result["num_pages"] = result["num_pages"] or getattr(doc, "num_pages", None)
+            result["num_pages"] = result["num_pages"] or (doc.num_pages() if hasattr(doc, "num_pages") else None)
             logger.info(f"[{path.name}] Tier 2 (Docling forced OCR) quality: {score}")
             if score > best_score:
                 best_text, best_score, best_method = text, score, "docling_forced_ocr"
