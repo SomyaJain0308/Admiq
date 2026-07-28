@@ -46,10 +46,11 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     whatsapp_access_token: str = ""
 
     # Database
+    database_url: str = ""
     redis_url: str = ""
     supabase_url: str = ""
     supabase_service_role_key: str = "" # Server-side only, bypasses RLS - never expose this to a frontend
-    storage_bucket: str = "college_documents"
+    storage_bucket: str = "college-documents"
     
     model_config = {"env_file": ENV_PATH, "extra": "ignore"}
 

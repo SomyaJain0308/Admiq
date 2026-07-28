@@ -8,9 +8,10 @@ from backend.rag.config import get_settings
 from backend.rag.security import SecurityPipeline
 from backend.rag.monitoring import get_logger, MetricsCollector
 from backend.rag.agent import ProductionAgent
-from backend.routers.document_upload import router as documents_router
+from backend.routers.documents import router as documents_router
 from backend.routers.whatsappChat import router as whatsapp_router
 from backend.routers.metrics import router as metrics_router
+from backend.routers.colleges import router as colleges_router
 
 load_dotenv()
 
@@ -40,3 +41,4 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 app.include_router(documents_router)
 app.include_router(whatsapp_router)
 app.include_router(metrics_router)
+app.include_router(colleges_router)

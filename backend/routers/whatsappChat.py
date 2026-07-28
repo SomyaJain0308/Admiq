@@ -15,7 +15,7 @@ from backend.services.session_service import get_or_create_active_session, is_se
 
 logger = get_logger()
 
-router = APIRouter(prefix="/webhooks/whatsapp", tags=["whatsapp"])
+router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])
 
 
 @router.get("")

@@ -1,16 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-from dotenv import load_dotenv
-from pathlib import Path
-import os
 
-# Securely get DATABASE_URL
-BASE_DIR = Path(__file__).resolve().parent
-env_path = BASE_DIR / "../.env"
-load_dotenv(dotenv_path=env_path)  # Load environment variables from .env file
-DATABASE_URL = os.getenv("DATABASE_URL")
+from backend.rag.config import get_settings
 
-engine = create_engine(DATABASE_URL)  # Create db engine
+settings = get_settings()
+
+engine = create_engine(settings.database_url)  # Create db engine
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) # Start db session
 

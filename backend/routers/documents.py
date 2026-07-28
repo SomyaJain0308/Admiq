@@ -9,12 +9,12 @@ from backend.services.document_service import create_document_row
 from backend.backgroundTasks.celery_tasks import process_document_task
 
 
-router = APIRouter()
+router = APIRouter(tags=["Upload Documents"])
 
 ALLOWED_CONTENT_TYPES = {"application/pdf"}
 MAX_FILE_SIZE_MB = 25
 
-@router.post("/colleges/{college_id}/documents")
+@router.post("/router/colleges/{college_id}/documents")
 async def upload_document(college_id: int, uploaded_by: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Only PDF files are supported right now.")
@@ -27,10 +27,10 @@ async def upload_document(college_id: int, uploaded_by: int = Form(...), file: U
     doc.storage_path = storage_path
     db.commit()
     db.refresh(doc)
-    process_document_task.delay(document_id = doc.document_id, college=college_id)
+    process_document_task.delay(document_id = doc.document_id, college_id=college_id)
     return {"document_id": doc.document_id, "status": doc.document_status}
 
-@router.get("/colleges/{college_id}/documents/{document_id}")
+@router.get("/router/colleges/{college_id}/documents/{document_id}")
 async def get_document_status(college_id: int, document_id: int, db: Session = Depends(get_db)):
     doc = db.execute(select(models.Document).where(models.Document.college_id == college_id, models.Document.document_id == document_id)).scalars().first()
     if doc is None:

@@ -1,14 +1,3 @@
-DROP TABLE IF EXISTS chunks CASCADE;
-DROP TABLE IF EXISTS low_confidence_queries CASCADE;
-DROP TABLE IF EXISTS messages CASCADE;
-DROP TABLE IF EXISTS documents CASCADE;
-DROP TABLE IF EXISTS whatsapp_numbers CASCADE;
-DROP TABLE IF EXISTS students CASCADE;
-DROP TABLE IF EXISTS staff_colleges CASCADE;
-DROP TABLE IF EXISTS college_staff CASCADE;
-DROP TABLE IF EXISTS colleges CASCADE;
-DROP TABLE IF EXISTS student_sessions CASCADE;
-
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
@@ -201,6 +190,11 @@ SELECT cron.schedule(
     AND last_message_at <= NOW() - INTERVAL '30 minutes';
   $$
 );
+
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('college-documents', 'college-documents', false)
+ON CONFLICT (id) DO NOTHING;
 
 
 
