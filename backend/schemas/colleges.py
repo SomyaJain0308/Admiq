@@ -1,35 +1,24 @@
 from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
-
-class College(BaseModel):
-    college_id: int
-    college_name: str
-    college_phone: str
-    college_email: str
-    college_context: dict
-    created_at: datetime
+from typing import Optional
 
 
 class CollegeBase(BaseModel):
-    college_name: str = Field(min_lenght=2, max_length=100)
+    college_name: str = Field(min_length=2, max_length=100)
     college_phone: str = Field(min_length=10, max_length=15)
     college_email: EmailStr = Field(max_length=150)
-    college_context: dict
+    college_context: Optional[dict] = None
 
 
 class CollegeCreate(CollegeBase):
-    ...
+    pass
 
 
-class CollegeUpdate(CollegeBase):
-    college_name: str | None = Field(default=None, min_lenght=2, max_length=100)
+class CollegeUpdate(BaseModel):
+    college_name: str | None = Field(default=None, min_length=2, max_length=100)
     college_phone: str | None = Field(default=None, min_length=10, max_length=15)
     college_email: EmailStr | None = Field(default=None, max_length=150)
-    college_context: dict | None
-
-
-class CollegeDelete(CollegeBase):
-    ...
+    college_context: dict | None = Field(default=None)
 
 
 class CollegeResponse(CollegeBase):

@@ -4,14 +4,14 @@ from sqlalchemy.orm import Session
 
 from backend.database.database import get_db
 from backend.database.models import College
-from backend.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeDelete, CollegeResponse
+from backend.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeResponse
 
 
 router = APIRouter(tags=["colleges"])
 
 
 @router.get("/router/college", response_model=list[CollegeResponse])
-async def get_College(db: Session = Depends(get_db)):
+async def get_colleges(db: Session = Depends(get_db)):
     colleges = db.execute(select(College)).scalars().all()
     if colleges:  
         return colleges
@@ -43,12 +43,13 @@ def create_college(college: CollegeCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail=f"Phone Number '{college.college_phone}' already exists")
 
 
-    new_college = {
-        "college_name": college.college_name,
-        "college_phone": college.college_phone,
-        "college_email": college.college_email,
-        "college_context": college.college_context
-    }
+    new_college = College(
+        college_name=college.college_name,
+        college_phone=college.college_phone,
+        college_email=college.college_email,
+        college_context=college.college_context
+    )
+    
 
     db.add(new_college)
     db.commit()
