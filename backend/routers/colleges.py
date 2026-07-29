@@ -55,3 +55,28 @@ def create_college(college: CollegeCreate, db: Session = Depends(get_db)):
     db.refresh(new_college)
 
     return new_college
+
+
+@router.patch("/router/college/{college_id}", response_model=CollegeResponse)
+async def update_college(college_id: int, college: CollegeUpdate, db: Session = Depends(get_db)):
+    existing_college = db.execute(select(College).where(College.college_id == college_id).limit(1)).scalars().first()
+    if not existing_college:
+        raise HTTPException(status_code=404, detail="College not Found")
+
+    college = college.model_dump(exclude_unset=True)
+    for field, value in college.items():
+        setattr(existing_college, field, value)
+
+    db.commit()
+    db.refresh(existing_college)
+
+    return existing_college
+
+
+@router.delete("/router/college/{college_id}", status_code=204)
+async def delete_college(college_id: int, db: Session = Depends(get_db)):
+    existing_college = db.execute(select(College).where(College.college_id == college_id).limit(1)).scalars().first()
+    if not existing_college:
+        raise HTTPException(status_code=404, detail="College not Found")
+    db.delete(existing_college)
+    db.commit()
