@@ -71,3 +71,20 @@ class AgentTurnOutput(BaseModel): # What the assistant sends back
 class QueryRewrite(BaseModel):
     needs_retrieval: bool = Field(description="False for greetings, thanks, acknowledgments, or small talk that don't need document lookup. True for anything asking about fees, courses, eligibility, deadlines, hostel, placements, documents, or admissions process.")
     search_queries: list[str] = Field(default_factory=list, description="1-4 focused search queries. Use 1 for a single-topic question. Only split into multiple when the student is genuinely asking about multiple distinct topics/courses/comparisons in one message (e.g. 'compare CSE and ECE fees' -> 2 queries, one per course). Empty if needs_retrieval is False.")
+
+
+class ChatTestRequest(BaseModel):
+    college_id: int
+    student_phone: str
+    message: str
+    student_name: str | None = None
+
+
+class ChatTestResponse(BaseModel):
+    response: str
+    model_used: str
+    sources: list[str]
+    wants_human_handoff: bool
+    best_distance: float | None
+    session_id: int
+    student_id: int
