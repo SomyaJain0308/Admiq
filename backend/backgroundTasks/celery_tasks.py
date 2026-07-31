@@ -3,7 +3,7 @@ from celery.exceptions import MaxRetriesExceededError
 
 from backend.backgroundTasks.celery_app import celery_app
 from backend.rag.chunking import insert_chunks_to_db
-from backend.database.database import AsyncSessionLocal
+from backend.database.database import SessionLocal
 from backend.database import models
 from backend.rag import document_processor, chunking
 from backend.services.storage_service import download_file_bytes
@@ -21,7 +21,7 @@ RETRYABLE_ERROR_TYPES = {"timeout", "rate_limit", "connection_error"}
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
 def process_document_task(self, document_id: int, college_id: int):
-    db = AsyncSessionLocal()
+    db = SessionLocal()
     tmp_path = None
     try:
         doc = db.execute(select(models.Document).where(models.Document.college_id == college_id, models.Document.document_id == document_id)).scalars().first()
@@ -43,7 +43,7 @@ def process_document_task(self, document_id: int, college_id: int):
         error_type = classify_error(e)
         logger.error(f"process_document_task failed document_id={document_id} college_id={college_id} error={e}", exc_info=True)
         db.rollback()
-        if error_type in MaxRetriesExceededError:
+        if error_type in RETRYABLE_ERROR_TYPES:
             try:
                 raise self.retry(exc=e, countdown=60)
             except MaxRetriesExceededError:
