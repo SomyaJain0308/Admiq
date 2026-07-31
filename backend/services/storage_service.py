@@ -1,5 +1,5 @@
 from supabase import create_client
-from backend.rag.config import get_settings
+from backend.config import get_settings
 
 def _bucket():
     settings = get_settings()

@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from backend.database.database import get_db
-from backend.rag.config import get_settings
+from backend.config import get_settings
 from backend.rag.security import SecurityPipeline
 from backend.rag.monitoring import get_logger, MetricsCollector, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.rag.agent import ProductionAgent

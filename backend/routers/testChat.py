@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 
 from backend.database.database import get_db
-from backend.rag.config import get_settings
+from backend.config import get_settings
 from backend.rag.monitoring import STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.rag.agent import ProductionAgent
 from backend.rag.security import SecurityPipeline

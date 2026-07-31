@@ -1,11 +1,12 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from functools import lru_cache
 from pathlib import Path
+from pydantic import SecretStr
 
 
 BASE_DIR = Path(__file__).resolve().parent
-ENV_PATH = BASE_DIR / "../.env"
+ENV_PATH = BASE_DIR / "/.env"
 
 class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetched from .env
 
@@ -52,8 +53,12 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     supabase_service_role_key: str = "" # Server-side only, bypasses RLS - never expose this to a frontend
     storage_bucket: str = "college-documents"
     
-    model_config = {"env_file": ENV_PATH, "extra": "ignore"}
+    model_config = SettingsConfigDict(env_file=ENV_PATH, env_file_encoding="utf-8")
+    secret_key: SecretStr
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
 
+    
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"

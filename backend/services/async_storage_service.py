@@ -1,9 +1,10 @@
 from supabase import create_async_client, AsyncClient
-from backend.rag.config import get_settings
+
+from backend.config import get_settings
 
 settings = get_settings()
 
-_async_client = AsyncClient | None = None
+_async_client: AsyncClient | None = None
 
 
 async def _bucket():

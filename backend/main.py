@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.rag.config import get_settings
+from backend.config import get_settings
 from backend.rag.security import SecurityPipeline
 from backend.rag.monitoring import get_logger, MetricsCollector
 from backend.rag.agent import ProductionAgent

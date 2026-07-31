@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-from backend.rag.config import get_settings
+from backend.config import get_settings
 
 settings = get_settings()
 

@@ -1,6 +1,6 @@
 import ssl
 from celery import Celery
-from backend.rag.config import get_settings
+from backend.config import get_settings
 
 
 settings = get_settings()

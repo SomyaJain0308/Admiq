@@ -1,4 +1,4 @@
-from backend.rag.config import get_settings
+from backend.config import get_settings
 from backend.database import models
 
 from sqlalchemy import select

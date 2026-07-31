@@ -8,7 +8,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 
-from backend.rag.config import get_settings
+from backend.config import get_settings
 from backend.database import models
 
 logger = logging.getLogger(__name__)
