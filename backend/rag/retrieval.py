@@ -2,6 +2,7 @@ from backend.rag.config import get_settings
 from backend.database import models
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langsmith import traceable
 
@@ -125,15 +126,17 @@ settings = get_settings()
 
 
 @traceable(name="embed_and_retrieve_chunks", run_type="retriever")
-def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> list[tuple[int, str, float]]:
+async def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> list[tuple[int, str, float]]:
     start = time.perf_counter()
     try:
-        query_embedding = GoogleGenerativeAIEmbeddings(api_key=settings.gemini_api_key, model=settings.embedding_model, output_dimensionality=settings.vector_size).embed_query(query)
+        embedder = GoogleGenerativeAIEmbeddings(api_key=settings.gemini_api_key, model=settings.embedding_model, output_dimensionality=settings.vector_size).embed_query(query)
+        query_embedding = await embedder.aembed_query(query)
     except Exception as e:
         logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
         raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.
     try:
-        results = db.execute(select(models.Chunk, models.Chunk.embedding.cosine_distance(query_embedding).label("distance")).where(models.Chunk.college_id == college_id).order_by("distance").limit(k)).all()
+        results = await db.execute(select(models.Chunk, models.Chunk.embedding.cosine_distance(query_embedding).label("distance")).where(models.Chunk.college_id == college_id).order_by("distance").limit(k))
+        results = results.all()
     except Exception as e:
         logger.error("chunk retrieval query failed college_id=%s k=%s error=%s", college_id, k, e, exc_info=True)
         raise
@@ -157,18 +160,22 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> li
 
 
 
-def get_previous_assistant_message(db, college_id: int, student_id: int) -> str:
-    message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
+async def get_previous_assistant_message(db, college_id: int, student_id: int) -> str:
+    result = await db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1))
+    message = result.scalars().first()
     return message or "This is the start of the conversation, no previous message yet."
 
 
 @traceable(name="build_system_prompt")
-def build_system_prompt(db, query: str, college_id: int, student_id: int, session_id: int, relevant_documents: str, student_summary: str | None = None, session_summary: str | None = None) -> str:
+async def build_system_prompt(db, query: str, college_id: int, student_id: int, session_id: int, relevant_documents: str, student_summary: str | None = None, session_summary: str | None = None) -> str:
     start = time.perf_counter()
     try:
-        college_name = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1)).scalars().first()
-        college_context = db.execute(select(models.College.college_context).where(models.College.college_id == college_id).limit(1)).scalars().first()
-        previous_assistant_message = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1)).scalars().first()
+        college_name_result = db.execute(select(models.College.college_name).where(models.College.college_id == college_id).limit(1))
+        college_name = college_name_result.scalars().first()
+        college_context_result = db.execute(select(models.College.college_context).where(models.College.college_id == college_id).limit(1))
+        college_context = college_context_result.scalars().first()
+        previous_assistant_message_result = db.execute(select(models.Message.content).where(models.Message.college_id == college_id, models.Message.student_id == student_id, models.Message.messager_role == 'assistant').order_by(models.Message.created_at.desc()).limit(1))
+        previous_assistant_message = previous_assistant_message_result.scalars().first()
     except Exception as e:
         logger.error("build_system_prompt failed college_id=%s student_id=%s session_id=%s error=%s", college_id, student_id, session_id, e, exc_info=True)
         raise  # intentionally raised — caller (agent.py's build_prompt node) must catch this and fall back to a default SYSTEM_PROMPT.

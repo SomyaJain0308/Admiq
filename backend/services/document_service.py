@@ -3,11 +3,19 @@ from sqlalchemy import select
 from backend.database import models
 
 
-def create_document_row(db, college_id: int, file_name: str, storage_path: str, uploaded_by: int) -> models.Document:
+def create_document_row(db, college_id: int, file_name: str, storage_path: str, uploaded_by: int) -> models.Document: # Used by celery_tasks.py
     doc = models.Document(college_id=college_id, file_name=file_name, storage_path=storage_path, uploaded_by=uploaded_by, document_status="processing")
     db.add(doc)
     db.commit()
     db.refresh(doc)
+    return doc
+
+
+async def async_create_document_row(db, college_id: int, file_name: str, storage_path: str, uploaded_by: int) -> models.Document: # Used by documents.py
+    doc = models.Document(college_id=college_id, file_name=file_name, storage_path=storage_path, uploaded_by=uploaded_by, document_status="processing")
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
     return doc
 
 

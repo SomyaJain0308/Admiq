@@ -1,11 +1,11 @@
-import requests, hashlib, hmac
+import httpx, hashlib, hmac
 from datetime import datetime, timezone
 
 from backend.schemas.models import InboundWhatsAppMessage
 
 
 
-def send_whatsapp_text_message(phone_number_id: str, to: str, message: str, access_token: str) -> dict:
+async def send_whatsapp_text_message(phone_number_id: str, to: str, message: str, access_token: str) -> dict:
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
 
     payload = {
@@ -22,11 +22,11 @@ def send_whatsapp_text_message(phone_number_id: str, to: str, message: str, acce
     "Authorization": f"Bearer {access_token}",
     "Content-Type": "application/json"
     }
-
-    response = requests.post(url, json=payload, headers=headers, timeout=10)
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post(url, json=payload, headers=headers)
 
     return {
-        "ok": response.ok,
+        "ok": response.is_success,
         "status_code": response.status_code,
         "data": response.json() if response.content else None
     }

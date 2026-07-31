@@ -1,8 +1,10 @@
 import time
 import logging
+
 from langgraph.graph import StateGraph, START, END
-from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION CHANGE TO DeepSeek too
+from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION Add DeepSeek too
 from langsmith import traceable
+
 from backend.rag.config import get_settings
 from backend.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
 from backend.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
@@ -38,17 +40,17 @@ class ProductionAgent:
 
 
     def _build_graph(self): # LangGraph state machine
-        def resolve_query(state: AgentState) -> dict: # Pass the initial query to llm it will decide wheather to retrieve or not, if true then rewrite the query for perfect retrieval which is determined by route_after_resolve
+        async def resolve_query(state: AgentState) -> dict: # Pass the initial query to llm it will decide wheather to retrieve or not, if true then rewrite the query for perfect retrieval which is determined by route_after_resolve
             start = time.perf_counter()
             # A little off the topic but let's first store the previous_assitant_message
             try:
-                previous_assistant_message = get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"]) # Defined in rag/retrieval.py
+                previous_assistant_message = await get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"]) # Defined in rag/retrieval.py
             except Exception as e:
                 logger.warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
 
             try:
-                result = self.query_llm.invoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message)) # Prompt present in rag/retrieval.py
+                result = await self.query_llm.ainvoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message)) # Prompt present in rag/retrieval.py
 
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
                 needs_retrieval = result["parsed"].needs_retrieval
@@ -79,7 +81,7 @@ class ProductionAgent:
                 return 1
 
 
-        def retrieve(state: AgentState) -> dict: # If needs_retrieve = True then search k chunks for each sub-query with their cosine distance if > retrieval_distance_threshold disregard those queries then send to resolve_after_resolve
+        async def retrieve(state: AgentState) -> dict: # If needs_retrieve = True then search k chunks for each sub-query with their cosine distance if > retrieval_distance_threshold disregard those queries then send to resolve_after_resolve
             start = time.perf_counter()
             try:
                 pending = state["pending_queries"]
@@ -88,7 +90,7 @@ class ProductionAgent:
                 newly_resolved = list(state.get("resolved_chunks", []))
                 still_pending = []
                 for sub_query in pending:
-                    scored = get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
+                    scored = await get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
                     for chunk_id, _, dist in scored:
                         RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <= self.retrieval_distance_threshold).lower()).observe(dist)
                     passing = [(chunk_id, block, distance) for chunk_id, block, distance in scored if distance <= self.retrieval_distance_threshold and chunk_id not in already_seen_ids]
@@ -113,12 +115,12 @@ class ProductionAgent:
             return {"resolved_chunks": newly_resolved, "pending_queries": still_pending, "relevant_documents": relevant_documents, "best_distance": best_distance}
 
 
-        def re_query(state: AgentState):
+        async def re_query(state: AgentState):
             attempt = state["retrieval_retry_count"] + 1
             start = time.perf_counter()
             failed = state["pending_queries"]
             try:
-                result = self.query_llm.invoke(RE_QUERY_PROMPT.format(original_query=state["query"], failed_queries="\n".join(failed), previous_assistant_message=state["previous_assistant_message"]))
+                result = await self.query_llm.ainvoke(RE_QUERY_PROMPT.format(original_query=state["query"], failed_queries="\n".join(failed), previous_assistant_message=state["previous_assistant_message"]))
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
                 new_queries = result["parsed"].search_queries
                 if len(new_queries) != len(failed):
@@ -133,30 +135,29 @@ class ProductionAgent:
             return {"pending_queries": new_queries, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
 
 
-        def flag_low_confidence(state: AgentState) -> dict:
+        async def flag_low_confidence(state: AgentState) -> dict: # Async because it must match the other nodes' calling convention within the same async graph although no await
             logger.warning("Retrieval exhausted retries college_id=%s student_id=%s session_id=%s query=%r best_distance=%.3f", state["college_id"], state["student_id"], state["session_id"], state["query"], state["best_distance"])
             SUBQUERIES_UNRESOLVED.observe(len(state["pending_queries"]))
             return {"needs_human_review": True}
 
 
-        def build_prompt(state: AgentState) -> dict:
+        async def build_prompt(state: AgentState) -> dict:
             try:
-                prompt = build_system_prompt(db=state["db"], query=state["query"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], relevant_documents=state["relevant_documents"], student_summary=state.get("student_summary"), session_summary=state.get("session_summary"))
+                prompt = await build_system_prompt(db=state["db"], query=state["query"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], relevant_documents=state["relevant_documents"], student_summary=state.get("student_summary"), session_summary=state.get("session_summary"))
             except Exception as e:
                 logger.warning("build_system_prompt failed, using default prompt college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 prompt = SYSTEM_PROMPT.format(college_name="an", student_summary=state.get("student_summary") or "No long-term student summary yet. OR error loading summary", session_summary=state.get("session_summary") or "No current session summary yet. OR error loading session_summary", college_context="No official context available right now. or error loading college_context", previous_assistant_message="This is the start of the conversation, no previous message yet. OR error loading previous assistant message", query=state["query"], relevant_documents=state.get("relevant_documents") or "No relevant documents were found for this query.")
             return {"prompt": prompt}
 
 
-        @traceable(name="primary_llm_call", run_type="llm")
-        def process_message(state: AgentState) -> dict: # Take the prompt from agentstate and send it to the llm then take it's response which includes raw response, sources, update_session_memmory save them in agentstate if there is an error add 1 to the error counter
+        async def process_message(state: AgentState) -> dict: # Take the prompt from agentstate and send it to the llm then take it's response which includes raw response, sources, update_session_memmory save them in agentstate if there is an error add 1 to the error counter
             attempt = state["primary_retry_count"] + 1
             start = time.perf_counter()
             prev_input_tokens = state.get("input_tokens", 0)
             prev_output_tokens = state.get("output_tokens", 0)
             response = None
             try:
-                response = self.primary_llm.invoke(state["prompt"]) # returns {"raw": <OG AIMessage>, "parsed": <AgentTurnOutput instance if parsing succeeded>, "parsing_error": <if parsing failed then an error otherwise ''>}
+                response = await self.primary_llm.ainvoke(state["prompt"]) # returns {"raw": <OG AIMessage>, "parsed": <AgentTurnOutput instance if parsing succeeded>, "parsing_error": <if parsing failed then an error otherwise ''>}
                 if response["parsing_error"] is not None:
                     raise ValueError(f"structured parse failed: {response['parsing_error']}") # NOTE: if it's the correct langgraph syntax then it will work otherwise it will raise an error test and change from the error format in production.
                 parsed_response = response["parsed"]
@@ -185,17 +186,17 @@ class ProductionAgent:
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(call_output_tokens)
                 logger.warning("Primary model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "primary_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
+        process_message = traceable(name="primary_llm_call", run_type="llm")(process_message)
 
             
-        @traceable(name="fallback_llm_call", run_type="llm")
-        def try_fallback(state: AgentState) -> dict: # fallback for the first llm everything is same except the model ofcourse
+        async def try_fallback(state: AgentState) -> dict: # fallback for the first llm everything is same except the model ofcourse
             attempt = state["fallback_retry_count"] + 1
             start = time.perf_counter()
             response = None
             prev_input_tokens = 0
             prev_output_tokens = 0
             try:
-                response = self.fallback_llm.invoke(state["prompt"])
+                response = await self.fallback_llm.ainvoke(state["prompt"])
                 if response["parsing_error"] is not None:
                     raise ValueError(f"structured parse failed: {response['parsing_error']}") # NOTE: is there not a better alternative than raising an error
                 parsed_response = response["parsed"]
@@ -224,9 +225,9 @@ class ProductionAgent:
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(call_output_tokens)
                 logger.warning("Fallback model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "fallback_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
-            
+        try_fallback = traceable(name="fallback_llm_call", run_type="llm")(try_fallback)    
 
-        def handle_error(state: AgentState) -> dict: # If this needs a comment then print("hello world") does too
+        async def handle_error(state: AgentState) -> dict: # Same reason as flag_low_confidence
             logger.error("Both primary and fallback exhausted session_id=%s college_id=%s student_id=%s primary_attempts=%s fallback_attempts=%s last_error=%s", state["session_id"], state["college_id"], state["student_id"], state["primary_retry_count"], state["fallback_retry_count"], state.get("error"))
             return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "sources": [], "model_used": "error_handler", "input_tokens": state.get("input_tokens", 0), "output_tokens": state.get("output_tokens", 0)}
 
@@ -287,10 +288,10 @@ class ProductionAgent:
         return graph.compile()
     
     @traceable(name="production_agent_invoke")
-    def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, student_summary: str | None = None, session_summary: str | None = None) -> dict:
+    async def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, student_summary: str | None = None, session_summary: str | None = None) -> dict:
         start = time.perf_counter()
         try:
-            result = self.graph.invoke({"db": db, "college_id": college_id, "student_id": student_id, "session_id": session_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
+            result = await self.graph.ainvoke({"db": db, "college_id": college_id, "student_id": student_id, "session_id": session_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
         except Exception:
             logger.critical("Graph invocation crashed unexpectedly college_id=%s student_id=%s session_id=%s", college_id, student_id, session_id, exc_info=True)
             AGENT_REQUESTS.labels(outcome="crash", model_used="none", error_type="unhandled_graph_exception").inc()
