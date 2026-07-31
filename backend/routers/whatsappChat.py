@@ -13,6 +13,7 @@ from backend.services.tenant_service import get_or_create_student, resolve_colle
 from backend.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
 from backend.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
 
+
 logger = get_logger()
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])

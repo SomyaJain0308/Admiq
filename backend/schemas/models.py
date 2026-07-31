@@ -16,7 +16,7 @@ class InboundWhatsAppMessage(BaseModel):
     message_type: str
     content: str
     raw_payload: dict
-
+    
 
 
 class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
@@ -64,7 +64,7 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
 class AgentTurnOutput(BaseModel): # What the assistant sends back
     response: str
     updated_session_summary: str
-    sources: str = Field(default="", description=("""Comma-separated list of source document titles or IDs cited in the response, e.g. 'admissions_faq.pdf, tuition_2026.pdf'. Use an empty string if no sources were used. Do not use any other delimiter. Only list Unique chunks never add repetetive chunks."""))
+    sources: list[str] = Field(default_factory=list, description="list of source filenames/queries used to answer, empty list if none were used")
     wants_human_handoff: bool = Field(default=False)
 
 

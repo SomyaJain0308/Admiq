@@ -128,7 +128,7 @@ settings = get_settings()
 def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> list[tuple[int, str, float]]:
     start = time.perf_counter()
     try:
-        query_embedding = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, output_dimensionality=settings.vector_size).embed_query(query)
+        query_embedding = GoogleGenerativeAIEmbeddings(api_key=settings.gemini_api_key, model=settings.embedding_model, output_dimensionality=settings.vector_size).embed_query(query)
     except Exception as e:
         logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
         raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.
@@ -144,7 +144,7 @@ def get_relevant_documents_scored(db, query: str, college_id: int, k: int) -> li
     for chunk, distance in results:
         try:
             if chunk.source_type == "document":
-                source = chunk.document.filename
+                source = chunk.document.file_name
             else:
                 source = chunk.source_query.query_text if chunk.source_query else "Staff answer"
         except Exception as e:

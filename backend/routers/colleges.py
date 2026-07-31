@@ -28,7 +28,7 @@ async def get_college(college_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="College not Found")
 
 
-@router.post("/router/colleges", response_model=CollegeCreate, status_code=201)
+@router.post("/router/colleges", response_model=CollegeResponse, status_code=201)
 def create_college(college: CollegeCreate, db: Session = Depends(get_db)):
     existing_college = db.execute(select(College).where(College.college_name == college.college_name).limit(1)).scalars().first()
     if existing_college:

@@ -1,4 +1,6 @@
 import os, tempfile, logging
+from celery.exceptions import MaxRetriesExceededError
+
 from backend.backgroundTasks.celery_app import celery_app
 from backend.rag.chunking import insert_chunks_to_db
 from backend.database.database import SessionLocal
@@ -6,11 +8,15 @@ from backend.database import models
 from backend.rag import document_processor, chunking
 from backend.services.storage_service import download_file_bytes
 from backend.services.document_service import update_document_status
+from backend.services.agent_helpers import classify_error
 
 from sqlalchemy import select
 
 
+
 logger = logging.getLogger(__name__)
+
+RETRYABLE_ERROR_TYPES = {"timeout", "rate_limit", "connection_error"}
 
 
 @celery_app.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -34,11 +40,18 @@ def process_document_task(self, document_id: int, college_id: int):
         insert_chunks_to_db(db, document_id=document_id, college_id=college_id, chunks=contextualized_chunks, vectors=vectors)
         update_document_status(db, college_id, document_id, status="success", extraction_method=extraction["method"], quality_score=extraction["quality_score"], num_pages=extraction["num_pages"])
     except Exception as e:
+        error_type = classify_error(e)
         logger.error(f"process_document_task failed document_id={document_id} college_id={college_id} error={e}", exc_info=True)
-        try:
-            update_document_status(db, college_id, document_id, status="failed", error=str(e))
-        except Exception:
-            pass # DB itself might fail
+        db.rollback()
+        if error_type in MaxRetriesExceededError:
+            try:
+                raise self.retry(exc=e, countdown=60)
+            except MaxRetriesExceededError:
+                logger.error(f"process_document_status exhausted retries document_id={document_id}")
+                try:
+                    update_document_status(db, college_id, document_id, status="failed", error=str(e))
+                except Exception:
+                    pass # DB itself might fail
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)

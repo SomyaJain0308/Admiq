@@ -1,19 +1,17 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from sqlalchemy.orm import DeclarativeBase
 
 from backend.rag.config import get_settings
 
 settings = get_settings()
 
-engine = create_engine(settings.database_url)  # Create db engine
+engine = create_async_engine(settings.database_url)
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine) # Start db session
+AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, autocommit=False, autoflush=False, expire_on_commit=False)
 
 class Base(DeclarativeBase):
     pass
 
-# Define the funtion to actually load the db that we will use everytime in the routers files!
-
-def get_db():
-    with SessionLocal() as db:
+async def get_db():
+    async with AsyncSessionLocal() as db:
         yield db

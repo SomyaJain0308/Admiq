@@ -228,7 +228,7 @@ class ProductionAgent:
 
         def handle_error(state: AgentState) -> dict: # If this needs a comment then print("hello world") does too
             logger.error("Both primary and fallback exhausted session_id=%s college_id=%s student_id=%s primary_attempts=%s fallback_attempts=%s last_error=%s", state["session_id"], state["college_id"], state["student_id"], state["primary_retry_count"], state["fallback_retry_count"], state.get("error"))
-            return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "sources": "", "model_used": "error_handler", "input_tokens": state.get("input_tokens", 0), "output_tokens": state.get("output_tokens", 0)}
+            return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "sources": [], "model_used": "error_handler", "input_tokens": state.get("input_tokens", 0), "output_tokens": state.get("output_tokens", 0)}
 
 
         def route_after_resolve(state: AgentState) -> str:
