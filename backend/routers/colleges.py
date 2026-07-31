@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.database.database import get_db
 from backend.database.models import College
@@ -11,7 +11,7 @@ router = APIRouter(tags=["colleges"])
 
 
 @router.get("/router/college", response_model=list[CollegeResponse])
-async def get_colleges(db: Session = Depends(get_db)):
+async def get_colleges(db: AsyncSession = Depends(get_db)):
     colleges_result = await db.execute(select(College))
     colleges = colleges_result.scalars().all()
     if colleges:  
@@ -21,7 +21,7 @@ async def get_colleges(db: Session = Depends(get_db)):
 
 
 @router.get("/router/college/{college_id}", response_model=CollegeResponse)
-async def get_college(college_id: int, db: Session = Depends(get_db)):
+async def get_college(college_id: int, db: AsyncSession = Depends(get_db)):
     existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
     existing_college = existing_college_result.scalars().first()
     if existing_college:
@@ -31,7 +31,7 @@ async def get_college(college_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/router/colleges", response_model=CollegeResponse, status_code=201)
-async def create_college(college: CollegeCreate, db: Session = Depends(get_db)):
+async def create_college(college: CollegeCreate, db: AsyncSession = Depends(get_db)):
     existing_college_result = await db.execute(select(College).where(College.college_name == college.college_name).limit(1))
     existing_college = existing_college_result.scalars().first()
     if existing_college:
@@ -61,8 +61,8 @@ async def create_college(college: CollegeCreate, db: Session = Depends(get_db)):
 
 
 @router.patch("/router/college/{college_id}", response_model=CollegeResponse)
-async def update_college(college_id: int, college: CollegeUpdate, db: Session = Depends(get_db)):
-    existing_college_result = db.execute(select(College).where(College.college_id == college_id).limit(1))
+async def update_college(college_id: int, college: CollegeUpdate, db: AsyncSession = Depends(get_db)):
+    existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
     existing_college = existing_college_result.scalars().first()
     if not existing_college:
         raise HTTPException(status_code=404, detail="College not Found")
@@ -77,7 +77,7 @@ async def update_college(college_id: int, college: CollegeUpdate, db: Session = 
 
 
 @router.delete("/router/college/{college_id}", status_code=204)
-async def delete_college(college_id: int, db: Session = Depends(get_db)):
+async def delete_college(college_id: int, db: AsyncSession = Depends(get_db)):
     existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
     existing_college = existing_college_result.scalars().first()
     if not existing_college:

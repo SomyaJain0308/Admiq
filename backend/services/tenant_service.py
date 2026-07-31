@@ -24,7 +24,7 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
             await db.refresh(student)
         return student
     
-    result = db.execute(select(models.Student).where(models.Student.college_id == college_id, models.Student.student_phone == student_phone))
+    result = await db.execute(select(models.Student).where(models.Student.college_id == college_id, models.Student.student_phone == student_phone))
     student = result.scalars().first()
     if student is not None:
         if student.student_name is None and student_name is not None:

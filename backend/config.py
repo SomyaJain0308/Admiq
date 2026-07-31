@@ -20,6 +20,7 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
 
     # LangSmith
     langchain_tracing_v2: bool = True
+    langchain_tracing_key: str
     langchain_api_key: str = ""
     langchain_project: str = "CollegeChatbot"
 
@@ -29,7 +30,7 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     chunk_size: int = 1000
     chunk_overlap: int = 150
     batch_size: int = 25
-    cache_ttl: str = "600s"
+    cache_ttl_seconds: str = "600s"
 
 
     # Application
@@ -52,13 +53,14 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     supabase_url: str = ""
     supabase_service_role_key: str = "" # Server-side only, bypasses RLS - never expose this to a frontend
     storage_bucket: str = "college-documents"
-    
-    model_config = SettingsConfigDict(env_file=ENV_PATH, env_file_encoding="utf-8")
+
+    # Security
+    model_config = SettingsConfigDict(env_file="backend/.env", env_file_encoding="utf-8")
     secret_key: SecretStr
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
 
-    
+
     @property
     def is_production(self) -> bool:
         return self.app_env == "production"
