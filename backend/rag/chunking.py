@@ -61,7 +61,7 @@ def add_context_to_chunks(document_text: str, chunks: List[Document]) -> List[Do
     use_explicit_cache = doc_tokens >= settings.min_cache_tokens and len(batches) > 1 # Gives True or False 
     cache = None
     if use_explicit_cache:
-        cache = create_context_cache(base_llm, messages=[SystemMessage(content=SYSTEM_INSTRUCTION), HumanMessage(content=document_text)], ttl=settings.cache_ttl)
+        cache = create_context_cache(base_llm, messages=[SystemMessage(content=SYSTEM_INSTRUCTION), HumanMessage(content=document_text)], ttl=settings.cache_ttl_seconds)
         cached_llm = ChatGoogleGenerativeAI(model=settings.contextual_retrieval_model, api_key=settings.gemini_api_key, cached_content=cache.name)
         structured_llm = cached_llm.with_structured_output(ChunkContexts, method="json_schema", include_raw=True)
     else:

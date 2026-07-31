@@ -1,12 +1,8 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from functools import lru_cache
-from pathlib import Path
 from pydantic import SecretStr
 
-
-BASE_DIR = Path(__file__).resolve().parent
-ENV_PATH = BASE_DIR / "/.env"
 
 class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetched from .env
 

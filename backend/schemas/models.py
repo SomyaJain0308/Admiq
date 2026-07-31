@@ -48,7 +48,7 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
     fallback_retry_count: int
     response: str
     updated_session_summary: str
-    sources: str
+    sources: list[str]
     wants_human_handoff: bool
     error: Optional[str]
     model_used: str
