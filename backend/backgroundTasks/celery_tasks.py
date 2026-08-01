@@ -41,7 +41,7 @@ def process_document_task(self, document_id: int, college_id: int):
         if extraction.get("quality_score") is not None:
             DOCUMENT_QUALITY_SCORE.observe(extraction["quality_score"])
         if extraction.get("num_pages") is not None:
-            DOCUMENT_PAGES_PROCESSED.observe(extraction["num_pages"])
+            DOCUMENTS_PAGES_PROCESSED.observe(extraction["num_pages"])
 
         if not extraction["success"]:
             update_document_status(db, college_id, document_id, status="failed", error=extraction["error"], extraction_method=extraction["method"], quality_score=extraction["quality_score"], num_pages=extraction["num_pages"])
