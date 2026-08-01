@@ -8,6 +8,12 @@ from prometheus_client import Counter, Histogram, CONTENT_TYPE_LATEST
 # For observability used in agent.py.
 REQUESTS_TOTAL = Counter("api_requests_total", "Total chat requests handled", ["model_used", "outcome"])
 
+DOCUMENT_EXTRACTION_METHOD = Counter("document_extraction_method_total", "Document extraction tier method used", ["method"])
+
+DOCUMENT_INGESTION_OUTCOME = Counter("document_ingestion_outcome_total", "Total document ingestion task outcomes", ["outcome", "error_type"])
+
+CELERY_TASK_RETRIES = Counter("celery_task_retries_total", "Total celery task retries by task name and error type", ["task_name", "error_type"])
+
 INPUT_TOKENS_TOTAL = Counter("api_input_tokens_total", "Total input tokens processed, for cost tracking", ["model_used"])
 
 OUTPUT_TOKENS_TOTAL = Counter("api_output_tokens_total", "Total output tokens processed, for cost tracking", ["model_used"])
@@ -25,6 +31,16 @@ LLM_OUTPUT_TOKENS = Counter("agent_llm_output_tokens", "Total output/response to
 STUDENT_TOKEN_BUDGET_REJECTIONS = Counter("agent_students_token_budget_rejections_total", "Total requests rejected because the requesting student's rolling token budget was exceeded")
 
 AGENT_MISSING_FOLLOWUP = Counter("agent_missing_followup_total", "Total successful responses that didn't end with a question — rule 11 (always end with a follow-up) was not followed", ["model_used"])
+
+DOCUMENT_INGESTION_LATENCY = Histogram("document_ingestion_latency_seconds", "End to end latency of document ingestion tasks (OCR + chunk + contextualize + embed + insert)")
+
+DOCUMENT_INGESTION_STAGE_LATENCY = Histogram("document_ingestion_stage_latency_seconds", "Latency of each stage of document ingestion tasks (OCR + chunk + contextualize + embed + insert)", ["stage"])
+
+DOCUMENT_QUALITY_SCORE = Histogram("document_quality_score", "Quality score ofextracted markdown (0-1, higher is better)", buckets=[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0])
+
+DOCUMENT_CHUNKS_CREATED = Histogram("documents_chunks_created", "Number of chunks created per successfully ingested document", buckets=[1, 5, 10, 20, 40, 80, 150, 300])
+
+DOCUMENTS_PAGES_PROCESSED = Histogram("document_pages_processed", "Number of pages processed per successfully ingested document", buckets=[1, 3, 5, 10, 20, 40, 80])
 
 REQUEST_LATENCY_MS = Histogram("api_request_latency_ms", "End-toend request latency in ms", ["model_used"])
 

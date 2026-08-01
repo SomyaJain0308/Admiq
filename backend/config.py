@@ -51,7 +51,7 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     storage_bucket: str = "college-documents"
 
     # Security
-    model_config = SettingsConfigDict(env_file="backend/.env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file="backend/.env", env_file_encoding="utf-8", extra="ignore")
     secret_key: SecretStr
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
