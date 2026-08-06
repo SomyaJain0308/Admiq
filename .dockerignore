@@ -1,0 +1,38 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# --- Env & secrets ---
+.env
+.env.local
+*.env.example
+
+# --- Git ---
+.git/
+.gitignore
+
+# --- Scratch / non-code files ---
+backend/learn_later.txt
+backend/test.pdf
+backend/scratch/
+
+# --- Tests ---
+backend/app/tests/
+
+# --- Docs ---
+README.md
+docs/
+
+# --- Frontend (not needed in backend image) ---
+frontend/
+
+# --- OS/editor junk ---
+.DS_Store
+.vscode/
+.idea/
