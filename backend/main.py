@@ -14,6 +14,7 @@ from backend.routers.metrics import router as metrics_router
 from backend.routers.colleges import router as colleges_router
 from backend.routers.staff import router as staff_router
 from backend.routers.testChat import router as chat_router
+from backend.routers.healthCheck import router as health_router
 
 
 
@@ -48,3 +49,4 @@ app.include_router(metrics_router)
 app.include_router(colleges_router)
 app.include_router(staff_router)
 app.include_router(chat_router)
+app.include_router(health_router)
