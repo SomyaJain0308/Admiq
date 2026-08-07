@@ -15,6 +15,7 @@ from backend.app.api.v1.routers.staff import router as staff_router
 from backend.app.api.v1.routers.test_chat import router as chat_router
 from backend.app.api.v1.routers.health_check import router as health_router
 from backend.app.api.v1.routers.low_confidence import router as low_confidence_router
+from backend.app.api.v1.routers.students import router as students_router
 
 
 
@@ -51,3 +52,4 @@ app.include_router(staff_router)
 app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(low_confidence_router)
+app.include_router(students_router)

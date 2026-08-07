@@ -1,9 +1,10 @@
 from datetime import datetime
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.app.models.College import College
+    from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+    from backend.app.models.Document import Document
 from backend.app.database import Base
-from backend.app.models.College import College
-from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
-from backend.app.models.Document import Document
 
 
 from pgvector.sqlalchemy import Vector

@@ -1,11 +1,12 @@
 from datetime import datetime
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.app.models.College import College
+    from backend.app.models.Message import Message
+    from backend.app.models.CollegeStaff_StaffCollege import StaffCollege
+    from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+    from backend.app.models.StudentSession import StudentSession
 from backend.app.database import Base
-from backend.app.models.College import College
-from backend.app.models.Message import Message
-from backend.app.models.CollegeStaff_StaffCollege import StaffCollege
-from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
-from backend.app.models.StudentSession import StudentSession
 
 from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Integer, UniqueConstraint, func, Text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP

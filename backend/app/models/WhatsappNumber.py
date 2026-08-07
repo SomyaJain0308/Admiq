@@ -1,7 +1,8 @@
 from datetime import datetime
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.app.models.College import College
 from backend.app.database import Base
-from backend.app.models.College import College
 
 from sqlalchemy import ForeignKey, Index, Integer, func, Text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP

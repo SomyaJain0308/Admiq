@@ -1,9 +1,10 @@
 from datetime import datetime
-
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from backend.app.models.Student import Student
+    from backend.app.models.College import College
+    from backend.app.models.Message import Message
 from backend.app.database import Base
-from backend.app.models.Student import Student
-from backend.app.models.College import College
-from backend.app.models.Message import Message
 
 from sqlalchemy import Boolean, CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Integer, UniqueConstraint, func, Text
 from sqlalchemy.dialects.postgresql import TIMESTAMP
