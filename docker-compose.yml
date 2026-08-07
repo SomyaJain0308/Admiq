@@ -14,8 +14,8 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     working_dir: /app
-    command: fastapi dev backend/app/main.py --host 0.0.0.0 --port 8000
-
+    command: fastapi dev backend/app/main.py --host 0.0.0.0 --port 8000 --reload-dir backend/app
+    
   celery_worker:
     build:
       context: .
@@ -29,7 +29,7 @@ services:
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     working_dir: /app
-    command: celery -A backend.background_tasks.celery_app worker --loglevel=info --concurrency=1
+    command: celery -A backend.app.background_tasks.celery_app worker --loglevel=info --concurrency=1
     depends_on:
       - backend
 

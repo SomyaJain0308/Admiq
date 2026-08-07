@@ -54,8 +54,6 @@ celerybeat.pid
 # Scratch / personal junk
 # ============================
 backend/scratch/
-backend/learn_later.txt
-backend/test.pdf
 
 # ============================
 # OS files

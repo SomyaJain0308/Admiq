@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.app.database.database import get_db
+from backend.app.database import get_db
 
 
 router = APIRouter(tags=["Health Check"])

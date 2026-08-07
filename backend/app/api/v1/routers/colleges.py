@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.app.database.database import get_db
+from backend.app.database import get_db
 from backend.app.models.models import College
 from backend.app.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeResponse
 

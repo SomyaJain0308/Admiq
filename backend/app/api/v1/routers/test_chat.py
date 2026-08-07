@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-
 import uuid
 from datetime import datetime
 
-from backend.app.database.database import get_db
+from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.monitoring import STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.app.rag.agent import ProductionAgent

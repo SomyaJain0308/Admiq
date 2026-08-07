@@ -4,7 +4,7 @@ from langsmith import traceable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
-from backend.app.database.database import get_db
+from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.rag.monitoring import get_logger, MetricsCollector, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS

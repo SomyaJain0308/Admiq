@@ -2,7 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from backend.app.database.database import get_db
+from backend.app.database import get_db
 from backend.app.models import models
 from backend.app.services.async_storage_service import upload_file_bytes
 from backend.app.services.document_service import async_create_document_row

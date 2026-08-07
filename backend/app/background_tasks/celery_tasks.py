@@ -1,18 +1,17 @@
 import os, tempfile, logging, time
 from backend.app.rag import chunking
 from celery.exceptions import MaxRetriesExceededError
+from sqlalchemy import select
 
-from backend.app.backgroundTasks.celery_app import celery_app
+from backend.app.background_tasks.celery_app import celery_app
 from backend.app.rag.chunking import insert_chunks_to_db
-from backend.app.database.database import SessionLocal
+from backend.app.database import SessionLocal
 from backend.app.models import models
 from backend.app.rag import document_processor
 from backend.app.services.storage_service import download_file_bytes
 from backend.app.services.document_service import update_document_status
 from backend.app.services.agent_helpers import classify_error
 from backend.app.rag.monitoring import DOCUMENT_INGESTION_LATENCY, DOCUMENT_INGESTION_STAGE_LATENCY, DOCUMENT_EXTRACTION_METHOD, DOCUMENT_INGESTION_OUTCOME, DOCUMENT_QUALITY_SCORE, DOCUMENT_CHUNKS_CREATED, DOCUMENTS_PAGES_PROCESSED, CELERY_TASK_RETRIES
-
-from sqlalchemy import select
 
 
 
