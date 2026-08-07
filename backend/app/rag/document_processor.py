@@ -6,7 +6,7 @@ import io
 import logging
 import re
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict
 
 import fitz  # PyMuPDF
 import numpy as np

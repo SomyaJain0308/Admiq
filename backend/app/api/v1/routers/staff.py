@@ -4,8 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.app.database import get_db
-from backend.app.models.models import CollegeStaff, StaffCollege, College
-from backend.app.schemas.staff import StaffCreate, StaffLogin, StaffResponse, StaffUpdate
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
+from backend.app.models.College import College
+from backend.app.schemas.staff import StaffCreate, StaffResponse, StaffUpdate
 
 
 router = APIRouter(tags=["staff"])

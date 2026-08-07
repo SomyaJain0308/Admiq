@@ -1,10 +1,14 @@
-from backend.app.models import models
+from backend.app.models.WhatsappNumber import WhatsAppNumber
+from backend.app.models.Student import Student
+from backend.app.models.Message import Message
+from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 
 async def resolve_college_from_phone_number_id(db, phone_number_id) -> int:
     # query whatsapp_numbers where phone_number_id = webhook metadata.phone_number_id if not found -> reject webhook / log unknown tenant return college_id
-    result = await db.execute(select(models.WhatsAppNumber).where(models.WhatsAppNumber.phone_number_id == phone_number_id))
+    result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.phone_number_id == phone_number_id))
     whatsapp_number = result.scalars().first()
     if whatsapp_number is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="College not found with this WhatsApp Number (Unknown Tenant)")
@@ -13,9 +17,9 @@ async def resolve_college_from_phone_number_id(db, phone_number_id) -> int:
 
 
 
-async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id, student_name=None) -> models.Student:
+async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id, student_name=None) -> Student:
     # find student by college_id + whatsapp_user_id if not found, maybe fallback college_id + student_phone if found, update name if existing name is None, create student
-    result = await db.execute(select(models.Student).where(models.Student.college_id == college_id, models.Student.whatsapp_user_id == whatsapp_user_id))
+    result = await db.execute(select(Student).where(Student.college_id == college_id, Student.whatsapp_user_id == whatsapp_user_id))
     student = result.scalars().first()
     if student is not None:
         if student.student_name is None and student_name is not None:
@@ -24,7 +28,7 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
             await db.refresh(student)
         return student
     
-    result = await db.execute(select(models.Student).where(models.Student.college_id == college_id, models.Student.student_phone == student_phone))
+    result = await db.execute(select(Student).where(Student.college_id == college_id, Student.student_phone == student_phone))
     student = result.scalars().first()
     if student is not None:
         if student.student_name is None and student_name is not None:
@@ -33,7 +37,7 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
             await db.refresh(student)
         return student
     
-    new_student = models.Student(
+    new_student = Student(
         college_id=college_id,
         whatsapp_user_id=whatsapp_user_id,
         student_phone=student_phone,
@@ -47,13 +51,13 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
 
 
 
-async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload, session_id: int | None = None) -> models.Message:
-    result = await db.execute(select(models.Message).where(models.Message.college_id == college_id, models.Message.whatsapp_message_id == whatsapp_message_id))
+async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload, session_id: int | None = None) -> Message:
+    result = await db.execute(select(Message).where(Message.college_id == college_id, Message.whatsapp_message_id == whatsapp_message_id))
     message = result.scalars().first()
     if message is not None:
         return message
     
-    new_message = models.Message(
+    new_message = Message(
         college_id=college_id,
         student_id=student_id,
         session_id=session_id,
@@ -72,8 +76,8 @@ async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, 
   
 
 
-async def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> models.Message:
-    message = models.Message(
+async def save_assistant_message(db, college_id: int, student_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> Message:
+    message = Message(
         college_id=college_id,
         student_id=student_id,
         session_id=session_id,
@@ -89,7 +93,7 @@ async def save_assistant_message(db, college_id: int, student_id: int, content: 
 
 
 async def flag_low_confidence_query(db, college_id, student_id, question_message_id, answer_message_id, similarity_score):
-    entry = models.LowConfidenceQuery(college_id=college_id, student_id=student_id, question_message_id=question_message_id, answer_message_id=answer_message_id, similarity_score=similarity_score)
+    entry = LowConfidenceQuery(college_id=college_id, student_id=student_id, question_message_id=question_message_id, answer_message_id=answer_message_id, similarity_score=similarity_score)
     db.add(entry)
     await db.commit()
     return entry

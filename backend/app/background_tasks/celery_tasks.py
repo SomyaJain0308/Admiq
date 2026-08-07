@@ -6,7 +6,7 @@ from sqlalchemy import select
 from backend.app.background_tasks.celery_app import celery_app
 from backend.app.rag.chunking import insert_chunks_to_db
 from backend.app.database import SessionLocal
-from backend.app.models import models
+from backend.app.models.Document import Document
 from backend.app.rag import document_processor
 from backend.app.services.storage_service import download_file_bytes
 from backend.app.services.document_service import update_document_status
@@ -26,7 +26,7 @@ def process_document_task(self, document_id: int, college_id: int):
     tmp_path = None
     task_start = time.perf_counter()
     try:
-        doc = db.execute(select(models.Document).where(models.Document.college_id == college_id, models.Document.document_id == document_id)).scalars().first()
+        doc = db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id)).scalars().first()
         if doc is None:
             logger.error(f"Document {document_id} not found, aborting task")
             return

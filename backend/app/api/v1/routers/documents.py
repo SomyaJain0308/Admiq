@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from backend.app.database import get_db
-from backend.app.models import models
+from backend.app.models.Document import Document
 from backend.app.services.async_storage_service import upload_file_bytes
 from backend.app.services.document_service import async_create_document_row
 from backend.app.background_tasks.celery_tasks import process_document_task
@@ -32,7 +32,7 @@ async def upload_document(college_id: int, uploaded_by: int = Form(...), file: U
 
 @router.get("/router/colleges/{college_id}/documents/{document_id}")
 async def get_document_status(college_id: int, document_id: int, db: Session = Depends(get_db)):
-    result = await db.execute(select(models.Document).where(models.Document.college_id == college_id, models.Document.document_id == document_id))
+    result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))
     doc = result.scalars().first()
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found.")

@@ -3,7 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
-from backend.app.models.models import LowConfidenceQuery, Message
+from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+from backend.app.models.Message import Message
 from backend.app.schemas.low_confidence import LowConfidenceResponse
 
 

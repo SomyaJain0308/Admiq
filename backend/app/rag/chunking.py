@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 from pydantic import BaseModel, Field
 from google import genai as _raw_genai # Only used for cache deletion
 
@@ -9,7 +9,8 @@ from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from backend.app.config import get_settings
-from backend.app.models import models
+from backend.app.models.Document import Document
+from backend.app.models.Chunk import Chunk
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -27,7 +28,7 @@ class ChunkContexts(BaseModel): # Force the llm to answer like this.
     contexts: List[str] = Field(description="1-2 sentence context per chunk, situating it within the document (e.g. which course/programme/section/policy it belongs to).")
 
 
-def chunk_markdown(markdown_text: str, filename: str, extra_metadata: Dict = None) -> List[Document]:
+def chunk_markdown(markdown_text: str, filename: str, extra_metadata: Optional[Dict] = None) -> List[Document]:
     # Split markdown by headers first, then by size if a section is too big.
     extra_metadata = extra_metadata or {}
     header_chunks = header_splitter.split_text(markdown_text)
@@ -104,7 +105,7 @@ def add_context_to_chunks(document_text: str, chunks: List[Document]) -> List[Do
     return contextualized
 
 
-def ingest_markdown(markdown_text: str, filename: str, college_id: str, extra_metadata: Dict = None):
+def ingest_markdown(markdown_text: str, filename: str, college_id: int, extra_metadata: Optional[Dict] = None):
     chunks = chunk_markdown(markdown_text, filename, extra_metadata={"college_id": college_id, **(extra_metadata or {})})
     contextualized_chunks = add_context_to_chunks(markdown_text, chunks)
     settings = get_settings()
@@ -114,11 +115,11 @@ def ingest_markdown(markdown_text: str, filename: str, college_id: str, extra_me
     return contextualized_chunks, vectors
 
 
-def insert_chunks_to_db(db, document_id: int, college_id: int, chunks: list, vectors: list) -> list[models.Chunk]:
+def insert_chunks_to_db(db, document_id: int, college_id: int, chunks: list, vectors: list) -> list[Chunk]:
     if not chunks:
         return []
     chunk_rows = [
-        models.Chunk(document_id=document_id, college_id=college_id, chunk_content=chunk.page_content, embedding=vector, chunk_index=index, source_type="document", source_query_id=None, expires_at=None)
+        Chunk(document_id=document_id, college_id=college_id, chunk_content=chunk.page_content, embedding=vector, chunk_index=index, source_type="document", source_query_id=None, expires_at=None)
         for index, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
     db.add_all(chunk_rows)
