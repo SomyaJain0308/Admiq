@@ -92,6 +92,22 @@ async def save_assistant_message(db, college_id: int, student_id: int, content: 
     return message
 
 
+async def save_staff_message(db, college_id: int, student_id: int, staff_id: int, content: str, sources: list[str] | None = None, session_id: int | None = None) -> Message:
+    message = Message(
+        college_id=college_id,
+        student_id=student_id,
+        session_id=session_id,
+        messager_role="staff",
+        replied_by_staff_id=staff_id,
+        content=content,
+        message_type="text",
+    )
+    db.add(message)
+    await db.commit()
+    await db.refresh(message)
+    return message
+
+
 async def flag_low_confidence_query(db, college_id, student_id, question_message_id, answer_message_id, similarity_score):
     entry = LowConfidenceQuery(college_id=college_id, student_id=student_id, question_message_id=question_message_id, answer_message_id=answer_message_id, similarity_score=similarity_score)
     db.add(entry)
