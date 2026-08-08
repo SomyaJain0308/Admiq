@@ -41,6 +41,7 @@ services:
     volumes:
       - ./backend:/app/backend
       - prometheus_multiproc:/tmp/prometheus_multiproc
+      - celerybeat_schedule:/tmp/celerybeat
     env_file:
       - .env
     environment:

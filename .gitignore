@@ -28,7 +28,7 @@ env/
 ENV/
 
 # ============================
-# Node / Frontend (for later)
+# Node / Frontend
 # ============================
 node_modules/
 .next/
