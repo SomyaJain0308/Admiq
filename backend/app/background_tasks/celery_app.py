@@ -9,3 +9,4 @@ celery_app = Celery("admiq", broker=settings.redis_url, backend=settings.redis_u
 
 celery_app.conf.broker_use_ssl = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
 celery_app.conf.redis_backend_use_ssl = {"ssl_cert_reqs": ssl.CERT_REQUIRED}
+celery_app.conf.beat_schedule = {"process_pending_tasks": {"task": "backend.app.background_tasks.student_profile_tasks.process_closed_sessions_task", "schedule": 300.0}}

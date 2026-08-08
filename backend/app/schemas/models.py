@@ -88,3 +88,7 @@ class ChatTestResponse(BaseModel):
     best_distance: float | None
     session_id: int
     student_id: int
+
+
+class StudentProfileSummary(BaseModel):
+    summary: str = Field(description="The merged, updated long-term student profile summary.")

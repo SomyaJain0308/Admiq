@@ -33,5 +33,22 @@ services:
     depends_on:
       - backend
 
+  celery_beat:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: admiq-celery-beat
+    volumes:
+      - ./backend:/app/backend
+      - prometheus_multiproc:/tmp/prometheus_multiproc
+    env_file:
+      - .env
+    environment:
+      - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
+    working_dir: /app
+    command: celery -A backend.app.background_tasks.celery_app beat --loglevel=info --schedule=/tmp/celerybeat/celerybeat-schedule
+    depends_on:
+      - backend
+
 volumes:
   prometheus_multiproc:

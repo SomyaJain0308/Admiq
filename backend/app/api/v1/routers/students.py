@@ -6,7 +6,7 @@ from backend.app.database import get_db
 from backend.app.models.Student import Student
 from backend.app.models.Message import Message
 
-router = APIRouter(tags=["Students"], prefix="/students")
+router = APIRouter(tags=["Students"], prefix="/router/students")
 
 
 @router.get("{college_id}")

@@ -17,6 +17,7 @@ COPY backend/ ./backend/
 RUN useradd --create-home appuser
 # create the prometheus dir and hand ownership to appuser
 RUN mkdir -p /tmp/prometheus_multiproc && chown -R appuser:appuser /tmp/prometheus_multiproc
+RUN mkdir -p /tmp/prometheus_multiproc /tmp/celerybeat && chown -R appuser:appuser /tmp/prometheus_multiproc /tmp/celerybeat
 USER appuser
 
 EXPOSE 8000
