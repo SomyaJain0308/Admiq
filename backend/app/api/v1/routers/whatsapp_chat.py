@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.rag.monitoring import get_logger, MetricsCollector, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
+from backend.app.monitoring.rag_monitoring import get_logger, MetricsCollector, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.app.rag.agent import ProductionAgent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events

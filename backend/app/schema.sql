@@ -78,7 +78,8 @@ CREATE TABLE messages (
     message_id              SERIAL PRIMARY KEY,
     college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     student_id              INT NOT NULL,
-    messager_role           TEXT NOT NULL CHECK (messager_role IN ('student', 'assistant')),
+    messager_role           TEXT NOT NULL CHECK (messager_role IN ('student', 'assistant', 'staff')),
+    replied_by_staff_id     INT REFERENCES college_staff(staff_id),
     content                 TEXT NOT NULL,
     sources                 JSONB,
     feedback                BOOLEAN,
@@ -92,6 +93,7 @@ CREATE TABLE messages (
     UNIQUE (college_id, whatsapp_message_id),
     UNIQUE (college_id, message_id),
     CHECK (feedback IS NULL OR messager_role = 'assistant'),
+    CHECK (messager_role = 'staff' OR replied_by_staff_id IS NULL),
     FOREIGN KEY (college_id, session_id) REFERENCES student_sessions(college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
 );

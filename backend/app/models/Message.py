@@ -27,6 +27,7 @@ class Message(Base):
     message_type: Mapped[str] = mapped_column(Text, server_default="text", nullable=False)
     raw_payload: Mapped[dict | None] = mapped_column(JSONB)
     session_id: Mapped[int | None] = mapped_column(Integer)
+    replied_by_staff_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("college_staff.staff_id"))
 
     student: Mapped["Student"] = relationship(back_populates="messages", overlaps="messages,messages")
     college: Mapped["College"] = relationship(back_populates="messages", overlaps="messages,messages,student")
@@ -34,8 +35,9 @@ class Message(Base):
 
 
     __table_args__ = (
-        CheckConstraint("messager_role IN ('student', 'assistant')", name="messages_messager_role_check"), 
+        CheckConstraint("messager_role IN ('student', 'assistant', 'staff')", name="messages_messager_role_check"), 
         CheckConstraint("feedback IS NULL OR messager_role = 'assistant'", name="messages_feedback_assistant_check"),
+        CheckConstraint("messager_role = 'staff' OR replied_by_staff_id IS NULL", name="messages_replied_by_staff_check"),
         Index("ix_messages_student_id_created_at", "student_id", "created_at"), 
         Index("ix_messages_college_id_created_at", "college_id", "created_at"),
         Index("ix_messages_college_id_session_id", "college_id", "session_id"), 
@@ -43,4 +45,5 @@ class Message(Base):
         UniqueConstraint("college_id", "message_id"),
         ForeignKeyConstraint(["college_id", "session_id"], ["student_sessions.college_id", "student_sessions.session_id"]),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
+        ForeignKeyConstraint(["college_id", "replied_by_staff_id"], ["college_staff.college_id", "college_staff.staff_id"]),
     )

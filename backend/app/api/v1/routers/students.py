@@ -9,7 +9,7 @@ from backend.app.models.Message import Message
 router = APIRouter(tags=["Students"], prefix="/router/students")
 
 
-@router.get("{college_id}")
+@router.get("/{college_id}")
 async def get_students(college_id: int, db: AsyncSession = Depends(get_db)):
     students_result = await db.execute(select(Student).where(Student.college_id == college_id))
     students = students_result.scalars().all()
@@ -18,9 +18,9 @@ async def get_students(college_id: int, db: AsyncSession = Depends(get_db)):
     return students
 
 
-@router.get("{college_id}/{student_id}")
+@router.get("/{college_id}/{student_id}")
 async def get_student(college_id: int, student_id: int, db: AsyncSession = Depends(get_db)):
-    student_result = await db.execute(select(Student).where(Student.college_id == college_id, Student.id == student_id).limit(1))
+    student_result = await db.execute(select(Student).where(Student.college_id == college_id, Student.student_id == student_id).limit(1))
     student = student_result.scalars().first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
