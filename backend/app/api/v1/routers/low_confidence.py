@@ -33,7 +33,8 @@ async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends
             answer_message_id=query.answer_message_id,
             answer_content=answer_content,
             resolved=query.resolved,
-            resolved_at=query.resolved_at if query.resolved_at else None
+            resolved_at=query.resolved_at if query.resolved_at else None,
+            resolved_by=query.resolved_by if query.resolved_by else None
         ))
     return responses
 
@@ -58,5 +59,6 @@ async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSess
         answer_message_id=query.answer_message_id,
         answer_content=answer_content,
         resolved=query.resolved,
-        resolved_at=query.resolved_at if query.resolved_at else None
+        resolved_at=query.resolved_at if query.resolved_at else None,
+        resolved_by=query.resolved_by if query.resolved_by else None
     )
