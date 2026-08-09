@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.rag.monitoring import get_logger, MetricsCollector
+from backend.app.monitoring.rag_monitoring import get_logger, MetricsCollector
 from backend.app.rag.agent import ProductionAgent
 from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.whatsapp_chat import router as whatsapp_router
