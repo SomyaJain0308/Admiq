@@ -31,4 +31,4 @@ def generate_profile_update(existing_summary: str | None, session_summary: str) 
         return result["parsed"]
     except Exception as e:
         logger.warning(f"Failed to generate profile update: {e}", exc_info=True)
-        return StudentProfileUpdate(summary=existing_summary or "", course_interest=None, acedemic_score_updates={}, interest_signal="neutral")
+        return StudentProfileUpdate(summary=existing_summary or "", course_interest=None, academic_score_updates={}, interest_signal="neutral")
