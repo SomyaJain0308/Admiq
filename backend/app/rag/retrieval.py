@@ -177,7 +177,7 @@ async def build_system_prompt(db, query: str, college_id: int, student_id: int, 
         college_name = college_name_result.scalars().first()
         college_context_result = await db.execute(select(College.college_context).where(College.college_id == college_id).limit(1))
         college_context = college_context_result.scalars().first()
-        previous_assistant_message_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role == 'assistant').order_by(Message.created_at.desc()).limit(1))
+        previous_assistant_message_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role != 'student').order_by(Message.created_at.desc()).limit(1))
         previous_assistant_message = previous_assistant_message_result.scalars().first()
     except Exception as e:
         logger.error("build_system_prompt failed college_id=%s student_id=%s session_id=%s error=%s", college_id, student_id, session_id, e, exc_info=True)

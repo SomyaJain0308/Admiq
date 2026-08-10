@@ -24,7 +24,7 @@ Merge the new session into the existing profile. Keep only durable, useful admis
 
 def merge_student_profile(existing_summary: str | None, session_summary: str) -> str:
     settings = get_settings()
-    llm = ChatGoogleGenerativeAI(models=settings.query_model, temperature=0, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(StudentProfileSummary, method="json_schema", include_raw=True)
+    llm = ChatGoogleGenerativeAI(model=settings.query_model, temperature=0, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(StudentProfileSummary, method="json_schema", include_raw=True)
     try:
         result = llm.invoke(STUDENT_PROFILE_PROMPT.format(existing_summary=existing_summary or "", session_summary=session_summary))
         if result["parsing_error"] is not None:

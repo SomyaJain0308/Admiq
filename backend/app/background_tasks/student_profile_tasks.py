@@ -28,7 +28,7 @@ def process_closed_sessions_task():
                     continue
                 student = db.execute(select(Student).where(Student.college_id == session.college_id, Student.student_id == session.student_id).limit(1)).scalars().first()
                 if not student:
-                    logger.warning(f"Student not found for session {session.id}. Skipping profile merge.")
+                    logger.warning(f"Student not found for session {session.session_id}. Skipping profile merge.")
                     session.profile_processed = True
                     continue
                 merged_summary = merge_student_profile(existing_summary=student.summary, session_summary=session.session_summary)
@@ -36,7 +36,7 @@ def process_closed_sessions_task():
                 session.profile_processed = True
                 processed_count += 1
             except Exception as e:
-                logger.error(f"Error processing session {session.id}: {e}", exc_info=True)
+                logger.error(f"Error processing session {session.session_id}: {e}", exc_info=True)
                 continue
         db.commit()
         logger.info(f"Processed {processed_count}/{len(closed_sessions)} closed sessions into student profiles.")
