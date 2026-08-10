@@ -41,11 +41,11 @@ async def generate_profile_update(existing_summary: str | None, session_summary:
     existing_profile_signals = existing_profile_signals or {}
     llm = ChatGoogleGenerativeAI(model=settings.query_model, temperature=0, max_retries=0, api_key=settings.gemini_api_key).with_structured_output(StudentProfileUpdate, method="json_schema", include_raw=True)
     try:
-        result = await llm.ainvoke(STUDENT_PROFILE_PROMPT.format(existing_summary=existing_summary or "", session_summary=session_summary, existing_concerns=", ".join(existing_profile_signals.get("concerns") or []) or "None recorded yet", existing_profile_signals=existing_profile_signals.get("guardian_involvement") or "Not yet known.", existing_competing_colleges=", ".join(existing_profile_signals.get("competing_colleges") or []) or "None mentioned yet."))
+        result = await llm.ainvoke(STUDENT_PROFILE_PROMPT.format(existing_summary=existing_summary or "", session_summary=session_summary, existing_concerns=", ".join(existing_profile_signals.get("concerns") or []) or "None recorded yet", existing_guardian_involvement=existing_profile_signals.get("guardian_involvement") or "Not yet known.", existing_competing_colleges=", ".join(existing_profile_signals.get("competing_colleges") or []) or "None mentioned yet."))
 
         if result["parsing_error"] is not None:
             raise ValueError(f"Failed to parse LLM output: {result['parsing_error']}")
         return result["parsed"]
     except Exception as e:
         logger.warning(f"Failed to generate profile update: {e}", exc_info=True)
-        return StudentProfileUpdate(summary=existing_summary or "", course_interest=None, academic_score_updates={}, interest_signal="neutral", open_concerns=existing_profile_signals.get("concerns") or [], guardian_involvement=existing_profile_signals.get("guardian_involvement"), competing_colleges=existing_profile_signals.get("competing_colleges"), dropoff_reason=None)
+        return StudentProfileUpdate(summary=existing_summary or "", course_interest=None, academic_score_updates={}, interest_signal="neutral", concerns=existing_profile_signals.get("concerns") or [], guardian_involvement=existing_profile_signals.get("guardian_involvement"), competing_colleges=existing_profile_signals.get("competing_colleges") or [], dropoff_reason=None)
