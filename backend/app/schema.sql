@@ -47,7 +47,6 @@ CREATE TABLE students (
     course_interest  TEXT,
     academic_scores  JSONB,  -- e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
     summary          TEXT,
-    student_status   TEXT DEFAULT 'new' CHECK (student_status IN ('new', 'contacted', 'interested', 'enrolled', 'not_interested')), -- Add more later if required
     assigned_to      INT,
     internal_notes   TEXT,
     created_at       TIMESTAMP DEFAULT NOW(),

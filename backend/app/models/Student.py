@@ -24,7 +24,6 @@ class Student(Base):
     course_interest: Mapped[str | None] = mapped_column(Text)
     academic_scores: Mapped[dict | None] = mapped_column(JSONB)  # e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
     summary: Mapped[str | None] = mapped_column(Text)
-    student_status: Mapped[str] = mapped_column(Text, server_default="new")
     assigned_to: Mapped[int | None] = mapped_column(Integer)
     internal_notes: Mapped[str | None] = mapped_column(Text)  # manual staff notes, separate from AI-generated summary
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
