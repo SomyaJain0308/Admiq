@@ -22,9 +22,11 @@ Talked to a few people doing admissions outreach and the same complaint kept com
 ## How it works
 
 ### 1. A student messages the college's WhatsApp number
+
 Meta sends a webhook to `/api/v1/whatsapp/webhook`. The handler verifies the signature, dedupes on `whatsapp_message_id` (Meta retries webhooks, so this matters), finds-or-creates the student and their active session, and hands the message off to the agent.
 
 ### 2. The RAG agent answers it
+
 This is a LangGraph state machine (`rag/agent.py`):
 
 \```
@@ -38,7 +40,9 @@ resolve_query → retrieve → re_query (if needed) → flag_low_confidence (if 
 - **process → fallback → error** is the actual generation step: primary model call, with a fallback model and a canned apology as successive safety nets. Every stage logs latency, token usage, and retry counts to Prometheus.
 
 ### 3. Documents get ingested through a 3-tier pipeline (Again AI Generated)
+
 Staff upload a PDF, it goes into a Celery task (`document_processor.py`):
+
 1. Try Docling with OCR.
 2. If the text quality looks bad (heuristic scoring), retry with Docling forced into full-page OCR mode.
 3. If it's still bad, fall back to a manual EasyOCR/Tesseract pass.
@@ -46,7 +50,9 @@ Staff upload a PDF, it goes into a Celery task (`document_processor.py`):
 Once extracted, the document is chunked (`chunking.py`) using header-aware + recursive splitting, then each chunk gets a short LLM-generated "context" blurb describing where it fits in the document (the Anthropic contextual retrieval technique) before being embedded and stored. Context generation is batched and uses Gemini's context caching to keep it cheap.
 
 ### 4. Every session quietly builds a student profile
+
 When a session closes, a Celery task (`student_profile_tasks.py`) summarizes what happened and merges it into the student's long-term profile:
+
 - A running natural-language summary
 - Course interest, academic scores explicitly stated by the student
 - **Open concerns/objections** — unresolved pushback the student raised (e.g. "thinks fees are too high"), so staff know exactly what to address before they even open the call
@@ -55,7 +61,9 @@ When a session closes, a Celery task (`student_profile_tasks.py`) summarizes wha
 - **Drop-off reason** — if the student went quiet mid-conversation, an inferred reason why
 
 ### 5. Leads get scored automatically
+
 A rule-based score (0–100, `services/lead_scoring.py`) — deliberately not another LLM call, this needs to be cheap enough to recompute constantly:
+
 - Recency-weighted trend of the student's interest signal across recent sessions (45 pts)
 - How recently they were last active (35 pts, decays to 0 over 30 days of silence)
 - How many sessions they've had (20 pts, diminishing returns after ~5)
@@ -71,20 +79,6 @@ Every college is fully isolated — own WhatsApp number, documents, students, st
 
 `colleges` → `whatsapp_numbers`, `college_staff` ↔ `staff_colleges` ↔ `colleges`, `students` (with `profile_signals`, `lead_score`, `interest_signal_history` as JSONB/computed fields), `student_sessions` (auto-closed after 30 min idle via `pg_cron`), `messages`, `documents` → `chunks` (pgvector embeddings, HNSW index), `low_confidence_queries` (the human-handoff queue — staff replies here get re-embedded as retrievable, expiring chunks so the bot "learns" the answer for next time).
 
-## Project structure
-
-\```
-backend/app/
-├── api/v1/routers/       # FastAPI route handlers (whatsapp webhook, test-chat, documents, colleges, staff, students, low_confidence)
-├── background_tasks/     # Celery tasks: document processing, student profiling, lead scoring
-├── models/                # SQLAlchemy ORM models
-├── monitoring/            # Prometheus metric definitions
-├── rag/                   # The actual agent: LangGraph state machine, retrieval, chunking, document processing, security filters
-├── services/              # Business logic: tenant resolution, session handling, lead scoring, storage
-├── schemas/                # Pydantic request/response/internal-state models
-└── schema.sql              # Source-of-truth DB schema (no migration tool wired up yet, see Roadmap)
-\```
-
 ## Running it
 
 \```bash
@@ -97,17 +91,17 @@ Spins up the FastAPI app, a Celery worker, Celery beat (for the scheduled docume
 
 Rough order, subject to change:
 
-1. ~~Student profile enrichment~~ ✅
-2. ~~Lead scoring~~ ✅
-3. Broadcast messages — deadline reminders, "counseling round starts tomorrow" pushed to everyone who's messaged
-4. Re-engagement nudges for leads that went cold — auto follow-up after X days of silence
-5. Observability — Grafana dashboards on top of the existing Prometheus metrics
-6. Auth — JWT settings already exist in config but nothing's wired up yet; staff/admin endpoints are currently open
-7. Frontend — staff dashboard for viewing leads, scores, and the low-confidence review queue
+1. Broadcast messages — deadline reminders, "counseling round starts tomorrow" pushed to everyone who's messaged
+2. Re-engagement nudges for leads that went cold — auto follow-up after X days of silence
+3. Observability — Grafana dashboards on top of the existing Prometheus metrics
+4. Auth — JWT settings already exist in config but nothing's wired up yet; staff/admin endpoints are currently open
+5. Frontend — staff dashboard for viewing leads, scores, and the low-confidence review queue
+6. Payments - Razorpay
 
 ## Known rough edges
 
 Being upfront about this since it's still an active build, not a finished product:
+
 - No auth on staff-facing endpoints yet (see Roadmap #6)
 - No formal migration tool — `schema.sql` is the source of truth, but existing databases need manual `ALTER TABLE`s when it changes
 - CORS is wide open (`allow_origins=["*"]`) — fine for local dev, not for prod
