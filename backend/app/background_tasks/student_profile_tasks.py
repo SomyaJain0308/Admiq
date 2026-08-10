@@ -6,7 +6,7 @@ from backend.app.background_tasks.celery_app import celery_app
 from backend.app.database import SessionLocal
 from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
-from backend.app.rag.student_profile import generate_profile_update, merge_student_profile
+from backend.app.rag.student_profile import generate_profile_update
 
 
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ def process_closed_sessions_task():
                 if updated_profile.course_interest:
                     student.course_interest = updated_profile.course_interest
                 if updated_profile.academic_score_updates:
-                    merged_scores = dict(student.acedemic_scores or {})
+                    merged_scores = dict(student.academic_scores or {})
                     merged_scores.update(updated_profile.academic_score_updates)
                     student.academic_scores = merged_scores
                 session.profile_processed = True

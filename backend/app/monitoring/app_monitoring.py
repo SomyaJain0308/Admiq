@@ -1,4 +1,4 @@
-from promethius_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Gauge, Histogram, CONTENT_TYPE_LATEST
 
 
 
