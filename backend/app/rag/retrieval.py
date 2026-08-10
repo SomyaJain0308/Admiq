@@ -164,7 +164,7 @@ async def get_relevant_documents_scored(db, query: str, college_id: int, k: int)
 
 
 async def get_previous_assistant_message(db, college_id: int, student_id: int) -> str:
-    result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role == 'assistant').order_by(Message.created_at.desc()).limit(1))
+    result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role != 'student').order_by(Message.created_at.desc()).limit(1))
     message = result.scalars().first()
     return message or "This is the start of the conversation, no previous message yet."
 

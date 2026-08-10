@@ -29,7 +29,7 @@ def merge_student_profile(existing_summary: str | None, session_summary: str) ->
         result = llm.invoke(STUDENT_PROFILE_PROMPT.format(existing_summary=existing_summary or "", session_summary=session_summary))
         if result["parsing_error"] is not None:
             raise ValueError(f"Failed to parse LLM output: {result['parsing_error']}")
-        return result["parsed_output"].summary
+        return result["parsed"].summary
     except Exception as e:
         logger.warning(f"Failed to merge student profile: {e}", exc_info=True)
         return existing_summary or ""

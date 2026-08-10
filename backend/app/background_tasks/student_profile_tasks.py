@@ -17,7 +17,7 @@ BATCH_SIZE = 50
 def process_closed_sessions_task():
     db = SessionLocal()
     try:
-        closed_sessions = db.execute(select(StudentSession).where(StudentSession.status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE)).scalars().all()
+        closed_sessions = db.execute(select(StudentSession).where(StudentSession.session_status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE)).scalars().all()
         if not closed_sessions:
             return
         processed_count = 0
