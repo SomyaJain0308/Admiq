@@ -1,9 +1,11 @@
 import logging
 
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.app.background_tasks.celery_app import celery_app
-from backend.app.database import SessionLocal
+from backend.app.database import get_db
 from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
 from backend.app.rag.student_profile import generate_profile_update
@@ -15,10 +17,10 @@ BATCH_SIZE = 50
 
 
 @celery_app.task
-def process_closed_sessions_task():
-    db = SessionLocal()
+async def process_closed_sessions_task(db: AsyncSession = Depends(get_db)):
     try:
-        closed_sessions = db.execute(select(StudentSession).where(StudentSession.session_status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE)).scalars().all()
+        closed_sessions_result = await db.execute(select(StudentSession).where(StudentSession.session_status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE))
+        closed_sessions = closed_sessions_result.scalars().all()
         if not closed_sessions:
             return
         processed_count = 0
@@ -27,12 +29,13 @@ def process_closed_sessions_task():
                 if not session.session_summary:
                     session.profile_processed = True
                     continue
-                student = db.execute(select(Student).where(Student.college_id == session.college_id, Student.student_id == session.student_id).limit(1)).scalars().first()
+                student_result = await db.execute(select(Student).where(Student.college_id == session.college_id, Student.student_id == session.student_id).limit(1))
+                student = student_result.scalars().first()
                 if not student:
                     logger.warning(f"Student not found for session {session.session_id}. Skipping profile merge.")
                     session.profile_processed = True
                     continue
-                updated_profile = generate_profile_update(existing_summary=student.summary, session_summary=session.session_summary)
+                updated_profile = await generate_profile_update(existing_summary=student.summary, session_summary=session.session_summary)
                 student.summary = updated_profile.summary
                 if updated_profile.course_interest:
                     student.course_interest = updated_profile.course_interest
@@ -45,7 +48,7 @@ def process_closed_sessions_task():
             except Exception as e:
                 logger.error(f"Error processing session {session.session_id}: {e}", exc_info=True)
                 continue
-        db.commit()
+        await db.commit()
         logger.info(f"Processed {processed_count}/{len(closed_sessions)} closed sessions into student profiles.")
     finally:
         db.close()

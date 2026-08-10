@@ -47,6 +47,7 @@ CREATE TABLE students (
     course_interest  TEXT,
     academic_scores  JSONB,  -- e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
     summary          TEXT,
+    profile_signals  JSONB,  -- concerns, guardian_involvement, competing_colleges, dropoff_reason
     assigned_to      INT,
     internal_notes   TEXT,
     created_at       TIMESTAMP DEFAULT NOW(),
@@ -205,7 +206,6 @@ CREATE INDEX ON chunks (document_id);
 CREATE INDEX ON chunks (chunk_content);
 CREATE INDEX ON documents (college_id);
 CREATE INDEX ON students (college_id);
-CREATE INDEX ON students (college_id, student_status);
 CREATE UNIQUE INDEX one_active_session_per_student ON student_sessions (college_id, student_id) WHERE session_status = 'active';
 CREATE INDEX ON student_sessions (college_id, student_id, session_status);
 CREATE INDEX ON student_sessions (last_message_at);
