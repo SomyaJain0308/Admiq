@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, TypedDict
+from typing import Literal, Optional, TypedDict
 
 
 
@@ -90,5 +90,8 @@ class ChatTestResponse(BaseModel):
     student_id: int
 
 
-class StudentProfileSummary(BaseModel):
-    summary: str = Field(description="The merged, updated long-term student profile summary.")
+class StudentProfileUpdate(BaseModel):
+    summary: str = Field(description="Updated long-term profile summary, merging the existing profile with this session.")
+    course_interest: str | None = Field(default=None, description="The course/program the student is currently most interested in - ONLY if explicitly stated by the student this session. Never invent a value the student didn't state. Empty if not mentioned. If student seems interested in multiple program return a str, for e.g. 'cse, ece, cse(ai/ml)' just like this.")
+    academic_score_updates: dict[str, float] = Field(default_factory=dict, description="Any NEW or UPDATED academic scores explicitily stated by the student this session, e.g. {'jee_main_percentile': 95.2, 'class_12_percentage': 92.36}. Use consistent snake_case keys. Never invent a value the student didn't state. Empty if none mentioned.")
+    interest_signal: Literal["positive", "negative", "neutral"] = Field(description="'positive' if the student showed genuine engagement or interest in moving forward (asking about next steps, deadlines, documents). 'negative' if they explicitily said they're not interested or are going elsewhere. 'neutral' if the session was purely informational or inconclusive." )
