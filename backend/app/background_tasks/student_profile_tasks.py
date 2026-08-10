@@ -16,6 +16,10 @@ BATCH_SIZE = 50
 
 
 @celery_app.task
+def process_closed_sessions_task():
+    asyncio.run(_process_closed_sessions_async())
+
+
 async def _process_closed_sessions_async():
     async with AsyncSessionLocal() as db:
         try:
