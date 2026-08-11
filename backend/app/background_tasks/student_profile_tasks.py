@@ -1,18 +1,20 @@
 import logging
 import asyncio
+from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from backend.app.background_tasks.celery_app import celery_app
 from backend.app.database import AsyncSessionLocal
 from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
 from backend.app.rag.student_profile import generate_profile_update
-
+from backend.app.services.lead_scoring import compute_lead_score
 
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 50
+INTEREST_SIGNAL_HISTORY_CAP = 5
 
 
 @celery_app.task
@@ -49,6 +51,20 @@ async def _process_closed_sessions_async():
                         student.academic_scores = merged_scores
                     existing_profile_signals = student.profile_signals or {}
                     student.profile_signals = {"concerns": updated_profile.concerns, "guardian_involvement": updated_profile.guardian_involvement if updated_profile.guardian_involvement is not None else existing_profile_signals.get("guardian_involvement"), "competing_colleges": updated_profile.competing_colleges, "dropoff_reason": updated_profile.dropoff_reason}
+                    interest_history = list(student.interest_signal_history or [])
+                    interest_history.append(updated_profile.interest_signal)
+                    student.interest_signal_history = interest_history[-INTEREST_SIGNAL_HISTORY_CAP:]
+                    total_sessions_result = await db.execute(select(func.count()).select_from(StudentSession).where(StudentSession.college_id == student.college_id, StudentSession.student_id == student.student_id).limit(1))
+                    total_sessions = total_sessions_result.scalars().first()
+                    last_activity = session.last_message_at or session.started_at
+                    days_since_last_activity = None
+                    if last_activity is not None:
+                        now = datetime.now(timezone.utc)
+                        if last_activity.tzinfo is None:
+                            last_activity = last_activity.replace(tzinfo=timezone.utc)
+                        days_since_last_activity = (now - last_activity).total_seconds() / 86400
+                    student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions, concerns=student.profile_signals.get("concerns"), competing_colleges=student.profile_signals.get("competing_colleges"), dropoff_reason=student.profile_signals.get("dropoff_reason"))
+                    student.lead_score_updated_at = datetime.now(timezone.utc)
                     session.profile_processed = True
                     processed_count += 1
                 except Exception as e:

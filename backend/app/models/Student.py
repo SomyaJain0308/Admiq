@@ -25,6 +25,9 @@ class Student(Base):
     academic_scores: Mapped[dict | None] = mapped_column(JSONB)  # e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
     summary: Mapped[str | None] = mapped_column(Text)
     profile_signals: Mapped[dict | None] = mapped_column(JSONB) # Concerns, guardian_involvement, competing_colleges, dropoff_reason
+    interest_signal_history: Mapped[list | None] = mapped_column(JSONB)
+    lead_score: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    lead_score_updated_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
     assigned_to: Mapped[int | None] = mapped_column(Integer)
     internal_notes: Mapped[str | None] = mapped_column(Text)  # manual staff notes, separate from AI-generated summary
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
@@ -34,6 +37,7 @@ class Student(Base):
         UniqueConstraint("college_id", "whatsapp_user_id"),
         UniqueConstraint("college_id", "student_phone"),
         Index("ix_students_college_id", "college_id"),
+        Index("ix_stuents_college_id_lead_score", "college_id", "lead_score"),
         ForeignKeyConstraint(["college_id", "assigned_to"], ["staff_colleges.college_id", "staff_colleges.staff_id"])
     )
 
