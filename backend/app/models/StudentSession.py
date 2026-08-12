@@ -23,6 +23,7 @@ class StudentSession(Base):
     session_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="active")
     session_summary: Mapped[str | None] = mapped_column(Text)
     profile_processed: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    reengagement_nudge_sent: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     total_tokens_used: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
 

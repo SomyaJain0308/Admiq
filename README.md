@@ -91,8 +91,7 @@ Spins up the FastAPI app, a Celery worker, Celery beat (for the scheduled docume
 
 Rough order, subject to change:
 
-1. Broadcast messages — deadline reminders, "counseling round starts tomorrow" pushed to everyone who's messaged
-2. Re-engagement nudges for leads that went cold — auto follow-up after X days of silence
+1. Follow up inside pre determined window.
 3. Observability — Grafana dashboards on top of the existing Prometheus metrics
 4. Auth — JWT settings already exist in config but nothing's wired up yet; staff/admin endpoints are currently open
 5. Frontend — staff dashboard for viewing leads, scores, and the low-confidence review queue

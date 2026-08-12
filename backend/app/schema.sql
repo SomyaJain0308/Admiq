@@ -2,12 +2,12 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 CREATE TABLE colleges (
-    college_id      SERIAL PRIMARY KEY,
-    college_name    TEXT NOT NULL,
-    college_phone   TEXT NOT NULL,
-    college_email   TEXT NOT NULL,
-    college_context         JSONB,
-    created_at      TIMESTAMP DEFAULT NOW()
+    college_id          SERIAL PRIMARY KEY,
+    college_name        TEXT NOT NULL,
+    college_phone       TEXT NOT NULL,
+    college_email   T   EXT NOT NULL,
+    college_strenghts   JSONB,
+    created_at          TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE whatsapp_numbers (
@@ -62,16 +62,17 @@ CREATE TABLE students (
 );
 
 CREATE TABLE student_sessions (
-    session_id       SERIAL PRIMARY KEY,
-    college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    student_id       INT NOT NULL,
-    started_at       TIMESTAMP DEFAULT NOW(),
-    last_message_at  TIMESTAMP DEFAULT NOW(),
-    ended_at         TIMESTAMP,
-    session_status   TEXT NOT NULL DEFAULT 'active' CHECK (session_status IN ('active', 'closed')),
-    session_summary  TEXT,
-    profile_processed BOOLEAN NOT NULL DEFAULT FALSE,
-    total_tokens_used INTEGER NOT NULL DEFAULT 0,
+    session_id              SERIAL PRIMARY KEY,
+    college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    student_id              INT NOT NULL,
+    started_at              TIMESTAMP DEFAULT NOW(),
+    last_message_at         TIMESTAMP DEFAULT NOW(),
+    ended_at                TIMESTAMP,
+    session_status          TEXT NOT NULL DEFAULT 'active' CHECK (session_status IN ('active', 'closed')),
+    session_summary         TEXT,
+    profile_processed       BOOLEAN NOT NULL DEFAULT FALSE,
+    reengagement_nudge_sent BOOLEAN NOT NULL DEFAULT FALSE,
+    total_tokens_used       INTEGER NOT NULL DEFAULT 0,
 
     UNIQUE (college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
