@@ -5,7 +5,7 @@ CREATE TABLE colleges (
     college_id          SERIAL PRIMARY KEY,
     college_name        TEXT NOT NULL,
     college_phone       TEXT NOT NULL,
-    college_email   T   EXT NOT NULL,
+    college_email       TEXT NOT NULL,
     college_strenghts   JSONB,
     created_at          TIMESTAMP DEFAULT NOW()
 );

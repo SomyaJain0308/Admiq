@@ -51,7 +51,7 @@ async def create_college(college: CollegeCreate, db: AsyncSession = Depends(get_
         college_name=college.college_name,
         college_phone=college.college_phone,
         college_email=college.college_email,
-        college_context=college.college_context
+        college_strengths=college.college_strengths
     )
     
     db.add(new_college)

@@ -28,12 +28,12 @@ MIN_LEAD_SCORE_FOR_NUDGE = 15
 
 
 @celery_app.task
-def check_and_send_reengagement_nudges_tasl():
+def check_and_send_reengagement_nudges_task():
     asyncio.run(_check_and_send_reenagegement_nudges_async())
 
 
 async def _check_and_send_reenagegement_nudges_async():
-    with AsyncSessionLocal as db:
+    with AsyncSessionLocal() as db:
         try:
             now = datetime.now(timezone.utc)
             window_start = now - timedelta(hours=REENGAGEMENT_WINDOW_END_HOURS)
@@ -67,9 +67,9 @@ async def _check_and_send_reenagegement_nudges_async():
                     college_result = await db.execute(select(College).where(College.college_id == student.college_id).limit(1))
                     college = college_result.scalars().first()
                     profile_signals = student.profile_signals or {}
-                    nudge = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths)
+                    nudge = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths if college.key_strengths else [])
                     if not nudge.should_send or not nudge.message:
-                        session.reenagement_nudge_sent = True
+                        session.reengagement_nudge_sent = True
                         continue
                     number_result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.college_id == student.college_id).limit(1))
                     whatsapp_number = number_result.scalars().first()
@@ -78,11 +78,11 @@ async def _check_and_send_reenagegement_nudges_async():
                         continue
                     send_result  = await send_whatsapp_text_message(phone_number_id=whatsapp_number.phone_number_id, to=student.whatsapp_user_id, message=nudge.message, access_token=get_settings().whatsapp_access_token)
                     if send_result["ok"]:
-                        db.add(Message(college_id=student.college_id, student_id=student.student_id, session_id=student.session_id, messager_role="assistant", content=nudge.message, message_type="reengagement_nudge"))
+                        db.add(Message(college_id=student.college_id, student_id=student.student_id, session_id=session.session_id, messager_role="assistant", content=nudge.message, message_type="reengagement_nudge"))
                         session.reengagement_nudge_sent = True
                         sent_count += 1
                     else:
-                        logger.error("Failed to send reengagement nudge to student {student.student_id}: {send_result}")
+                        logger.error(f"Failed to send reengagement nudge to student {student.student_id}: {send_result}")
                 except Exception as e:
                     logger.error(f"Error processing reengagement candidate session {session.session_id}: {e}", exc_info=True)
                     continue

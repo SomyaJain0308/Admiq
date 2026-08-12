@@ -1,5 +1,5 @@
 import logging
-from langchain import ChatGoogleGenerativeAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from backend.app.config import get_settings
 from backend.app.schemas.models import ReengagementMessage

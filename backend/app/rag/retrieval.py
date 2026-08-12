@@ -175,8 +175,8 @@ async def build_system_prompt(db, query: str, college_id: int, student_id: int, 
     try:
         college_name_result = await db.execute(select(College.college_name).where(College.college_id == college_id).limit(1))
         college_name = college_name_result.scalars().first()
-        college_context_result = await db.execute(select(College.college_context).where(College.college_id == college_id).limit(1))
-        college_context = college_context_result.scalars().first()
+        college_strengths_result = await db.execute(select(College.college_strengths).where(College.college_id == college_id).limit(1))
+        college_strengths = college_strengths_result.scalars().first()
         previous_assistant_message_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role != 'student').order_by(Message.created_at.desc()).limit(1))
         previous_assistant_message = previous_assistant_message_result.scalars().first()
     except Exception as e:
@@ -186,7 +186,7 @@ async def build_system_prompt(db, query: str, college_id: int, student_id: int, 
         college_name=college_name,
         student_summary=student_summary or "No long-term student summary yet.",
         session_summary=session_summary or "No current session summary yet.",
-        college_context=college_context or "No college-context was added by the college.",
+        college_strengths=college_strengths or "No college-strengths was added by the college.",
         previous_assistant_message=previous_assistant_message or "This is the start of the conversation, no previous message yet.",
         query=query,
         relevant_documents=relevant_documents,
