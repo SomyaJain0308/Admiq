@@ -33,7 +33,7 @@ def check_and_send_reengagement_nudges_task():
 
 
 async def _check_and_send_reenagegement_nudges_async():
-    with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal() as db:
         try:
             now = datetime.now(timezone.utc)
             window_start = now - timedelta(hours=REENGAGEMENT_WINDOW_END_HOURS)
