@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func
 
 from backend.app.background_tasks.celery_app import celery_app
-from backend.app.database import AsyncSessionLocal
+from backend.app.database import AsyncSessionLocal, engine
 from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
 from backend.app.rag.student_profile import generate_profile_update
@@ -23,54 +23,57 @@ def process_closed_sessions_task():
 
 
 async def _process_closed_sessions_async():
-    async with AsyncSessionLocal() as db:
-        try:
-            closed_sessions_result = await db.execute(select(StudentSession).where(StudentSession.session_status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE))
-            closed_sessions = closed_sessions_result.scalars().all()
-            if not closed_sessions:
-                return
-            processed_count = 0
-            for session in closed_sessions:
-                try:
-                    if not session.session_summary:
+    try:
+        async with AsyncSessionLocal() as db:
+            try:
+                closed_sessions_result = await db.execute(select(StudentSession).where(StudentSession.session_status == "closed", StudentSession.profile_processed == False).limit(BATCH_SIZE))
+                closed_sessions = closed_sessions_result.scalars().all()
+                if not closed_sessions:
+                    return
+                processed_count = 0
+                for session in closed_sessions:
+                    try:
+                        if not session.session_summary:
+                            session.profile_processed = True
+                            continue
+                        student_result = await db.execute(select(Student).where(Student.college_id == session.college_id, Student.student_id == session.student_id).limit(1))
+                        student = student_result.scalars().first()
+                        if not student:
+                            logger.warning(f"Student not found for session {session.session_id}. Skipping profile merge.")
+                            session.profile_processed = True
+                            continue
+                        updated_profile = await generate_profile_update(existing_summary=student.summary, session_summary=session.session_summary, existing_profile_signals=student.profile_signals)
+                        student.summary = updated_profile.summary
+                        if updated_profile.course_interest:
+                            student.course_interest = updated_profile.course_interest
+                        if updated_profile.academic_score_updates:
+                            merged_scores = dict(student.academic_scores or {})
+                            merged_scores.update(updated_profile.academic_score_updates)
+                            student.academic_scores = merged_scores
+                        existing_profile_signals = student.profile_signals or {}
+                        student.profile_signals = {"concerns": updated_profile.concerns, "guardian_involvement": updated_profile.guardian_involvement if updated_profile.guardian_involvement is not None else existing_profile_signals.get("guardian_involvement"), "competing_colleges": updated_profile.competing_colleges, "dropoff_reason": updated_profile.dropoff_reason}
+                        interest_history = list(student.interest_signal_history or [])
+                        interest_history.append(updated_profile.interest_signal)
+                        student.interest_signal_history = interest_history[-INTEREST_SIGNAL_HISTORY_CAP:]
+                        total_sessions_result = await db.execute(select(func.count()).select_from(StudentSession).where(StudentSession.college_id == student.college_id, StudentSession.student_id == student.student_id))
+                        total_sessions = total_sessions_result.scalars().first()
+                        last_activity = session.last_message_at or session.started_at
+                        days_since_last_activity = None
+                        if last_activity is not None:
+                            now = datetime.now(timezone.utc)
+                            if last_activity.tzinfo is None:
+                                last_activity = last_activity.replace(tzinfo=timezone.utc)
+                            days_since_last_activity = (now - last_activity).total_seconds() / 86400
+                        student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions, concerns=student.profile_signals.get("concerns"), competing_colleges=student.profile_signals.get("competing_colleges"), dropoff_reason=student.profile_signals.get("dropoff_reason"))
+                        student.lead_score_updated_at = datetime.now(timezone.utc)
                         session.profile_processed = True
+                        processed_count += 1
+                    except Exception as e:
+                        logger.error(f"Error processing session {session.session_id}: {e}", exc_info=True)
                         continue
-                    student_result = await db.execute(select(Student).where(Student.college_id == session.college_id, Student.student_id == session.student_id).limit(1))
-                    student = student_result.scalars().first()
-                    if not student:
-                        logger.warning(f"Student not found for session {session.session_id}. Skipping profile merge.")
-                        session.profile_processed = True
-                        continue
-                    updated_profile = await generate_profile_update(existing_summary=student.summary, session_summary=session.session_summary, existing_profile_signals=student.profile_signals)
-                    student.summary = updated_profile.summary
-                    if updated_profile.course_interest:
-                        student.course_interest = updated_profile.course_interest
-                    if updated_profile.academic_score_updates:
-                        merged_scores = dict(student.academic_scores or {})
-                        merged_scores.update(updated_profile.academic_score_updates)
-                        student.academic_scores = merged_scores
-                    existing_profile_signals = student.profile_signals or {}
-                    student.profile_signals = {"concerns": updated_profile.concerns, "guardian_involvement": updated_profile.guardian_involvement if updated_profile.guardian_involvement is not None else existing_profile_signals.get("guardian_involvement"), "competing_colleges": updated_profile.competing_colleges, "dropoff_reason": updated_profile.dropoff_reason}
-                    interest_history = list(student.interest_signal_history or [])
-                    interest_history.append(updated_profile.interest_signal)
-                    student.interest_signal_history = interest_history[-INTEREST_SIGNAL_HISTORY_CAP:]
-                    total_sessions_result = await db.execute(select(func.count()).select_from(StudentSession).where(StudentSession.college_id == student.college_id, StudentSession.student_id == student.student_id).limit(1))
-                    total_sessions = total_sessions_result.scalars().first()
-                    last_activity = session.last_message_at or session.started_at
-                    days_since_last_activity = None
-                    if last_activity is not None:
-                        now = datetime.now(timezone.utc)
-                        if last_activity.tzinfo is None:
-                            last_activity = last_activity.replace(tzinfo=timezone.utc)
-                        days_since_last_activity = (now - last_activity).total_seconds() / 86400
-                    student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions, concerns=student.profile_signals.get("concerns"), competing_colleges=student.profile_signals.get("competing_colleges"), dropoff_reason=student.profile_signals.get("dropoff_reason"))
-                    student.lead_score_updated_at = datetime.now(timezone.utc)
-                    session.profile_processed = True
-                    processed_count += 1
-                except Exception as e:
-                    logger.error(f"Error processing session {session.session_id}: {e}", exc_info=True)
-                    continue
-            await db.commit()
-            logger.info(f"Processed {processed_count}/{len(closed_sessions)} closed sessions into student profiles.")
-        finally:
-            await db.close()
+                await db.commit()
+                logger.info(f"Processed {processed_count}/{len(closed_sessions)} closed sessions into student profiles.")
+            finally:
+                await db.close()
+    finally:
+        await engine.dispose()
