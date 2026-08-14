@@ -36,7 +36,7 @@ async def _check_and_send_reenagegement_nudges_async():
     try:
         async with AsyncSessionLocal() as db:
             try:
-                now = datetime.now(timezone.utc)
+                now = datetime.now(timezone.utc).replace(tzinfo=None)
                 window_start = now - timedelta(hours=REENGAGEMENT_WINDOW_END_HOURS)
                 window_end = now - timedelta(hours=REENGAGEMENT_WINDOW_START_HOURS)
                 candidates_result = await db.execute(select(StudentSession).where(StudentSession.last_message_at >= window_start, StudentSession.last_message_at <= window_end, StudentSession.reengagement_nudge_sent == False).limit(BATCH_SIZE))
