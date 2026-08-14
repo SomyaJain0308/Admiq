@@ -9,7 +9,6 @@ from langchain_core.documents import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from backend.app.config import get_settings
-from backend.app.models.Document import Document
 from backend.app.models.Chunk import Chunk
 
 logger = logging.getLogger(__name__)

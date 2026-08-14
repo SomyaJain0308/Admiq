@@ -45,5 +45,5 @@ class Message(Base):
         UniqueConstraint("college_id", "message_id"),
         ForeignKeyConstraint(["college_id", "session_id"], ["student_sessions.college_id", "student_sessions.session_id"]),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
-        ForeignKeyConstraint(["college_id", "replied_by_staff_id"], ["college_staff.college_id", "college_staff.staff_id"]),
+        ForeignKeyConstraint(["college_id", "replied_by_staff_id"], ["staff_college.college_id", "staff_college.staff_id"]),
     )

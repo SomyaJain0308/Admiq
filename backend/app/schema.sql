@@ -83,7 +83,7 @@ CREATE TABLE messages (
     college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     student_id              INT NOT NULL,
     messager_role           TEXT NOT NULL CHECK (messager_role IN ('student', 'assistant', 'staff')),
-    replied_by_staff_id     INT REFERENCES college_staff(staff_id),
+    replied_by_staff_id     INT,
     content                 TEXT NOT NULL,
     sources                 JSONB,
     feedback                BOOLEAN,
@@ -98,6 +98,7 @@ CREATE TABLE messages (
     UNIQUE (college_id, message_id),
     CHECK (feedback IS NULL OR messager_role = 'assistant'),
     CHECK (messager_role = 'staff' OR replied_by_staff_id IS NULL),
+    FOREIGN KEY (college_id, replied_by_staff_id) REFERENCES staff_colleges(college_id, staff_id),
     FOREIGN KEY (college_id, session_id) REFERENCES student_sessions(college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
 );

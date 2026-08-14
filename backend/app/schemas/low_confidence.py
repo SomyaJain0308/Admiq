@@ -13,7 +13,7 @@ class LowConfidenceResponse(BaseModel):
     answer_content: str
     resolved: bool
     resolved_at: Optional[datetime] = Field(default=None, description="Timestamp when the query was resolved, if applicable.")
-    resolved_by: Optional[str] = Field(default=None, description="Identifier of the user who resolved the query, if applicable.")
+    resolved_by: Optional[int] = Field(default=None, description="Staff ID of the user who resolved the query, if applicable.")
 
 
 class ReconstructedAnswer(BaseModel):

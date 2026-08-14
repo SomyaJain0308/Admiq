@@ -15,9 +15,11 @@ SYNC_DATABASE_URL = settings.database_url.replace("+asyncpg", "")
 sync_engine = create_engine(SYNC_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)
 
-
 class Base(DeclarativeBase):
     pass
+
+# Must come after Base is defined - this import triggers models/__init__.py, which imports every model class so SQLAlchemy's registry is fully populated before any mapper configuration runs (see comment in models/__init__.py).
+from backend.app import models
 
 async def get_db():
     async with AsyncSessionLocal() as db:

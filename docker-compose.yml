@@ -9,12 +9,34 @@ services:
       - prometheus_multiproc:/tmp/prometheus_multiproc
     ports:
       - "8000:8000"
+    networks:
+      - monitoring
     env_file:
       - .env
     environment:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     working_dir: /app
     command: fastapi dev backend/app/main.py --host 0.0.0.0 --port 8000 --reload-dir backend/app
+
+  prometheus:
+    image: prom/prometheus:v2.37.0
+    container_name: admiq-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:9.0.0
+    container_name: admiq-grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
 
   celery_worker:
     build:
@@ -24,6 +46,8 @@ services:
     volumes:
       - ./backend:/app/backend
       - prometheus_multiproc:/tmp/prometheus_multiproc
+    networks:
+      - monitoring
     env_file:
       - .env
     environment:
@@ -41,6 +65,8 @@ services:
     volumes:
       - ./backend:/app/backend
       - prometheus_multiproc:/tmp/prometheus_multiproc
+    networks:
+      - monitoring
     env_file:
       - .env
     environment:
@@ -52,3 +78,7 @@ services:
 
 volumes:
   prometheus_multiproc:
+
+networks:
+  monitoring:
+    driver: bridge

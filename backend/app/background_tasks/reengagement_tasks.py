@@ -67,7 +67,7 @@ async def _check_and_send_reenagegement_nudges_async():
                     college_result = await db.execute(select(College).where(College.college_id == student.college_id).limit(1))
                     college = college_result.scalars().first()
                     profile_signals = student.profile_signals or {}
-                    nudge = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths if college.key_strengths else [])
+                    nudge = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths if college else None)
                     if not nudge.should_send or not nudge.message:
                         session.reengagement_nudge_sent = True
                         continue
