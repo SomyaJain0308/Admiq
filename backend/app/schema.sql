@@ -6,7 +6,7 @@ CREATE TABLE colleges (
     college_name        TEXT NOT NULL,
     college_phone       TEXT NOT NULL,
     college_email       TEXT NOT NULL,
-    college_strenghts   JSONB,
+    college_strengths   JSONB,
     created_at          TIMESTAMP DEFAULT NOW()
 );
 
@@ -50,7 +50,7 @@ CREATE TABLE students (
     profile_signals         JSONB,  -- concerns, guardian_involvement, competing_colleges, dropoff_reason
     interest_signal_history JSONB, -- capped list of recent per-session interest signals, scoring input only
     lead_score              INT NOT NULL DEFAULT 0,
-    lead_score_uploaded_at  TIMESTAMP,
+    lead_score_updated_at   TIMESTAMP,
     assigned_to             INT,
     internal_notes          TEXT,
     created_at              TIMESTAMP DEFAULT NOW(),
