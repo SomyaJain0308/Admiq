@@ -6,14 +6,31 @@ settings = get_settings()
 
 _async_client: AsyncClient | None = None
 
-
 async def _bucket():
     global _async_client
+
     if _async_client is None:
-        _async_client = await create_async_client(settings.supabase_url, settings.supabase_service_role_key)
+        _async_client = await create_async_client(
+            settings.supabase_url,
+            settings.supabase_service_role_key,
+        )
+
+    assert _async_client is not None
     return _async_client.storage.from_(settings.storage_bucket)
 
-async def upload_file_bytes(path: str, file_bytes: bytes, content_type: str = "application/pdf") -> str:
+
+async def upload_file_bytes(
+    path: str,
+    file_bytes: bytes,
+    content_type: str = "application/pdf",
+) -> str:
     bucket = await _bucket()
-    await bucket.upload(path, file_bytes, {"content-type": content_type})
+    await bucket.upload(
+        path,
+        file_bytes,
+        {
+            "content-type": content_type,
+            "upsert": "true",
+        },
+    )
     return path
