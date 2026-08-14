@@ -26,8 +26,8 @@ scrape_configs:
     static_configs:
       - targets: ["redis-exporter:9121"]
 
-  - job_name: "sample-app"
-    scrape_interval: 10s
-    metrics_path: "/metrics"
+  - job_name: "backend"
+    scrape_interval: 15s
+    metrics_path: "/router/metrics"
     static_configs:
-      - targets: ["sample-app:8080"]
+      - targets: ["127.0.0.1:8080"]
