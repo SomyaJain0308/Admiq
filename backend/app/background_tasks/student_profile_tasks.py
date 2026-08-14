@@ -60,12 +60,12 @@ async def _process_closed_sessions_async():
                         last_activity = session.last_message_at or session.started_at
                         days_since_last_activity = None
                         if last_activity is not None:
-                            now = datetime.now(timezone.utc)
+                            now = datetime.now()
                             if last_activity.tzinfo is None:
-                                last_activity = last_activity.replace(tzinfo=timezone.utc)
+                                last_activity = last_activity.replace(tzinfo=None)
                             days_since_last_activity = (now - last_activity).total_seconds() / 86400
                         student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions, concerns=student.profile_signals.get("concerns"), competing_colleges=student.profile_signals.get("competing_colleges"), dropoff_reason=student.profile_signals.get("dropoff_reason"))
-                        student.lead_score_updated_at = datetime.now(timezone.utc)
+                        student.lead_score_updated_at = datetime.now()
                         session.profile_processed = True
                         processed_count += 1
                     except Exception as e:
