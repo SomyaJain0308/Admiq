@@ -1,6 +1,7 @@
 import time
 import logging
 
+from backend.app.monitoring.logging_utils import ContextLoggerAdapter
 from langgraph.graph import StateGraph, START, END
 from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION Add DeepSeek too
 from langsmith import traceable
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
-    def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
+    def __init__(self, state: AgentState): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
             settings = get_settings() # Defined in rag/config (values set in .env)
 
@@ -35,7 +36,7 @@ class Agent:
 
             self.graph = self._build_graph()
         except Exception:
-            logger.critical("Agent failed to initialize", exc_info=True)
+            state["logger"].critical("Agent failed to initialize", exc_info=True)
             raise # Fail fast at startup rather than with a half-built agent.
 
 
@@ -46,7 +47,7 @@ class Agent:
             try:
                 previous_assistant_message = await get_previous_assistant_message(db=state["db"], college_id=state["college_id"], student_id=state["student_id"]) # Defined in rag/retrieval.py
             except Exception as e:
-                logger.warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("Failed to fetch previous_assistant_message college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
 
             try:
@@ -60,7 +61,7 @@ class Agent:
                     NEEDS_RETRIEVAL_COUNT.inc()
                     QUERY_DECOMPOSITION_SIZE.observe(len(search_queries))
             except Exception as e:
-                logger.warning("resolve_query failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("resolve_query failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 search_queries, input_tokens, output_tokens = [state["query"]], 0, 0
                 needs_retrieval = True
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
@@ -110,7 +111,7 @@ class Agent:
                     relevant_documents = "No relevant documents were found for this query."
                     best_distance = 1.0
             except Exception as e:
-                logger.warning("Retrieval failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("Retrieval failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 newly_resolved, still_pending = state.get("resolved_chunks", []), state.get("pending_queries", [])
                 relevant_documents, best_distance = "No relevant documents were found for this query.", 1.0
             finally:
@@ -129,17 +130,17 @@ class Agent:
                 if len(new_queries) != len(failed):
                     new_queries = failed
             except Exception as e:
-                logger.warning("re-query failed college_id=%s studnet_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("re-query failed college_id=%s studnet_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 new_queries, input_tokens, output_tokens = failed, 0, 0
             LLM_INPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(output_tokens)
-            logger.info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], failed, new_queries)
+            state["logger"].info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], failed, new_queries)
             STAGE_LATENCY.labels(stage="re_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             return {"pending_queries": new_queries, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
 
 
         async def flag_low_confidence(state: AgentState) -> dict: # Async because it must match the other nodes' calling convention within the same async graph although no await
-            logger.warning("Retrieval exhausted retries college_id=%s student_id=%s session_id=%s query=%r best_distance=%.3f", state["college_id"], state["student_id"], state["session_id"], state["query"], state["best_distance"])
+            state["logger"].warning("Retrieval exhausted retries college_id=%s student_id=%s session_id=%s query=%r best_distance=%.3f", state["college_id"], state["student_id"], state["session_id"], state["query"], state["best_distance"])
             SUBQUERIES_UNRESOLVED.observe(len(state["pending_queries"]))
             return {"needs_human_review": True}
 
@@ -148,7 +149,7 @@ class Agent:
             try:
                 prompt = await build_system_prompt(db=state["db"], query=state["query"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], relevant_documents=state["relevant_documents"], student_summary=state.get("student_summary"), session_summary=state.get("session_summary"))
             except Exception as e:
-                logger.warning("build_system_prompt failed, using default prompt college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("build_system_prompt failed, using default prompt college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 prompt = SYSTEM_PROMPT.format(college_name="an", student_summary=state.get("student_summary") or "No long-term student summary yet. OR error loading summary", session_summary=state.get("session_summary") or "No current session summary yet. OR error loading session_summary", college_strengths="No official strength available right now. or error loading college_strength", previous_assistant_message="This is the start of the conversation, no previous message yet. OR error loading previous assistant message", query=state["query"], relevant_documents=state.get("relevant_documents") or "No relevant documents were found for this query.")
             return {"prompt": prompt}
 
@@ -170,10 +171,10 @@ class Agent:
                 LLM_INPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(input_tokens) 
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(output_tokens)
                 STAGE_LATENCY.labels(stage="primary", model_used=self.primary_llm_name).observe(time.perf_counter() - start)
-                logger.info("Primary model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
+                state["logger"].info("Primary model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
                 if not parsed_response.response.strip().endswith("?"):
                     AGENT_MISSING_FOLLOWUP.labels(model_used="primary").inc()
-                    logger.info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
+                    state["logger"].info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
                 return {"response": parsed_response.response, "updated_session_summary": parsed_response.updated_session_summary, "sources": parsed_response.sources, "error": None, "model_used": "primary", "input_tokens": total_input, "output_tokens": total_output, "wants_human_handoff": parsed_response.wants_human_handoff or state.get("needs_human_review", False)}
             except Exception as e:
                 call_input_tokens = 0
@@ -187,7 +188,7 @@ class Agent:
                 AGENT_RETRIES.labels(stage="primary").inc()
                 LLM_INPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(call_input_tokens)
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(call_output_tokens)
-                logger.warning("Primary model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("Primary model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "primary_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
         process_message = traceable(name="primary_llm_call", run_type="llm")(process_message)
 
@@ -209,10 +210,10 @@ class Agent:
                 LLM_INPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(input_tokens) 
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(output_tokens)
                 STAGE_LATENCY.labels(stage="fallback", model_used=self.fallback_llm_name).observe(time.perf_counter() - start)
-                logger.info("Fallback model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
+                state["logger"].info("Fallback model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
                 if not parsed_response.response.strip().endswith("?"):
                     AGENT_MISSING_FOLLOWUP.labels(model_used="fallback").inc()
-                    logger.info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
+                    state["logger"].info("Response missing follow-up question college_id=%s student_id=%s session_id=%s response=%r", state["college_id"], state["student_id"], state["session_id"], parsed_response.response[-80:])
                 return {"response": parsed_response.response, "updated_session_summary": parsed_response.updated_session_summary, "sources": parsed_response.sources, "error": None, "model_used": "fallback", "input_tokens": total_input, "output_tokens": total_output, "wants_human_handoff": parsed_response.wants_human_handoff or state.get("needs_human_review", False)}
             except Exception as e:
                 call_input_tokens = 0
@@ -226,12 +227,12 @@ class Agent:
                 AGENT_RETRIES.labels(stage="fallback").inc()
                 LLM_INPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(call_input_tokens)
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(call_output_tokens)
-                logger.warning("Fallback model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
+                state["logger"].warning("Fallback model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "fallback_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
         try_fallback = traceable(name="fallback_llm_call", run_type="llm")(try_fallback)    
 
         async def handle_error(state: AgentState) -> dict: # Same reason as flag_low_confidence
-            logger.error("Both primary and fallback exhausted session_id=%s college_id=%s student_id=%s primary_attempts=%s fallback_attempts=%s last_error=%s", state["session_id"], state["college_id"], state["student_id"], state["primary_retry_count"], state["fallback_retry_count"], state.get("error"))
+            state["logger"].error("Both primary and fallback exhausted session_id=%s college_id=%s student_id=%s primary_attempts=%s fallback_attempts=%s last_error=%s", state["session_id"], state["college_id"], state["student_id"], state["primary_retry_count"], state["fallback_retry_count"], state.get("error"))
             return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "sources": [], "model_used": "error_handler", "input_tokens": state.get("input_tokens", 0), "output_tokens": state.get("output_tokens", 0)}
 
 
@@ -292,10 +293,11 @@ class Agent:
     @traceable(name="agent_invoke")
     async def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, request_id: str, student_summary: str | None = None, session_summary: str | None = None) -> dict:
         start = time.perf_counter()
+        request_logger = ContextLoggerAdapter(logger, {"request_id": request_id, "college_id": college_id, "student_id": student_id, "session_id": session_id})
         try:
-            result = await self.graph.ainvoke({"db": db, "college_id": college_id, "student_id": student_id, "session_id": session_id, "request_id": request_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
+            result = await self.graph.ainvoke({"db": db, "logger": request_logger, "college_id": college_id, "student_id": student_id, "session_id": session_id, "request_id": request_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
         except Exception:
-            logger.critical("Graph invocation crashed unexpectedly college_id=%s student_id=%s session_id=%s", college_id, student_id, session_id, exc_info=True)
+            request_logger.critical("Graph invocation crashed unexpectedly college_id=%s student_id=%s session_id=%s", college_id, student_id, session_id, exc_info=True)
             AGENT_REQUESTS.labels(outcome="crash", model_used="none", error_type="unhandled_graph_exception").inc()
             INVOKE_LATENCY.observe(time.perf_counter() - start)
             return {"response": "I'm sorry, I'm having trouble processing your request right now. Please try again in a moment.", "updated_session_summary": "", "model_used": "crash_handler", "error": "unhandled_graph_exception", "sources": [], "wants_human_handoff": False}

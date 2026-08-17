@@ -32,15 +32,6 @@ def get_logger(name: str = "production-api") -> logging.Logger: # Adding permane
     return logger
 
 
-class RequestTimer():
-    def __enter__(self):
-        self.start = time.time()
-        return self
-    
-    def __exit__(self, *args):
-        self.elapsed_ms = (time.time() - self.start) * 1000
-
-
 
 class ContextLoggerAdapter(logging.LoggerAdapter):
     def process(self, msg, kwargs):

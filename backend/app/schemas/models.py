@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypedDict
 
 
 
@@ -21,6 +21,7 @@ class InboundWhatsAppMessage(BaseModel):
 
 class AgentState(TypedDict): # dictionary that gets passed from node to node, and each node can read it and add to it.
     db: object
+    logger: Any
     college_id: int
     student_id: int
     session_id: int
