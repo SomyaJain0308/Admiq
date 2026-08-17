@@ -24,6 +24,7 @@ class AgentState(TypedDict): # dictionary that gets passed from node to node, an
     college_id: int
     student_id: int
     session_id: int
+    request_id: str
     query: str
 
     # resolve_query / re_query

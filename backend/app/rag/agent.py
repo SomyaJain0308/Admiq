@@ -290,10 +290,10 @@ class Agent:
         return graph.compile()
     
     @traceable(name="agent_invoke")
-    async def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, student_summary: str | None = None, session_summary: str | None = None) -> dict:
+    async def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, request_id: str, student_summary: str | None = None, session_summary: str | None = None) -> dict:
         start = time.perf_counter()
         try:
-            result = await self.graph.ainvoke({"db": db, "college_id": college_id, "student_id": student_id, "session_id": session_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
+            result = await self.graph.ainvoke({"db": db, "college_id": college_id, "student_id": student_id, "session_id": session_id, "request_id": request_id, "query": message, "error": None, "primary_retry_count": 0, "fallback_retry_count": 0, "retrieval_retry_count": 0, "model_used": "0", "sources": None, "student_summary": student_summary, "session_summary": session_summary, "input_tokens": 0, "output_tokens": 0, "needs_human_review": False, "wants_human_handoff": False}, config={"tags": ["prodcution_agent"], "metadata": {"college_id": college_id, "student_id": student_id, "session_id": session_id}})
         except Exception:
             logger.critical("Graph invocation crashed unexpectedly college_id=%s student_id=%s session_id=%s", college_id, student_id, session_id, exc_info=True)
             AGENT_REQUESTS.labels(outcome="crash", model_used="none", error_type="unhandled_graph_exception").inc()

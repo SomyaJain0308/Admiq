@@ -1,3 +1,5 @@
+import logging
+import uuid
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
 from fastapi.responses import PlainTextResponse
 from langsmith import traceable
@@ -7,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.monitoring.logging_utils import get_logger, RequestTimer
+from backend.app.monitoring.logging_utils import ContextLoggerAdapter, get_logger, RequestTimer
 from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
@@ -15,7 +17,9 @@ from backend.app.services.whatsapp_service import send_whatsapp_text_message, ve
 from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
 
 
-logger = get_logger()
+request_id = uuid.uuid4().hex[:12]
+
+logger = ContextLoggerAdapter(logging.getLogger(__name__), {"request_id": request_id})
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])
 
@@ -46,6 +50,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
         college_id = await resolve_college_from_phone_number_id(db, event.phone_number_id) # Defined in services/tenant_service.py
         student = await get_or_create_student(db, college_id=college_id, student_phone=event.student_phone, whatsapp_user_id=event.whatsapp_user_id, student_name=event.student_name) # Defined in services/tenant_service.py
         session = await get_or_create_active_session(db=db, college_id=college_id, student_id=student.student_id) # Defined in services/session_service.py
+        logger.extra.update({"college_id": college_id, "student_id": student.student_id, "session_id": session.session_id, "request_id": request_id})
 
         try: # Sometimes whatsapp resends the message if it does this try/except makes sure there is no duping.
             inbound = await save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id) # Defined in services/tenant_service.py
@@ -77,7 +82,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             else:
                 # On success, pass the request to the rag pipeling which will rewrite the query, retrieve documents, determine wheather they r good, if true then send to llm for generation if not rewrite query and the loop continues
                 try:
-                    result = await agent.invoke(db, message, college_id=college_id, student_id=student.student_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary) # defined in rag/agent.py
+                    result = await agent.invoke(db, message, college_id=college_id, student_id=student.student_id, request_id=request_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary) # defined in rag/agent.py
                     response_text = result["response"]
                     model_used = result["model_used"]
                     sources = result.get("sources", [])
