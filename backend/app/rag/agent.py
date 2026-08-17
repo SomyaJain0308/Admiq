@@ -290,7 +290,7 @@ class Agent:
 
         return graph.compile()
     
-    @traceable(name="production_agent_invoke")
+    @traceable(name="agent_invoke")
     async def invoke(self, db, message: str, college_id: int, student_id: int, session_id: int, student_summary: str | None = None, session_summary: str | None = None) -> dict:
         start = time.perf_counter()
         try:
