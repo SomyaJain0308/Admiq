@@ -8,7 +8,7 @@ from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import get_logger, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
-from backend.app.rag.agent import ProductionAgent
+from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
 from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
@@ -30,7 +30,7 @@ async def verify_whatsapp_webhook(hub_verify_token: str | None = Query(None, ali
 @traceable(name="whatsapp_chat_endpoint")
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     security: SecurityPipeline = request.app.state.security
-    agent: ProductionAgent = request.app.state.agent
+    agent: Agent = request.app.state.agent
 
     raw_body = await request.body()
     signature_header = request.headers.get("x-hub-signature-256")

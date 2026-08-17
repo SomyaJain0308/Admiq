@@ -6,7 +6,7 @@ from datetime import datetime
 from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.monitoring.logging_utils import STUDENT_TOKEN_BUDGET_REJECTIONS
-from backend.app.rag.agent import ProductionAgent
+from backend.app.rag.agent import Agent
 from backend.app.rag.security import SecurityPipeline
 from backend.app.services.tenant_service import flag_low_confidence_query, get_or_create_student, save_assistant_message, save_inbound_message
 from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
@@ -20,7 +20,7 @@ router = APIRouter(tags=["Chat (Test)"])
 @router.post("/router/test/chat", response_model=ChatTestResponse)
 async def test_chat(request: Request, payload: ChatTestRequest, db: AsyncSession = Depends(get_db)):
     security: SecurityPipeline = request.app.state.security
-    agent: ProductionAgent = request.app.state.agent
+    agent: Agent = request.app.state.agent
     student = await get_or_create_student(db, college_id=payload.college_id, student_phone=payload.student_phone, whatsapp_user_id=payload.student_phone, student_name=payload.student_name)
     session = await get_or_create_active_session(db=db, college_id=payload.college_id, student_id=student.student_id)
 
