@@ -8,13 +8,13 @@ from langsmith import traceable
 from backend.app.config import get_settings
 from backend.app.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
 from backend.app.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
-from backend.app.monitoring.rag_monitoring import AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, RETRIEVAL_ROUNDS_TO_RESOLVE, STAGE_LATENCY, RETRIEVAL_LATENCY, INVOKE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, SOURCES_PER_RESPONSE, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED
+from backend.app.monitoring.agent_metrics import NEEDS_RETRIEVAL_COUNT, RELEVANT_CHUNKS_COUNT, RETRIEVED_CHUNKS_COUNT, AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, STAGE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED, INVOKE_LATENCY
 from backend.app.services.agent_helpers import extract_token_usage, classify_error
 
 logger = logging.getLogger(__name__)
 
 
-class ProductionAgent:
+class Agent:
     def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
             settings = get_settings() # Defined in rag/config (values set in .env)
@@ -35,7 +35,7 @@ class ProductionAgent:
 
             self.graph = self._build_graph()
         except Exception:
-            logger.critical("ProductionAgent failed to initialize", exc_info=True)
+            logger.critical("Agent failed to initialize", exc_info=True)
             raise # Fail fast at startup rather than with a half-built agent.
 
 
@@ -50,6 +50,7 @@ class ProductionAgent:
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
 
             try:
+                AGENT_REQUESTS.inc()
                 result = await self.query_llm.ainvoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message)) # Prompt present in rag/retrieval.py
 
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
@@ -57,18 +58,19 @@ class ProductionAgent:
                 search_queries = result["parsed"].search_queries or [state["query"]]
 
                 if needs_retrieval:
+                    NEEDS_RETRIEVAL_COUNT.inc()
                     QUERY_DECOMPOSITION_SIZE.observe(len(search_queries))
             except Exception as e:
                 logger.warning("resolve_query failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 search_queries, input_tokens, output_tokens = [state["query"]], 0, 0
                 needs_retrieval = True
-            STAGE_LATENCY.labels(stage="resolve_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(output_tokens)
 
             result_dict = {"pending_queries": search_queries if needs_retrieval else [], "needs_retrieval": needs_retrieval, "resolved_chunks": [], "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
             if not needs_retrieval:
                 result_dict["relevant_documents"] = "No document lookup needed - this is a greeting, thanks, or small talk, not an admissions question."
+            STAGE_LATENCY.labels(stage="resolve_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             return result_dict
 
 
@@ -91,10 +93,12 @@ class ProductionAgent:
                 still_pending = []
                 for sub_query in pending:
                     scored = await get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
+                    RETRIEVED_CHUNKS_COUNT.observe(len(scored))
                     for chunk_id, _, dist in scored:
                         RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <= self.retrieval_distance_threshold).lower()).observe(dist)
                     passing = [(chunk_id, block, distance) for chunk_id, block, distance in scored if distance <= self.retrieval_distance_threshold and chunk_id not in already_seen_ids]
                     if passing:
+                        RELEVANT_CHUNKS_COUNT.observe(len(passing))
                         for chunk_id, _, dist in passing:
                             already_seen_ids.add(chunk_id)
                         newly_resolved.extend(passing)
@@ -111,7 +115,7 @@ class ProductionAgent:
                 newly_resolved, still_pending = state.get("resolved_chunks", []), state.get("pending_queries", [])
                 relevant_documents, best_distance = "No relevant documents were found for this query.", 1.0
             finally:
-                RETRIEVAL_LATENCY.observe(time.perf_counter() - start)
+                STAGE_LATENCY.labels(stage="retrieve", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             return {"resolved_chunks": newly_resolved, "pending_queries": still_pending, "relevant_documents": relevant_documents, "best_distance": best_distance}
 
 
@@ -128,10 +132,10 @@ class ProductionAgent:
             except Exception as e:
                 logger.warning("re-query failed college_id=%s studnet_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 new_queries, input_tokens, output_tokens = failed, 0, 0
-            STAGE_LATENCY.labels(stage="re_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             LLM_INPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(output_tokens)
             logger.info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], failed, new_queries)
+            STAGE_LATENCY.labels(stage="re_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             return {"pending_queries": new_queries, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
 
 
@@ -238,7 +242,6 @@ class ProductionAgent:
 
         def route_after_retrieve(state: AgentState) -> str:
             if not state["pending_queries"]:
-                RETRIEVAL_ROUNDS_TO_RESOLVE.observe(state["retrieval_retry_count"])
                 return "generate"
             elif state["retrieval_retry_count"] < self.max_retrieval_retries:
                 return "re_query"
@@ -303,7 +306,6 @@ class ProductionAgent:
         error = result.get("error")
         if error is None and model_used != "error_handler":
             outcome = "success" 
-            SOURCES_PER_RESPONSE.labels(model_used=model_used).observe(len(result.get("sources") or []))
         else:
             outcome = "error"
         AGENT_REQUESTS.labels(outcome=outcome, model_used=model_used, error_type=(classify_error(Exception(error)) if error else "")).inc()

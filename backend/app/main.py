@@ -5,8 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.monitoring.rag_monitoring import get_logger
-from backend.app.rag.agent import ProductionAgent
+from backend.app.monitoring.logging_utils import get_logger
+from backend.app.rag.agent import Agent
 from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.whatsapp_chat import router as whatsapp_router
 from backend.app.api.v1.routers.metrics import router as metrics_router
@@ -27,7 +27,7 @@ logger = get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI): # Initialize all components on startup
     app.state.security = SecurityPipeline()
-    app.state.agent = ProductionAgent()
+    app.state.agent = Agent()
 
     settings = get_settings()
 

@@ -48,7 +48,6 @@ STAGE_LATENCY = Histogram("agent_stage_latency_seconds", "Latency per llm call, 
 
 RETRIEVAL_LATENCY = Histogram("agent_retrieval_latency", "Latency of the retrieval step")
 
-INVOKE_LATENCY = Histogram("agent_invoke_latency_seconds", "End-to-end latency of a full agent invocation")
 
 SOURCES_PER_RESPONSE = Histogram("agent_sources_per_response", "Number of sources cited per successful response (retrieval quality signal)", ["model_used"])
 
@@ -72,7 +71,7 @@ class JSONFormatter(logging.Formatter):
         if extra_data:
             log_obj.update(extra_data)
         return json.dumps(log_obj)
-    
+
 
 def get_logger(name: str = "production-api") -> logging.Logger: # Adding permanent comments since I keep forgetting this block of very cryptic code
     logger = logging.getLogger(name)             # Check if we alr have a logger (postoffice)

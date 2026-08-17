@@ -2,7 +2,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 from prometheus_client import generate_latest, multiprocess, CollectorRegistry
 
-from backend.app.monitoring.rag_monitoring import METRICS_CONTENT_TYPE
+from backend.app.monitoring.logging_utils import METRICS_CONTENT_TYPE
 
 
 router = APIRouter(tags=["Metrics"])

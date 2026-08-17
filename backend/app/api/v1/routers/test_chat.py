@@ -5,7 +5,7 @@ from datetime import datetime
 
 from backend.app.database import get_db
 from backend.app.config import get_settings
-from backend.app.monitoring.rag_monitoring import STUDENT_TOKEN_BUDGET_REJECTIONS
+from backend.app.monitoring.logging_utils import STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.app.rag.agent import ProductionAgent
 from backend.app.rag.security import SecurityPipeline
 from backend.app.services.tenant_service import flag_low_confidence_query, get_or_create_student, save_assistant_message, save_inbound_message

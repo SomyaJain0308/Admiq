@@ -11,7 +11,7 @@ from backend.app.rag import document_processor
 from backend.app.services.storage_service import download_file_bytes
 from backend.app.services.document_service import update_document_status
 from backend.app.services.agent_helpers import classify_error
-from backend.app.monitoring.rag_monitoring import DOCUMENT_INGESTION_LATENCY, DOCUMENT_INGESTION_STAGE_LATENCY, DOCUMENT_EXTRACTION_METHOD, DOCUMENT_INGESTION_OUTCOME, DOCUMENT_QUALITY_SCORE, DOCUMENT_CHUNKS_CREATED, DOCUMENTS_PAGES_PROCESSED, CELERY_TASK_RETRIES
+from backend.app.monitoring.logging_utils import DOCUMENT_INGESTION_LATENCY, DOCUMENT_INGESTION_STAGE_LATENCY, DOCUMENT_EXTRACTION_METHOD, DOCUMENT_INGESTION_OUTCOME, DOCUMENT_QUALITY_SCORE, DOCUMENT_CHUNKS_CREATED, DOCUMENTS_PAGES_PROCESSED, CELERY_TASK_RETRIES
 
 
 
@@ -86,3 +86,4 @@ def process_document_task(self, document_id: int, college_id: int):
             os.unlink(tmp_path)
         db.close()
 
+        

@@ -5,7 +5,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from datetime import datetime
 
 
-from backend.app.monitoring.rag_monitoring import get_logger
+from backend.app.monitoring.logging_utils import get_logger
 from backend.app.config import get_settings
 from backend.app.services.whatsapp_service import send_whatsapp_text_message
 from backend.app.database import get_db
