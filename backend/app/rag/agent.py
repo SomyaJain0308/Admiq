@@ -50,7 +50,6 @@ class Agent:
                 previous_assistant_message = "This is the start of the conversation, no previous messages yet."
 
             try:
-                AGENT_REQUESTS.inc()
                 result = await self.query_llm.ainvoke(RESOLVE_QUERY_PROMPT.format(query=state["query"], previous_assistant_message=previous_assistant_message)) # Prompt present in rag/retrieval.py
 
                 input_tokens, output_tokens = extract_token_usage(result["raw"])
