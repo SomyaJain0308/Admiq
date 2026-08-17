@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class Agent:
-    def __init__(self, state: AgentState): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
+    def __init__(self): # Loads settings (get_settings()), builds the graph, and sets max_retries / retrieval_k, start two llm instances(with structured json output)
         try:
             settings = get_settings() # Defined in rag/config (values set in .env)
 
@@ -36,7 +36,7 @@ class Agent:
 
             self.graph = self._build_graph()
         except Exception:
-            state["logger"].critical("Agent failed to initialize", exc_info=True)
+            logger.critical("Agent failed to initialize", exc_info=True)
             raise # Fail fast at startup rather than with a half-built agent.
 
 
