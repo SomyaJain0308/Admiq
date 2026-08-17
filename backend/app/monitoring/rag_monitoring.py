@@ -1,7 +1,7 @@
 import logging, json, time
 from datetime import datetime, timezone
 
-from prometheus_client import Counter, Histogram, Gauge, CONTENT_TYPE_LATEST
+from prometheus_client import Counter, Histogram, CONTENT_TYPE_LATEST
 
 
 
@@ -68,8 +68,9 @@ class JSONFormatter(logging.Formatter):
 
     def format(self, record):
         log_obj = {"timestamp": datetime.now(timezone.utc).isoformat(), "level": record.levelname, "message": record.getMessage(), "module": record.module, "funtion": record.funcName}
-        if hasattr(record, "extra_data"):
-            log_obj.update(record.extra_data)
+        extra_data = getattr(record, "extra_data", None)
+        if extra_data:
+            log_obj.update(extra_data)
         return json.dumps(log_obj)
     
 
@@ -83,56 +84,7 @@ def get_logger(name: str = "production-api") -> logging.Logger: # Adding permane
     return logger
 
 
-
-class MetricsCollector: # Collects and aggregates application metrics
-    def __init__(self):
-        self._requests_total = 0
-        self._errors_total = 0
-        self._latency_sum = 0.0
-        self._latency_count = 0
-        self._tokens_input = 0
-        self._tokens_output = 0
-
-    def record_request(self, latency_ms: float, input_tokens: int = 0, output_tokens: int = 0, error: bool = False, model_used: str = "unknown"):
-        self._requests_total += 1
-        self._latency_sum += latency_ms
-        self._latency_count += 1 
-        self._tokens_input += input_tokens
-        self._tokens_output += output_tokens
-        if error:
-            self._errors_total += 1
-            outcome = "error"
-        else:
-            outcome = "success"
-
-        REQUESTS_TOTAL.labels(model_used=model_used, outcome=outcome).inc()
-        REQUEST_LATENCY_MS.labels(model_used=model_used).observe(latency_ms)
-        if input_tokens:
-            INPUT_TOKENS_TOTAL.labels(model_used=model_used).inc(input_tokens)
-        if output_tokens:
-            OUTPUT_TOKENS_TOTAL.labels(model_used=model_used).inc(output_tokens)
-    
-
-    @property
-    def summary(self) -> dict:
-        if self._requests_total > 0:
-            avg_latency = self._latency_sum / self._latency_count
-            error_rate = self._errors_total / self._requests_total
-        else:
-            avg_latency = 0.0
-            error_rate = 0.0
-        
-        return {
-            "total_requests": self._requests_total,
-            "total_errors": self._errors_total,
-            "error_rate": f"{error_rate:.2%}",
-            "avg_latency_ms": round(avg_latency, 2),
-            "total_input_tokens": self._tokens_input,
-            "total_output_tokens": self._tokens_output,
-        }
-    
-
-class RequestTimer: # Context Manager for timing requests
+class RequestTimer():
     def __enter__(self):
         self.start = time.time()
         return self

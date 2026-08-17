@@ -7,7 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from backend.app.database import get_db
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.monitoring.rag_monitoring import get_logger, MetricsCollector, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
+from backend.app.monitoring.rag_monitoring import get_logger, RequestTimer, STUDENT_TOKEN_BUDGET_REJECTIONS
 from backend.app.rag.agent import ProductionAgent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
@@ -31,7 +31,6 @@ async def verify_whatsapp_webhook(hub_verify_token: str | None = Query(None, ali
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     security: SecurityPipeline = request.app.state.security
     agent: ProductionAgent = request.app.state.agent
-    metrics: MetricsCollector = request.app.state.metrics
 
     raw_body = await request.body()
     signature_header = request.headers.get("x-hub-signature-256")
@@ -63,7 +62,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
             if not is_allowed:
                 logger.warning("Incoming WhatsApp message blocked by security", extra={"extra_data": {"reason": notes, "college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id,}})
-                metrics.record_request(latency_ms=timer.elapsed_ms,error=True)
                 response_text = "Sorry, I can't help with that message. It is blocked by our security filter. Maybe try and rephrase it?"
                 model_used = "security_block"
                 sources = []
@@ -71,7 +69,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             elif is_session_budget_exceeded(session, get_settings().session_token_budget): # Rate Limiting (Based on total tokens consumed in the session)
                 logger.warning("Session token budget exceeded", extra={"extra_data": {"session_id": session.session_id, "student_id": student.student_id, "college_id": college_id}})
                 STUDENT_TOKEN_BUDGET_REJECTIONS.inc() # Defined in rag/monitoring.py again basic observability.
-                metrics.record_request(latency_ms=timer.elapsed_ms, error=True, model_used="budget_exceeded") # Defined in rag/monitoring.py
                 response_text = "You've reached the message limit for this converstaion. Please wait for 30 minutes and try again. or contact the college directly."
                 model_used = "budget_exceeded"
                 sources = []
@@ -87,7 +84,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                     await record_session_tokens(db, session, result.get("input_tokens", 0), result.get("output_tokens", 0)) # Defined in services/session_services.py
                 except Exception as e:
                     logger.error(f"Agent invocation failed {e}", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "error": str(e)}})
-                    metrics.record_request(latency_ms=timer.elapsed_ms, error=True) # Defined in rag/monitoring.py
                     response_text = "Sorry, I am having trouble answering right now. Please try again after 2 minutes."
                     model_used = "error"
                     sources = []
@@ -98,7 +94,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             if model_used not in ("security_block", "error", "budget_exceeded"):
                 input_tokens = result.get("input_tokens", 0)
                 output_tokens = result.get("output_tokens", 0)
-                metrics.record_request(latency_ms=timer.elapsed_ms, input_tokens=input_tokens, output_tokens=output_tokens) # Defined in rag/monitoring.py
                 if result.get("wants_human_handoff"):
                     await flag_low_confidence_query(db, college_id=college_id, student_id=student.student_id, question_message_id=inbound.message_id, answer_message_id=assistant_msg.message_id, similarity_score=result.get("best_distance")) # Defined in rag/agent.py
             if new_session_summary:

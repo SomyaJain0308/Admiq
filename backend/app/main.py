@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
-from backend.app.monitoring.rag_monitoring import get_logger, MetricsCollector
+from backend.app.monitoring.rag_monitoring import get_logger
 from backend.app.rag.agent import ProductionAgent
 from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.whatsapp_chat import router as whatsapp_router
@@ -27,7 +27,6 @@ logger = get_logger()
 @asynccontextmanager
 async def lifespan(app: FastAPI): # Initialize all components on startup
     app.state.security = SecurityPipeline()
-    app.state.metrics = MetricsCollector()
     app.state.agent = ProductionAgent()
 
     settings = get_settings()
@@ -37,7 +36,7 @@ async def lifespan(app: FastAPI): # Initialize all components on startup
 
     yield
 
-    logger.info("Shutting down...", extra={"extra_data": app.state.metrics.summary})
+    logger.info("Shutting down...")
 
 
 app = FastAPI(title="Admiq", description="A college admission chatbot.", version="1.0.0", lifespan=lifespan)
