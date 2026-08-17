@@ -11,8 +11,8 @@ from backend.app.rag import document_processor
 from backend.app.services.storage_service import download_file_bytes
 from backend.app.services.document_service import update_document_status
 from backend.app.services.agent_helpers import classify_error
-from backend.app.monitoring.logging_utils import DOCUMENT_INGESTION_LATENCY, DOCUMENT_INGESTION_STAGE_LATENCY, DOCUMENT_EXTRACTION_METHOD, DOCUMENT_INGESTION_OUTCOME, DOCUMENT_QUALITY_SCORE, DOCUMENT_CHUNKS_CREATED, DOCUMENTS_PAGES_PROCESSED, CELERY_TASK_RETRIES
-
+from backend.app.monitoring.document_metrics import DOCUMENT_INGESTION_LATENCY, DOCUMENT_INGESTION_STAGE_LATENCY, DOCUMENT_EXTRACTION_METHOD, DOCUMENT_INGESTION_OUTCOME, DOCUMENT_QUALITY_SCORE, DOCUMENT_CHUNKS_CREATED, DOCUMENTS_PAGES_PROCESSED
+from backend.app.monitoring.celery_metrics import CELERY_TASK_RETRIES
 
 
 logger = logging.getLogger(__name__)
