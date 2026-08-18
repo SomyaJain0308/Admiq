@@ -6,6 +6,7 @@ from datetime import datetime
 
 
 from backend.app.monitoring.logging_utils import get_logger
+from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_OPEN, LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS, LOW_CONFIDENCE_QUERIES_RESOLVED
 from backend.app.config import get_settings
 from backend.app.services.whatsapp_service import send_whatsapp_text_message
 from backend.app.database import get_db
@@ -26,6 +27,7 @@ router = APIRouter(tags=["low_confidence"])
 async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db)):
     low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == False))
     low_confidence_queries = low_confidence_result.scalars().all()
+    LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
     if not low_confidence_queries:
         raise HTTPException(status_code=404, detail="No queries need human handoff at this time.")
 
@@ -109,6 +111,8 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, staff_id
     query.resolved = True
     query.resolved_by = staff_id
     query.resolved_at = datetime.utcnow()
+    LOW_CONFIDENCE_QUERIES_RESOLVED.inc()
+    LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS.observe((query.resolved_at - query.flagged_at).total_seconds())
     await db.commit()
 
     return {"status": "resolved", "reconstructed_question": reconstructed.question, "expires_at": expires_at}

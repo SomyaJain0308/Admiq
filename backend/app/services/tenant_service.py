@@ -2,6 +2,8 @@ from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.models.Student import Student
 from backend.app.models.Message import Message
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_FLAGGED
+
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -112,4 +114,5 @@ async def flag_low_confidence_query(db, college_id, student_id, question_message
     entry = LowConfidenceQuery(college_id=college_id, student_id=student_id, question_message_id=question_message_id, answer_message_id=answer_message_id, similarity_score=similarity_score)
     db.add(entry)
     await db.commit()
+    LOW_CONFIDENCE_QUERIES_FLAGGED.inc()
     return entry

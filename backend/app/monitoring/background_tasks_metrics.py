@@ -2,6 +2,8 @@ from prometheus_client import Counter, Histogram
 
 
 
+CELERY_TASK_RETRIES = Counter("celery_task_retries_total", "Total celery task retries by task name and error type", ["task_name", "error_type"])
+
 
 BACKGROUND_TASK_ITEM_OUTCOMES = Counter("background_task_item_outcomes_total", "Per-item outcome (one increment per session/student processed within a batch)", ["task_name", "outcome"])
 
