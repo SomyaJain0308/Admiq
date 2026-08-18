@@ -27,7 +27,6 @@ scrape_configs:
       - targets: ["redis-exporter:9121"]
 
   - job_name: "backend"
-    scrape_interval: 15s
     metrics_path: "/router/metrics"
     static_configs:
       - targets: ["backend:8000"]
