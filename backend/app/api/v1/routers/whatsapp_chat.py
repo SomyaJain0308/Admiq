@@ -11,7 +11,7 @@ from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import ContextLoggerAdapter
 from backend.app.monitoring.timing import RequestTimer
-from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS
+from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
@@ -56,6 +56,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             inbound = await save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id) # Defined in services/tenant_service.py
         except IntegrityError: # Error db sends when unique for something is enabled and it gets violated
             await db.rollback()
+            DUPLICATE_WEBHOOK_DELIVERY.inc()
             logger.info("Duplicate whatsapp redelivery, skipping", extra={"extra_data": {"whatsapp_message_id": event.whatsapp_message_id}})
             continue
         security_notes = []
@@ -95,6 +96,8 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                     sources = []
             # Now check the output of the llm make sure it's safe to send to the user
             response_text, output_warnings = security.check_output(response_text) # Defined in rag/security.py
+            if output_warnings:
+                OUTPUT_SECURITY_WARNINGS.inc(len(output_warnings))
             security_notes.extend(output_warnings)
             assistant_msg = await save_assistant_message(db=db, college_id=college_id, student_id=student.student_id, content=response_text, sources=sources, session_id=session.session_id) # Defined in services/tenant_service.py
             if model_used not in ("security_block", "error", "budget_exceeded"):
