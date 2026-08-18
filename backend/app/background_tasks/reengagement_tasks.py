@@ -98,10 +98,10 @@ async def _check_and_send_reenagegement_nudges_async():
                                 REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="send_failed").inc()
                         except Exception as e:
                             logger.error(f"Error processing reengagement candidate session {session.session_id}: {e}", exc_info=True)
+                            REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="error").inc()
                             continue
                     await db.commit()
-                    logger.info(f"Sent {sent_count}/{len(candidate_sessions)} reengagement nudges.")
-                    REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="error").inc()
+                    logger.info(f"Sent {sent_count}/{len(candidate_sessions)} reengagement nudges.")        
             finally:
                 await db.close()
     finally:

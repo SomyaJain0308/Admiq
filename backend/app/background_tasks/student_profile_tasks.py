@@ -1,6 +1,6 @@
 import logging
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from backend.app.monitoring.background_tasks_metrics import BACKGROUND_TASK_BATCH_DURATION, BACKGROUND_TASK_BATCH_SIZE, BACKGROUND_TASK_ITEM_OUTCOMES, LEAD_SCORE_DISTRIBUTION
 from sqlalchemy import select, func
@@ -65,13 +65,13 @@ async def _process_closed_sessions_async():
                             last_activity = session.last_message_at or session.started_at
                             days_since_last_activity = None
                             if last_activity is not None:
-                                now = datetime.now()
-                                if last_activity.tzinfo is None:
-                                    last_activity = last_activity.replace(tzinfo=None)
+                                now = datetime.now(timezone.utc).replace(tzinfo=None)
+                                if last_activity.tzinfo is not None:
+                                    last_activity = last_activity.astimezone(timezone.utc).replace(tzinfo=None)
                                 days_since_last_activity = (now - last_activity).total_seconds() / 86400
                             student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions, concerns=student.profile_signals.get("concerns"), competing_colleges=student.profile_signals.get("competing_colleges"), dropoff_reason=student.profile_signals.get("dropoff_reason"))
                             LEAD_SCORE_DISTRIBUTION.labels(source="session_close").observe(student.lead_score)
-                            student.lead_score_updated_at = datetime.now()
+                            student.lead_score_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                             session.profile_processed = True
                             processed_count += 1
                             BACKGROUND_TASK_ITEM_OUTCOMES.labels(task_name="update_student_profile", outcome="student_profle_updated").inc()

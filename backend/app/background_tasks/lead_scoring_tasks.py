@@ -41,13 +41,13 @@ async def _recompute_lead_scores_async():
                                 total_sessions, last_activity = stats_result.one()
                                 days_since_last_activity = None
                                 if last_activity is not None:
-                                    now = datetime.now(timezone.utc)
-                                    if last_activity.tzinfo is None:
-                                        last_activity = last_activity.replace(tzinfo=timezone.utc)
+                                    now = datetime.now(timezone.utc).replace(tzinfo=None)
+                                    if last_activity.tzinfo is not None:
+                                        last_activity = last_activity.astimezone(timezone.utc).replace(tzinfo=None)
                                     days_since_last_activity = (now - last_activity).total_seconds() / 86400
                                 profile_signals = student.profile_signals or {}
                                 student.lead_score = compute_lead_score(interest_signal_history=student.interest_signal_history, days_since_last_activity=days_since_last_activity, total_sessions=total_sessions or 0, concerns=profile_signals.get("concerns"), competing_colleges=profile_signals.get("competing_colleges"), dropoff_reason=profile_signals.get("dropoff_reason"))
-                                student.lead_score_updated_at = datetime.now(timezone.utc)
+                                student.lead_score_updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
                                 total_updated += 1
                                 LEAD_SCORE_DISTRIBUTION.labels(source="nightly_recompute").observe(student.lead_score)
                                 BACKGROUND_TASK_ITEM_OUTCOMES.labels(task_name="lead_scoring", outcome="lead_score_updated").inc()
