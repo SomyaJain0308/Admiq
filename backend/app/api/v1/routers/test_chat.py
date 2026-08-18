@@ -21,6 +21,7 @@ router = APIRouter(tags=["Chat (Test)"])
 async def test_chat(request: Request, payload: ChatTestRequest, db: AsyncSession = Depends(get_db)):
     security: SecurityPipeline = request.app.state.security
     agent: Agent = request.app.state.agent
+    request_id = uuid.uuid4().hex[:12]
     student = await get_or_create_student(db, college_id=payload.college_id, student_phone=payload.student_phone, whatsapp_user_id=payload.student_phone, student_name=payload.student_name)
     session = await get_or_create_active_session(db=db, college_id=payload.college_id, student_id=student.student_id)
 
@@ -34,7 +35,7 @@ async def test_chat(request: Request, payload: ChatTestRequest, db: AsyncSession
         STUDENT_TOKEN_BUDGET_REJECTIONS.inc()
         response_text, model_used, sources, wants_human_handoff, best_distance = "You've reached the message limit for this conversation. Try again after 30 minutes.", "budget_exceeded", [], False, None
     else:
-        result = await agent.invoke(db, message, college_id=payload.college_id, student_id=student.student_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary)
+        result = await agent.invoke(db, message, college_id=payload.college_id, student_id=student.student_id, request_id=request_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary)
         response_text, model_used, sources, wants_human_handoff, best_distance, new_session_summary = result["response"], result["model_used"], result.get("sources", []), result.get("wants_human_handoff", False), result.get("best_distance"), result.get("updated_session_summary")
         await record_session_tokens(db, session, result.get("input_tokens", 0), result.get("output_tokens", 0))
     response_text, _ = security.check_output(response_text)
