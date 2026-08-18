@@ -23,6 +23,7 @@ services:
     container_name: admiq-prometheus
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./secrets:/etc/prometheus/secrets:ro
     ports:
       - "9090:9090"
     networks:

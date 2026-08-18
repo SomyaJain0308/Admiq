@@ -26,6 +26,15 @@ scrape_configs:
     static_configs:
       - targets: ["redis-exporter:9121"]
 
+  - job_name: "supabase"
+    scheme: https
+    metrics_path: "/customer/v1/privileged/metrics"
+    static_configs:
+      - targets: ["https://bgdhdkdktngshwnesgkf.supabase.co"]
+    basic_auth:
+      username: "service_role"
+      password_file: "/etc/prometheus/secrets/supabase_metrics_password.txt"
+
   - job_name: "backend"
     metrics_path: "/router/metrics"
     static_configs:

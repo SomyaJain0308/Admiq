@@ -1,6 +1,7 @@
 import httpx, hashlib, hmac
 from datetime import datetime, timezone
 
+from backend.app.monitoring.api_metrics import WHATSAPP_SEND_LATENCY_SECONDS, WHATSPAP_SEND_OUTCOMES
 from backend.app.schemas.models import InboundWhatsAppMessage
 
 
@@ -19,11 +20,23 @@ async def send_whatsapp_text_message(phone_number_id: str, to: str, message: str
     }
 
     headers = {
-    "Authorization": f"Bearer {access_token}",
-    "Content-Type": "application/json"
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
     }
-    async with httpx.AsyncClient(timeout=10) as client:
-        response = await client.post(url, json=payload, headers=headers)
+    try:
+        with WHATSAPP_SEND_LATENCY_SECONDS.time():
+            async with httpx.AsyncClient(timeout=10) as client:
+                response = await client.post(url, json=payload, headers=headers)
+    except httpx.RequestError as e:
+        WHATSPAP_SEND_OUTCOMES.labels(outcome="network_error").inc()
+        return {"ok": False, "status_code": None, "data": None, "error": str(e)}
+    if response.status_code == 429:
+        outcome = "rate_limited"
+    elif response.is_success:
+        outcome = "success"
+    elif 400 <= response.status_code < 500:
+        outcome = "server_error"
+    WHATSPAP_SEND_OUTCOMES.labels(outcome=outcome).inc()
 
     return {
         "ok": response.is_success,
