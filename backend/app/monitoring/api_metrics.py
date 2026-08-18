@@ -6,7 +6,7 @@ REQUESTS_TOTAL = Counter("api_requests_total", "Total Chat Requests Handled", ["
 
 REQUEST_LATENCY_MS = Histogram("api_request_latency_ms", "End-to-End Request Latency in ms", ["model_used"])
 
-WHATSPAP_SEND_OUTCOMES = Counter("whatsapp_send_outcomes_total", "Outbound Whatsapp mesage send attempts by outcoms", ["outcome"])
+WHATSAPP_SEND_OUTCOMES = Counter("whatsapp_send_outcomes_total", "Outbound Whatsapp mesage send attempts by outcoms", ["outcome"])
 
 WHATSAPP_SEND_LATENCY_SECONDS = Histogram("whatsapp_send_latency_seconds", "Latency of the outbound WhatsApp API call itself, isolated from agent/DB latency")
 
