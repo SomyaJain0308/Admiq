@@ -36,3 +36,6 @@ frontend/
 .DS_Store
 .vscode/
 .idea/
+
+# --- Dashboards (grafana) ---
+backend/app/monitoring/grafana_dashboards

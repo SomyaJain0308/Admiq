@@ -34,10 +34,15 @@ services:
     container_name: admiq-grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
     ports:
       - "3000:3000"
     networks:
       - monitoring
+    depends_on:
+      - prometheus
 
   node-exporter:
     image: prom/node-exporter:latest
@@ -108,6 +113,7 @@ services:
 
 volumes:
   prometheus_multiproc:
+  grafana_data:
 
 networks:
   monitoring:

@@ -30,9 +30,9 @@ scrape_configs:
     scheme: https
     metrics_path: "/customer/v1/privileged/metrics"
     static_configs:
-      - targets: ["https://bgdhdkdktngshwnesgkf.supabase.co"]
+      - targets: ["bgdhdkdktngshwnesgkf.supabase.co"]
     basic_auth:
-      username: "service_role"
+      username: "username"
       password_file: "/etc/prometheus/secrets/supabase_metrics_password.txt"
 
   - job_name: "backend"

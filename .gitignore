@@ -74,3 +74,4 @@ Thumbs.db
 # ============================
 *.log
 logs/
+backend/app/monitoring/grafana_dashboards
