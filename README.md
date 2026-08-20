@@ -87,23 +87,10 @@ docker-compose up
 
 Spins up the FastAPI app, a Celery worker, Celery beat (for the scheduled document-processing / lead-scoring jobs), and Prometheus. Needs a `.env` in `backend/` — see `.env.example` for the required keys (Gemini API key, Supabase/Postgres URL, Redis URL, WhatsApp webhook secrets, LangSmith key).
 
-## Roadmap
-
-Rough order, subject to change:
-
-1. Follow up inside pre determined window.
-3. Observability — Grafana dashboards on top of the existing Prometheus metrics
-4. Auth — JWT settings already exist in config but nothing's wired up yet; staff/admin endpoints are currently open
-5. Frontend — staff dashboard for viewing leads, scores, and the low-confidence review queue
-6. Payments - Razorpay
-
 ## Known rough edges
 
 Being upfront about this since it's still an active build, not a finished product:
 
-- No auth on staff-facing endpoints yet (see Roadmap #6)
 - No formal migration tool — `schema.sql` is the source of truth, but existing databases need manual `ALTER TABLE`s when it changes
 - CORS is wide open (`allow_origins=["*"]`) — fine for local dev, not for prod
 - No automated test suite yet
-
-
