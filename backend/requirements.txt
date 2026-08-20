@@ -1,4 +1,5 @@
 fastapi[standard]==0.139.0
+fastapi-limiter==0.1.6
 uvicorn[standard]==0.49.0
 opencv-python-headless==5.0.0.93
 sqlalchemy==2.0.51
@@ -10,8 +11,8 @@ pgvector==0.3.6
 pydantic==2.13.4
 pydantic-settings==2.14.2
 python-dotenv==1.2.2
-pwdlib[argon2]==0.2.3
-PyJWT==2.10.1
+pwdlib[argon2]==0.3.1
+PyJWT==2.13.0
 celery==5.6.3
 redis==8.0.1
 google-genai==2.10.0

@@ -2,6 +2,9 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_limiter import FastAPILimiter
+import redis.asyncio as redis
+
 
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
@@ -31,11 +34,15 @@ async def lifespan(app: FastAPI): # Initialize all components on startup
 
     settings = get_settings()
 
+    redis_connection = redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+    await FastAPILimiter.init(redis_connection)
+
     logger.info('Starting Production API...', extra={'extra_data': {"environment": settings.app_env, "primary_model": settings.primary_model, "tracing_enabled": settings.langchain_tracing_v2}})
     logger.info("All components initialized. Ready to serve requests.")
 
     yield
 
+    await FastAPILimiter.close()
     logger.info("Shutting down...")
 
 

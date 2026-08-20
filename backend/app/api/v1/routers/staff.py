@@ -8,8 +8,8 @@ from sqlalchemy.orm import selectinload
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
-from backend.app.schemas.staff import StaffCreate, StaffResponse, StaffUpdate, StaffPublicResponse, StaffLogin, Token
-from backend.app.services.auth_services import create_access_token, verify_password, hash_password, verify_access_token, oauth2_scheme
+from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, StaffPublicResponse, StaffLogin, Token
+from backend.app.services.auth_services import create_access_token, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
 from backend.app.config import get_settings
 
 
@@ -21,20 +21,9 @@ router = APIRouter(tags=["staff"])
 
 
 @router.get("/me", response_model=StaffResponse)
-async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
-    staff_id = verify_access_token(token)
-    if staff_id is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    try:
-        staff_id_int = int(staff_id) # Defense against malformed jwt
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authentication": "Bearer"})
-    staff_result = await db.execute(select(CollegeStaff).where(StaffCollege.staff_id == staff_id_int).limit(1))
-    staff = staff_result.scalars().first()
-    if not staff:
-        raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
-    return staff
-
+async def read_current_staff(current_staff: CollegeStaff = Depends(get_current_staff)):
+    return current_staff
+    
 
 @router.get("/router/staff/{college_id}", response_model=list[StaffResponse])
 async def get_staff(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
@@ -91,17 +80,6 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
     return new_staff
 
 
-@router.post("/token", response_model=Token)
-async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
-    staff = staff_result.scalars().first()
-    if not staff or not verify_password(form_data.password, staff.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
-    acces_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
-    access_token = create_access_token(data={"sub": str(staff.staff_id)}, expires_delta=acces_token_expires)
-    return Token(access_token=access_token, token_type="bearer")
-
-
 @router.patch("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
 async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
@@ -140,3 +118,32 @@ async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depend
 
     await db.delete(existing_staff.staff_member)
     await db.commit()
+
+
+@router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
+    staff = staff_result.scalars().first()
+    if not staff or not verify_password(form_data.password, staff.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
+    access_token = create_access_token(data={"sub": str(staff.staff_id)})
+    refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
+    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
+
+
+@router.post("/refresh", response_model=Token)
+async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    staff_id = verify_refresh_token(payload.refresh_token)
+    if staff_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        staff_id_int = int(staff_id) # Protection against malformed staff_id
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token", headers={"WWW-Authenticate": "Bearer"})
+    staff_result = await db.execute(select(CollegeStaff).where(CollegeStaff.staff_id == staff_id_int).limit(1))
+    staff = staff_result.scalars().first()
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
+    new_access_token = create_access_token(data={"sub": str(staff.staff_id)})
+    new_refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
+    return Token(access_token=new_access_token, refresh_token=new_refresh_token, token_type="Bearer")
