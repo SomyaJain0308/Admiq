@@ -13,28 +13,29 @@ from backend.app.config import get_settings
 
 settings = get_settings()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/users/token")
+# Extract the JWT out of the Authorization header
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token") # Creates a reusable dependency ( FastAPI Uses dependencies like: "something: Type = Depends(some_function)" so for e.g. "db: Session = Depends(get_db)" before the route code runs fastapi calls some_function() or get_db() for me) 
 
-password_hasher = PasswordHash.recommended()
+password_hasher = PasswordHash.recommended() # Actually hashes the password
 
 
 def hash_password(password: str) -> str:
-    return password_hasher.hash(password)
+    return password_hasher.hash(password) # PlainPassword -> HashedPassword
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return password_hasher.verify(plain_password, hashed_password)
+    return password_hasher.verify(plain_password, hashed_password) # While login u can't unhash the pass and then check it so you hash the provided pass the same way and see if the hashed password (which was stored in db) and the password provided by user during login matches
 
 
-def _create_token(data: dict, expires_data: timedelta, token_type: str) -> str:
-    to_encode = data.copy()
+def _create_token(data: dict, expires_data: timedelta, token_type: str) -> str: # Data -> {"sub": "x"} meaning "subject = staff ID x"
+    to_encode = data.copy() # Fancy way of doing nothing
     expire = datetime.now(UTC) + expires_data
     to_encode.update({"exp": expire, "type": token_type})
     return jwt.encode(to_encode, settings.secret_key.get_secret_value(), algorithm=settings.algorithm)
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    expires_delta = expires_delta or timedelta(settings.access_token_expire_days)
+    expires_delta = expires_delta or timedelta(settings.access_token_expire_minutes)
     return _create_token(data, expires_delta, token_type="access")
 
 
@@ -43,7 +44,7 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
     return _create_token(data, expires_delta, token_type="refresh")
 
 
-def _verify_token(token: str, expected_type: str) -> str | None:
+def _verify_token(token: str, expected_type: str) -> str | None: # Given a token string verify the signature (the secret_key in .env which is server side)
     try:
         payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[settings.algorithm], options={"require": ["exp", "sub"]})
     except jwt.InvalidTokenError:
@@ -71,7 +72,7 @@ async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSessio
         raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
     staff_result = await db.execute(select(CollegeStaff).where(CollegeStaff.staff_id == staff_id_int).limit(1))
     staff = staff_result.scalars().first()
-    if not staff:
+    if not staff: # confirm the staff member still actually exists (they might have been deleted after the token was issued)
         raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
     return staff
 

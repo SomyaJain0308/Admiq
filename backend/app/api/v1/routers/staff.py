@@ -1,6 +1,6 @@
-from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,8 +8,8 @@ from sqlalchemy.orm import selectinload
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
-from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, StaffPublicResponse, StaffLogin, Token
-from backend.app.services.auth_services import create_access_token, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
+from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, Token
+from backend.app.services.auth_services import create_access_token, verify_college_access, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
 from backend.app.config import get_settings
 
 
@@ -26,7 +26,7 @@ async def read_current_staff(current_staff: CollegeStaff = Depends(get_current_s
     
 
 @router.get("/router/staff/{college_id}", response_model=list[StaffResponse])
-async def get_staff(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
+async def get_staff(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -38,7 +38,7 @@ async def get_staff(college_id: int, db: AsyncSession = Depends(get_db), current
 
 
 @router.get("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
-async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
+async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -50,7 +50,7 @@ async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Dep
 
 
 @router.post("/router/staff/{college_id}", response_model=StaffResponse, status_code=201)
-async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
+async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -81,7 +81,7 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
 
 
 @router.patch("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
-async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
+async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -107,7 +107,7 @@ async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: A
 
 
 @router.delete("/router/staff/{college_id}/{staff_id}", status_code=204)
-async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
+async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -120,18 +120,18 @@ async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depend
     await db.commit()
 
 
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
     staff = staff_result.scalars().first()
     if not staff or not verify_password(form_data.password, staff.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
+        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"}) # password or email is incorrect is the norm, otherwise it would be very easy for hackers to attack
     access_token = create_access_token(data={"sub": str(staff.staff_id)})
     refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     staff_id = verify_refresh_token(payload.refresh_token)
     if staff_id is None:
