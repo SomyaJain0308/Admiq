@@ -50,15 +50,21 @@ async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Dep
 
 
 @router.post("/router/staff/{college_id}", response_model=StaffResponse, status_code=201)
-async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
+async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
 
+    college_has_staff = await db.execute(select(StaffCollege.staff_id).where(StaffCollege.college_id == college_id).limit(1))
+    if college_has_staff.scalar() is not None:
+        caller_membership = await db.execute(select(StaffCollege).where(StaffCollege.college_id == college_id, StaffCollege.staff_id == current_staff.staff_id).limit(1))
+        if not caller_membership.scalars().first():
+            raise HTTPException(status_code=403, detail="You do not have access to this college")
+
     existing_staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == staff.staff_email.lower()).limit(1))
     existing_staff = existing_staff_result.scalars().first()
 
-    if existing_staff: # We can't do both the db calls in one it's intentional.
+    if existing_staff:  # We can't do both the db calls in one it's intentional.
         membership_result = await db.execute(select(StaffCollege).where(StaffCollege.college_id == college_id, StaffCollege.staff_id == existing_staff.staff_id).limit(1))
         if membership_result.scalars().first():
             raise HTTPException(status_code=409, detail=f"'{staff.staff_email}' is already staff at this college")
@@ -133,7 +139,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"}) # password or email is incorrect is the norm, otherwise it would be very easy for hackers to attack
     access_token = create_access_token(data={"sub": str(staff.staff_id)})
     refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
-    return Token(access_token=access_token, refresh_token=refresh_token, token_type="bearer")
+    return Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer")
 
 
 @router.post("/refresh", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
