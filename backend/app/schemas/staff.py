@@ -15,7 +15,7 @@ class StaffCreate(StaffBase):
 
 class StaffLogin(BaseModel):
     staff_email: EmailStr
-    password: str
+    password: str = Field(min_length=8, max_length=100)
 
 
 class StaffUpdate(BaseModel):
@@ -31,3 +31,16 @@ class StaffResponse(StaffBase):
     staff_id: int
     is_active: bool
     created_at: datetime
+
+
+class StaffPublicResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    staff_id: int
+    is_active: bool
+    staff_name: str = Field(min_length=2, max_length=100)
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str

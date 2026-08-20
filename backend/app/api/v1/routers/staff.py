@@ -1,13 +1,22 @@
+from datetime import timedelta
+from typing import Annotated
+from backend.app.schemas import staff
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
-from backend.app.schemas.staff import StaffCreate, StaffResponse, StaffUpdate
+from backend.app.schemas.staff import StaffCreate, StaffResponse, StaffUpdate, StaffPublicResponse, StaffLogin, Token
+from backend.app.services.auth_services import create_access_token, verify_password, hash_password, verify_access_token, oauth2_scheme
+from backend.app.config import get_settings
 
+
+
+settings = get_settings()
 
 router = APIRouter(tags=["staff"])
 
@@ -22,6 +31,7 @@ async def get_staff(college_id: int, db: AsyncSession = Depends(get_db)):
     if not staff:
         raise HTTPException(status_code=404, detail="No staff exist yet for this college")
     return [s.staff_member for s in staff]
+
 
 @router.get("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
 async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db)):
@@ -41,7 +51,7 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
 
-    existing_staff_result = await db.execute(select(CollegeStaff).where(CollegeStaff.staff_email == staff.staff_email).limit(1))
+    existing_staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == staff.staff_email.lower()).limit(1))
     existing_staff = existing_staff_result.scalars().first()
 
     if existing_staff: # We can't do both the db calls in one it's intentional.
@@ -55,7 +65,7 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
         await db.refresh(existing_staff)
         return existing_staff
 
-    new_staff = CollegeStaff(staff_name=staff.staff_name, staff_email=staff.staff_email, is_active=staff.is_active, hashed_password=staff.password)
+    new_staff = CollegeStaff(staff_name=staff.staff_name, staff_email=staff.staff_email.lower(), is_active=staff.is_active, hashed_password=hash_password(staff.password))
     db.add(new_staff)
     await db.flush()
 
@@ -66,18 +76,40 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
     return new_staff
 
 
+@router.post("/token", response_model=Token)
+async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    staff_result = await db.execute(select(CollegeStaff).where(func.lower(StaffLogin.staff_email) == form_data.username.lower()).limit(1))
+    staff = staff_result.scalars().first()
+    if not staff or not verify_password(form_data.password, staff.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
+    acces_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    access_token = create_access_token(data={"sub": str(staff.staff_id)}, expires_delta=acces_token_expires)
+    return Token(access_token=access_token, token_type="bearer")
+
+
+@router.get("/me", response_model=StaffResponse)
+async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    staff_id = verify_access_token(token)
+    if staff_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        staff_id_int = int(staff_id) # Defense against malformed jwt
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authentication": "Bearer"})
+    staff_result = await db.execute(select(StaffCollege).where(StaffCollege.staff_id == staff_id_int).limit(1))
+    staff = staff_result.scalars().first()
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
+    return staff
+
+
 @router.patch("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
 async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
 
-    existing_staff_result = await db.execute(
-        select(StaffCollege)
-        .where(StaffCollege.college_id == college_id, StaffCollege.staff_id == staff_id)
-        .options(selectinload(StaffCollege.staff_member))
-        .limit(1)
-    )
+    existing_staff_result = await db.execute(select(StaffCollege).where(StaffCollege.college_id == college_id, StaffCollege.staff_id == staff_id).options(selectinload(StaffCollege.staff_member)).limit(1))
     membership = existing_staff_result.scalars().first()
     if not membership:
         raise HTTPException(status_code=404, detail="Staff not Found")
