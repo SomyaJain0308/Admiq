@@ -1,6 +1,4 @@
 from datetime import timedelta
-from typing import Annotated
-from backend.app.schemas import staff
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, func
@@ -21,8 +19,25 @@ settings = get_settings()
 router = APIRouter(tags=["staff"])
 
 
+
+@router.get("/me", response_model=StaffResponse)
+async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    staff_id = verify_access_token(token)
+    if staff_id is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
+    try:
+        staff_id_int = int(staff_id) # Defense against malformed jwt
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authentication": "Bearer"})
+    staff_result = await db.execute(select(CollegeStaff).where(StaffCollege.staff_id == staff_id_int).limit(1))
+    staff = staff_result.scalars().first()
+    if not staff:
+        raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
+    return staff
+
+
 @router.get("/router/staff/{college_id}", response_model=list[StaffResponse])
-async def get_staff(college_id: int, db: AsyncSession = Depends(get_db)):
+async def get_staff(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -34,7 +49,7 @@ async def get_staff(college_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
-async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db)):
+async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -46,7 +61,7 @@ async def get_staff_by_id(staff_id: int, college_id: int, db: AsyncSession = Dep
 
 
 @router.post("/router/staff/{college_id}", response_model=StaffResponse, status_code=201)
-async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db)):
+async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -87,24 +102,8 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return Token(access_token=access_token, token_type="bearer")
 
 
-@router.get("/me", response_model=StaffResponse)
-async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
-    staff_id = verify_access_token(token)
-    if staff_id is None:
-        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authenticate": "Bearer"})
-    try:
-        staff_id_int = int(staff_id) # Defense against malformed jwt
-    except (TypeError, ValueError):
-        raise HTTPException(status_code=401, detail="Invalid or expired token", headers={"WWW-Authentication": "Bearer"})
-    staff_result = await db.execute(select(StaffCollege).where(StaffCollege.staff_id == staff_id_int).limit(1))
-    staff = staff_result.scalars().first()
-    if not staff:
-        raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
-    return staff
-
-
 @router.patch("/router/staff/{college_id}/{staff_id}", response_model=StaffResponse)
-async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db)):
+async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -130,7 +129,7 @@ async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: A
 
 
 @router.delete("/router/staff/{college_id}/{staff_id}", status_code=204)
-async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db)):
+async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(get_current_staff)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
