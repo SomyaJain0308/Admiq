@@ -105,3 +105,5 @@ Being upfront about this since it's still an active build, not a finished produc
 - No formal migration tool — `schema.sql` is the source of truth, but existing databases need manual `ALTER TABLE`s when it changes
 - CORS is wide open (`allow_origins=["*"]`) — fine for local dev, not for prod
 - No automated test suite yet
+
+
