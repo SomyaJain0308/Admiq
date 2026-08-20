@@ -17,7 +17,7 @@ services:
       - PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc
     working_dir: /app
     command: fastapi dev backend/app/main.py --host 0.0.0.0 --port 8000 --reload-dir backend/app
-z
+
   prometheus:
     image: prom/prometheus:v2.37.0
     container_name: admiq-prometheus
