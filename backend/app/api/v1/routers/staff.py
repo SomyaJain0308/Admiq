@@ -78,7 +78,7 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
 
 @router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    staff_result = await db.execute(select(CollegeStaff).where(func.lower(StaffLogin.staff_email) == form_data.username.lower()).limit(1))
+    staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
     staff = staff_result.scalars().first()
     if not staff or not verify_password(form_data.password, staff.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
@@ -118,8 +118,9 @@ async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: A
 
     update_data = staff.model_dump(exclude_unset=True)
     if "password" in update_data:
-        update_data["hashed_password"] = update_data.pop("password") 
-
+        update_data["hashed_password"] = hash_password(update_data.pop("password"))
+    if "staff_email" in update_data:
+        update_data["staff_email"] = update_data["staff_email"].lower()
     for field, value in update_data.items():
         setattr(existing_staff, field, value)
 
