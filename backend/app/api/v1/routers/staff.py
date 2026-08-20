@@ -9,7 +9,7 @@ from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
 from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, Token
-from backend.app.services.auth_services import create_access_token, verify_college_access, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
+from backend.app.services.auth_services import create_access_token, revoke_refresh_token, verify_college_access, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
 from backend.app.config import get_settings
 
 
@@ -120,6 +120,11 @@ async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depend
     await db.commit()
 
 
+@router.post("/logout", status_code=204)
+async def logout(payload: RefreshTokenRequest):
+    await revoke_refresh_token(payload.refresh_token)
+
+
 @router.post("/token", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
@@ -133,7 +138,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 @router.post("/refresh", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
 async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
-    staff_id = verify_refresh_token(payload.refresh_token)
+    staff_id = await verify_refresh_token(payload.refresh_token)
     if staff_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token", headers={"WWW-Authenticate": "Bearer"})
     try:
@@ -146,4 +151,5 @@ async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = 
         raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
     new_access_token = create_access_token(data={"sub": str(staff.staff_id)})
     new_refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
+    await revoke_refresh_token(payload.refresh_token) # Expire the old token as soon as a new one is issued
     return Token(access_token=new_access_token, refresh_token=new_refresh_token, token_type="Bearer")
