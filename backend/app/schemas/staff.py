@@ -31,15 +31,7 @@ class StaffResponse(StaffBase):
     staff_id: int
     is_active: bool
     created_at: datetime
-
-
-class StaffPublicResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    staff_id: int
-    is_active: bool
-    staff_name: str = Field(min_length=2, max_length=100)
-
+    
 
 class Token(BaseModel):
     access_token: str
