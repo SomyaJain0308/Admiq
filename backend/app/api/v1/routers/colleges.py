@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
 from backend.app.models.College import College
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
+from backend.app.services.auth_services import verify_college_access
 from backend.app.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeResponse
 
 
@@ -21,7 +23,7 @@ async def get_colleges(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/router/college/{college_id}", response_model=CollegeResponse)
-async def get_college(college_id: int, db: AsyncSession = Depends(get_db)):
+async def get_college(college_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
     existing_college = existing_college_result.scalars().first()
     if existing_college:
@@ -61,7 +63,7 @@ async def create_college(college: CollegeCreate, db: AsyncSession = Depends(get_
 
 
 @router.patch("/router/college/{college_id}", response_model=CollegeResponse)
-async def update_college(college_id: int, college: CollegeUpdate, db: AsyncSession = Depends(get_db)):
+async def update_college(college_id: int, college: CollegeUpdate, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
     existing_college = existing_college_result.scalars().first()
     if not existing_college:

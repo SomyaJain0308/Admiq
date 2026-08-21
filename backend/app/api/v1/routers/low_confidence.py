@@ -26,7 +26,7 @@ logger = get_logger()
 router = APIRouter(tags=["low_confidence"])
 
 @router.get("/router/low_confidence/{college_id}", response_model=list[LowConfidenceResponse])
-async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
+async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == False))
     low_confidence_queries = low_confidence_result.scalars().all()
     LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
@@ -45,7 +45,7 @@ async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends
 
 
 @router.get("/router/low_confidence/{college_id}/query/{query_id}", response_model=LowConfidenceResponse)
-async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
+async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     query_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.query_id == query_id).limit(1))
     query = query_result.scalars().first()
     if not query:
@@ -59,7 +59,8 @@ async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSess
 
 
 @router.post("/router/low_confidence/{college_id}/query/{query_id}/reply")
-async def reply_to_low_confidence_query(college_id: int, query_id: int, staff_id: int, reply_message: str, expires_at: datetime, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
+async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_message: str, expires_at: datetime, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    staff_id = membership.staff_id
     settings = get_settings()
     query_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.query_id == query_id, LowConfidenceQuery.resolved == False).limit(1))
     query = query_result.scalars().first()
