@@ -3,14 +3,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from backend.app.database import get_db
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
 from backend.app.models.Student import Student
 from backend.app.models.Message import Message
+from backend.app.services.auth_services import verify_college_access
 
 router = APIRouter(tags=["Students"], prefix="/router/students")
 
 
 @router.get("/{college_id}")
-async def get_students(college_id: int, db: AsyncSession = Depends(get_db)):
+async def get_students(college_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     students_result = await db.execute(select(Student).where(Student.college_id == college_id))
     students = students_result.scalars().all()
     if not students:
@@ -19,7 +21,7 @@ async def get_students(college_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{college_id}/{student_id}")
-async def get_student(college_id: int, student_id: int, db: AsyncSession = Depends(get_db)):
+async def get_student(college_id: int, student_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     student_result = await db.execute(select(Student).where(Student.college_id == college_id, Student.student_id == student_id).limit(1))
     student = student_result.scalars().first()
     if not student:
@@ -28,7 +30,7 @@ async def get_student(college_id: int, student_id: int, db: AsyncSession = Depen
 
 
 @router.get("/view_convo/{college_id}/{student_id}")
-async def view_conversation(college_id: int, student_id: int, db: AsyncSession = Depends(get_db)):
+async def view_conversation(college_id: int, student_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     convo_result = await db.execute(select(Message).where(Message.college_id == college_id, Message.student_id == student_id).order_by(Message.created_at.asc()))
     convo = convo_result.scalars().all()
     if not convo:

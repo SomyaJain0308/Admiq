@@ -5,6 +5,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from datetime import datetime
 
 
+from backend.app.services.auth_services import verify_college_access
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_OPEN, LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS, LOW_CONFIDENCE_QUERIES_RESOLVED
 from backend.app.config import get_settings
@@ -16,6 +17,7 @@ from backend.app.models.Student import Student
 from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.models.Chunk import Chunk
 from backend.app.schemas.low_confidence import LowConfidenceResponse
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
 from backend.app.rag.staff_reply_context import reconstruct_staff_answer
 from backend.app.services.tenant_service import save_staff_message
 
@@ -24,7 +26,7 @@ logger = get_logger()
 router = APIRouter(tags=["low_confidence"])
 
 @router.get("/router/low_confidence/{college_id}", response_model=list[LowConfidenceResponse])
-async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db)):
+async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == False))
     low_confidence_queries = low_confidence_result.scalars().all()
     LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
@@ -37,25 +39,13 @@ async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends
         question_content = question_content_result.scalars().first()
         answer_content_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.message_id == query.answer_message_id).limit(1))
         answer_content = answer_content_result.scalars().first()
-
-        responses.append(LowConfidenceResponse(
-            query_id=query.query_id,
-            college_id=query.college_id,
-            student_id=query.student_id,
-            question_message_id=query.question_message_id,
-            question_content=question_content,
-            answer_message_id=query.answer_message_id,
-            answer_content=answer_content,
-            resolved=query.resolved,
-            resolved_at=query.resolved_at if query.resolved_at else None,
-            resolved_by=query.resolved_by if query.resolved_by else None
-        ))
+        responses.append(LowConfidenceResponse( query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None))
     return responses
 
 
 
 @router.get("/router/low_confidence/{college_id}/query/{query_id}", response_model=LowConfidenceResponse)
-async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSession = Depends(get_db)):
+async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     query_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.query_id == query_id).limit(1))
     query = query_result.scalars().first()
     if not query:
@@ -64,23 +54,12 @@ async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSess
     question_content = question_content_result.scalars().first()
     answer_content_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.message_id == query.answer_message_id).limit(1))
     answer_content = answer_content_result.scalars().first()
-    return LowConfidenceResponse(
-        query_id=query.query_id,
-        college_id=query.college_id,
-        student_id=query.student_id,
-        question_message_id=query.question_message_id,
-        question_content=question_content,
-        answer_message_id=query.answer_message_id,
-        answer_content=answer_content,
-        resolved=query.resolved,
-        resolved_at=query.resolved_at if query.resolved_at else None,
-        resolved_by=query.resolved_by if query.resolved_by else None
-    )
+    return LowConfidenceResponse(query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None)
 
 
 
 @router.post("/router/low_confidence/{college_id}/query/{query_id}/reply")
-async def reply_to_low_confidence_query(college_id: int, query_id: int, staff_id: int, reply_message: str, expires_at: datetime, db: AsyncSession = Depends(get_db)):
+async def reply_to_low_confidence_query(college_id: int, query_id: int, staff_id: int, reply_message: str, expires_at: datetime, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     settings = get_settings()
     query_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.query_id == query_id, LowConfidenceQuery.resolved == False).limit(1))
     query = query_result.scalars().first()

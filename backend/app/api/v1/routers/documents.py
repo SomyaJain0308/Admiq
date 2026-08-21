@@ -1,9 +1,11 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from backend.app.database import get_db
 from backend.app.models.Document import Document
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
+from backend.app.services.auth_services import verify_college_access
 from backend.app.services.async_storage_service import upload_file_bytes
 from backend.app.services.document_service import async_create_document_row
 from backend.app.background_tasks.celery_tasks import process_document_task
@@ -15,7 +17,8 @@ ALLOWED_CONTENT_TYPES = {"application/pdf"}
 MAX_FILE_SIZE_MB = 25
 
 @router.post("/router/colleges/{college_id}/documents")
-async def upload_document(college_id: int, uploaded_by: int = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_document(college_id: int, file: UploadFile = File(...), db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    uploaded_by = membership.staff_id
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Only PDF files are supported right now.")
     file_bytes = await file.read()
@@ -31,7 +34,7 @@ async def upload_document(college_id: int, uploaded_by: int = Form(...), file: U
     return {"document_id": doc.document_id, "status": doc.document_status}
 
 @router.get("/router/colleges/{college_id}/documents/{document_id}")
-async def get_document_status(college_id: int, document_id: int, db: Session = Depends(get_db)):
+async def get_document_status(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))
     doc = result.scalars().first()
     if doc is None:
