@@ -11,6 +11,7 @@ from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.rag.agent import Agent
+from backend.app.api.v1.routers.internal_tasks import router as internal_tasks_router
 from backend.app.api.v1.routers.whatsapp_chat import router as whatsapp_router
 from backend.app.api.v1.routers.metrics import router as metrics_router
 from backend.app.api.v1.routers.colleges import router as colleges_router
@@ -55,6 +56,7 @@ if os.getenv("ENABLE_DOCUMENT_UPLOAD", "true").lower() == "true": # Docling pull
     app.include_router(documents_router)
 
 app.include_router(whatsapp_router)
+app.include_router(internal_tasks_router)
 app.include_router(metrics_router)
 app.include_router(colleges_router)
 app.include_router(staff_router)

@@ -57,6 +57,9 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Internal Schedules Tasks
+    internal_task_token: str = ""
+
 
     @property
     def is_production(self) -> bool:
