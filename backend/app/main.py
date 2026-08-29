@@ -20,6 +20,7 @@ from backend.app.api.v1.routers.test_chat import router as chat_router
 from backend.app.api.v1.routers.health_check import router as health_router
 from backend.app.api.v1.routers.low_confidence import router as low_confidence_router
 from backend.app.api.v1.routers.students import router as students_router
+from backend.app.api.v1.routers.documents import router as documents_router
 
 
 
@@ -51,10 +52,8 @@ app = FastAPI(title="Admiq", description="A college admission chatbot.", version
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]) # NOTE: change allow_origins in production.
 
-if os.getenv("ENABLE_DOCUMENT_UPLOAD", "true").lower() == "true": # Docling pulls heavy stuff which fucks up the ram so doing it locally for now since i don't want to blow past the render's 512gb ram limit.
-    from backend.app.api.v1.routers.documents import router as documents_router
-    app.include_router(documents_router)
 
+app.include_router(documents_router)
 app.include_router(whatsapp_router)
 app.include_router(internal_tasks_router)
 app.include_router(metrics_router)
