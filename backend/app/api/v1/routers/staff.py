@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
-from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, Token
+from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, Token, CurrentStaffResponse
 from backend.app.services.auth_services import create_access_token, revoke_refresh_token, verify_college_access, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token
 from backend.app.config import get_settings
 
@@ -20,9 +20,11 @@ router = APIRouter(tags=["staff"])
 
 
 
-@router.get("/me", response_model=StaffResponse)
-async def read_current_staff(current_staff: CollegeStaff = Depends(get_current_staff)):
-    return current_staff
+@router.get("/me", response_model=CurrentStaffResponse)
+async def read_current_staff(current_staff: CollegeStaff = Depends(get_current_staff), db: AsyncSession = Depends(get_db)):
+    colleges_result = await db.execute(select(College).join(StaffCollege, StaffCollege.college_id == College.college_id).where(StaffCollege.staff_id == current_staff.staff_id))
+    colleges = colleges_result.scalars().all()
+    return CurrentStaffResponse(staff_id=current_staff.staff_id, staff_name=current_staff.staff_name, staff_email=current_staff.staff_email, is_active=current_staff.is_active, created_at=current_staff.created_at, colleges=colleges)
     
 
 @router.get("/router/staff/{college_id}", response_model=list[StaffResponse])

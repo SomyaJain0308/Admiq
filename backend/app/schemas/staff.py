@@ -25,13 +25,23 @@ class StaffUpdate(BaseModel):
     password: str | None = Field(default=None, min_length=8, max_length=100)
 
 
-class StaffResponse(StaffBase):
+class CollegeSummary(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    college_id: int
+    college_name: str
 
+
+class StaffResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     staff_id: int
+    staff_name: str
+    staff_email: EmailStr
     is_active: bool
     created_at: datetime
-    
+
+
+class CurrentStaffResponse(StaffResponse):
+    colleges: list[CollegeSummary]
 
 class Token(BaseModel):
     access_token: str

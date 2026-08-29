@@ -4,13 +4,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
 import redis.asyncio as redis
+import os
 
 
 from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.rag.agent import Agent
-from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.whatsapp_chat import router as whatsapp_router
 from backend.app.api.v1.routers.metrics import router as metrics_router
 from backend.app.api.v1.routers.colleges import router as colleges_router
@@ -50,7 +50,10 @@ app = FastAPI(title="Admiq", description="A college admission chatbot.", version
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]) # NOTE: change allow_origins in production.
 
-app.include_router(documents_router)
+if os.getenv("ENABLE_DOCUMENT_UPLOAD", "true").lower() == "true": # Docling pulls heavy stuff which fucks up the ram so doing it locally for now since i don't want to blow past the render's 512gb ram limit.
+    from backend.app.api.v1.routers.documents import router as documents_router
+    app.include_router(documents_router)
+
 app.include_router(whatsapp_router)
 app.include_router(metrics_router)
 app.include_router(colleges_router)
