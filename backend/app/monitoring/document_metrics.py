@@ -1,11 +1,11 @@
 from prometheus_client import Counter, Histogram
 
 
-DOCUMENT_EXTRACTION_METHOD = Counter("document_extraction_method_total", "Document extraction tier method used", ["model_used"])
+DOCUMENT_EXTRACTION_METHOD = Counter("document_extraction_method_total", "Document extraction tier method used", ["method"])
 
 DOCUMENT_INGESTION_OUTCOME = Counter("document_ingestion_outcome_total", "Total document ingestion task outcomes", ["outcome", "error_type"])
 
-DOCUMENT_INGESTION_LATENCY = Histogram("document_ingestion_latency_seconds", "End to end latency of document ingestion tasks (OCR + chunk + contextualize + embed + insert)", ["stage"])
+DOCUMENT_INGESTION_LATENCY = Histogram("document_ingestion_latency_seconds", "End to end latency of document ingestion tasks (OCR + chunk + contextualize + embed + insert)")
 
 DOCUMENT_INGESTION_STAGE_LATENCY = Histogram("document_ingestion_stage_latency", "Latency of each stage of document ingestion tasks (OCR + Chunk + Contextualize + Embed + Insert)", ["stage"])
 
