@@ -5,6 +5,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { DashboardLayout } from "@/components/DashboardLayout"
 import Login from "@/pages/Login"
 import DashboardHome from "@/pages/DashboardHome"
+import LowConfidenceQueue from "@/pages/LowConfidenceQueue"
 import ComingSoon from "@/pages/ComingSoon"
 
 const queryClient = new QueryClient({
@@ -26,7 +27,7 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<DashboardLayout />}>
                 <Route path="/" element={<DashboardHome />} />
-                <Route path="/queue" element={<ComingSoon title="Low-confidence queue" />} />
+                <Route path="/queue" element={<LowConfidenceQueue />} />
                 <Route path="/staff" element={<ComingSoon title="Staff" />} />
                 <Route path="/students" element={<ComingSoon title="Students" />} />
               </Route>

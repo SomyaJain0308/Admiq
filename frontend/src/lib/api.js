@@ -88,6 +88,16 @@ export const api = {
   patch: (path, body) => request(path, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   delete: (path) => request(path, { method: "DELETE" }),
 
+  // A handful of backend endpoints take plain, undecorated str/int/datetime
+  // parameters that aren't part of the URL path - FastAPI treats those as
+  // query params by default (only Pydantic-model parameters get read from
+  // the request body). This helper is for exactly those endpoints - don't
+  // use it for anything that expects real JSON.
+  postWithQueryParams: (path, params) => {
+    const search = new URLSearchParams(params).toString()
+    return request(`${path}?${search}`, { method: "POST" })
+  },
+
   // Auth endpoints need special handling: /token takes form-encoded data
   // (FastAPI's OAuth2PasswordRequestForm), not JSON like everything else.
   login: async (email, password) => {
