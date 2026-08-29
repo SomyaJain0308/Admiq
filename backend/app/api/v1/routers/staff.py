@@ -131,7 +131,7 @@ async def logout(payload: RefreshTokenRequest):
     await revoke_refresh_token(payload.refresh_token)
 
 
-@router.post("/token", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+@router.post("/token", response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
     staff = staff_result.scalars().first()
@@ -142,7 +142,7 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer")
 
 
-@router.post("/refresh", response_model=Token, dependencies=[Depends(RateLimiter(times=5, seconds=60))])
+@router.post("/refresh", response_model=Token)
 async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
     staff_id = await verify_refresh_token(payload.refresh_token)
     if staff_id is None:

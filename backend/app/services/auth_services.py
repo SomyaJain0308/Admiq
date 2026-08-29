@@ -33,7 +33,10 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return password_hasher.verify(plain_password, hashed_password) # While login u can't unhash the pass and then check it so you hash the provided pass the same way and see if the hashed password (which was stored in db) and the password provided by user during login matches
+    try:
+        return password_hasher.verify(plain_password, hashed_password)
+    except Exception:
+        return False # While login u can't unhash the pass and then check it so you hash the provided pass the same way and see if the hashed password (which was stored in db) and the password provided by user during login matches
 
 
 def _create_token(data: dict, expires_data: timedelta, token_type: str) -> str: # Data -> {"sub": "x"} meaning "subject = staff ID x"
