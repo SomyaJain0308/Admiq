@@ -1,96 +1,944 @@
 # Admiq
 
-A multi-tenant WhatsApp chatbot backend for college admissions offices. Students message a college's WhatsApp number and get answers grounded in that college's own documents (brochures, fee structures, eligibility criteria, hostel info, etc.) via RAG, instead of a human having to answer the same 20 questions a hundred times a day. Every conversation also builds up a structured lead profile behind the scenes, so admissions staff aren't starting from zero when they follow up.
+**AI-powered admissions support for colleges.**
 
-This is a backend-first build. There's no frontend yet — right now everything is tested through a `/test-chat` endpoint that mirrors the real WhatsApp flow without needing an actual WhatsApp number.
+Admiq is a multi-tenant admissions platform that lets colleges automate repetitive student queries over WhatsApp while giving admissions staff the context they need to follow up with high-intent students.
 
-## Why
+Instead of forcing counsellors to repeatedly answer the same questions about **fees, eligibility, courses, deadlines, hostels, placements, and admissions**, Admiq uses each college's own documents as its knowledge base, answers students through WhatsApp, escalates uncertain questions to staff, and continuously builds a useful profile of every lead.
 
-Talked to a few people doing admissions outreach and the same complaint kept coming up: staff spend most of their day answering repetitive questions over WhatsApp (fees, deadlines, eligibility) instead of actually talking to the students who are close to deciding. The idea here is to let the bot handle the repetitive stuff, flag anything it can't confidently answer to a human, and quietly build a profile of each lead in the background so staff know exactly who to call and what to say when they do.
+The goal is simple:
 
-## Stack
+> **Let AI handle repetitive admissions conversations so humans can focus on conversations that actually need humans.**
 
-- **API:** FastAPI (async), Python
-- **DB:** PostgreSQL + `pgvector` (hosted on Supabase) via SQLAlchemy 2.0 async ORM
-- **Background jobs:** Celery + Redis, with `celery beat` for scheduled tasks
-- **LLM / embeddings:** Google Gemini (`gemini-2.5-flash` for chat + extraction, `gemini-embedding-001` for embeddings) via `langchain-google-genai`
-- **Agent orchestration:** LangGraph
-- **Document parsing:** Docling (PDF → structured markdown) with an OCR fallback chain (Tesseract / EasyOCR) for scanned documents (Only AI generated code in this project.)
-- **Observability:** Prometheus metrics + LangSmith tracing (Grafana dashboards planned, see Roadmap)
-- **Infra:** Docker Compose (`backend`, `celery_worker`, `celery_beat`, `prometheus`)
+---
 
-## How it works
+## ✨ What Admiq Does
 
-### 1. A student messages the college's WhatsApp number
+### 🤖 AI Admissions Assistant
 
-Meta sends a webhook to `/api/v1/whatsapp/webhook`. The handler verifies the signature, dedupes on `whatsapp_message_id` (Meta retries webhooks, so this matters), finds-or-creates the student and their active session, and hands the message off to the agent.
+Students can message a college's WhatsApp number and receive answers grounded in the college's official documents.
 
-### 2. The RAG agent answers it
+The assistant:
 
-This is a LangGraph state machine (`rag/agent.py`):
+* Understands whether a message actually requires document retrieval
+* Decomposes complex questions into focused searches
+* Retrieves relevant information from the college's knowledge base
+* Rewrites failed searches when necessary
+* Generates grounded responses using Gemini
+* Tracks conversation context and previous assistant responses
+* Falls back to a secondary model/retry path when generation fails
+* Flags questions when retrieval confidence is too low
 
-\```
-resolve_query → retrieve → re_query (if needed) → flag_low_confidence (if needed) → build_prompt → process → fallback (if needed) → error (if needed)
-\```
+This means a student can ask something like:
 
-- **resolve_query** decides if the message even needs a document lookup (skips retrieval for greetings/small talk) and breaks it into 1–4 focused sub-queries if it's a multi-part question.
-- **retrieve** embeds each sub-query and does a cosine similarity search against `pgvector`, filtered by a distance threshold.
-- **re_query** rewrites and retries sub-queries that came back empty, up to a configured retry limit.
-- **flag_low_confidence** — if retries are exhausted and nothing good came back, the query gets queued for human staff review, but the bot still gives its best-effort answer instead of just going silent.
-- **process → fallback → error** is the actual generation step: primary model call, with a fallback model and a canned apology as successive safety nets. Every stage logs latency, token usage, and retry counts to Prometheus.
+> "What is the BTech fee and do I need to have PCM in class 12?"
 
-### 3. Documents get ingested through a 3-tier pipeline (Again AI Generated)
+and the system can independently retrieve the relevant information from the college's uploaded documents.
 
-Staff upload a PDF, it goes into a Celery task (`document_processor.py`):
+---
 
-1. Try Docling with OCR.
-2. If the text quality looks bad (heuristic scoring), retry with Docling forced into full-page OCR mode.
-3. If it's still bad, fall back to a manual EasyOCR/Tesseract pass.
+### 📚 Document-Based RAG
 
-Once extracted, the document is chunked (`chunking.py`) using header-aware + recursive splitting, then each chunk gets a short LLM-generated "context" blurb describing where it fits in the document (the Anthropic contextual retrieval technique) before being embedded and stored. Context generation is batched and uses Gemini's context caching to keep it cheap.
+College staff upload admission documents, PDFs, brochures, fee structures, eligibility documents, and other material.
 
-### 4. Every session quietly builds a student profile
+Admiq processes them through a multi-stage ingestion pipeline:
 
-When a session closes, a Celery task (`student_profile_tasks.py`) summarizes what happened and merges it into the student's long-term profile:
+```text
+PDF
+ │
+ ▼
+Docling extraction + OCR
+ │
+ ├── Good extraction ──────────────┐
+ │                                 │
+ ├── Poor extraction → Full OCR ───┤
+ │                                 │
+ └── Still poor → EasyOCR/Tesseract
+                                   │
+                                   ▼
+                              Markdown
+                                   │
+                                   ▼
+                         Header-aware chunking
+                                   │
+                                   ▼
+                       Contextual retrieval context
+                                   │
+                                   ▼
+                             Embeddings
+                                   │
+                                   ▼
+                         PostgreSQL + pgvector
+```
 
-- A running natural-language summary
-- Course interest, academic scores explicitly stated by the student
-- **Open concerns/objections** — unresolved pushback the student raised (e.g. "thinks fees are too high"), so staff know exactly what to address before they even open the call
-- **Competing colleges** the student mentioned considering
-- **Parent/guardian involvement** — a short note on who's actually driving the decision
-- **Drop-off reason** — if the student went quiet mid-conversation, an inferred reason why
+Each chunk contains both the extracted content and contextual information describing where it belongs in the document.
 
-### 5. Leads get scored automatically
+Embeddings are stored in PostgreSQL using `pgvector` with an HNSW index for efficient similarity search.
 
-A rule-based score (0–100, `services/lead_scoring.py`) — deliberately not another LLM call, this needs to be cheap enough to recompute constantly:
+---
 
-- Recency-weighted trend of the student's interest signal across recent sessions (45 pts)
-- How recently they were last active (35 pts, decays to 0 over 30 days of silence)
-- How many sessions they've had (20 pts, diminishing returns after ~5)
-- Minus penalties for unresolved concerns, competing colleges mentioned, and unresolved drop-offs
+## 🧠 Retrieval Pipeline
 
-Recomputed the moment a session closes, and again every night in a batch job so scores keep decaying for leads who've gone quiet even without a new conversation to trigger it.
+The core assistant is implemented as a **LangGraph state machine**.
 
-## Multi-tenancy
+```text
+                     ┌─────────────────┐
+                     │   User Query    │
+                     └────────┬────────┘
+                              ▼
+                     ┌─────────────────┐
+                     │ Resolve Query   │
+                     └────────┬────────┘
+                              │
+                 ┌────────────┴────────────┐
+                 │                         │
+          No retrieval needed        Retrieval needed
+                 │                         │
+                 │                         ▼
+                 │                  ┌─────────────┐
+                 │                  │   Retrieve  │
+                 │                  └──────┬──────┘
+                 │                         │
+                 │                  Results found?
+                 │                    │         │
+                 │                   Yes        No
+                 │                    │         │
+                 │                    │         ▼
+                 │                    │    ┌──────────┐
+                 │                    │    │ Re-query │
+                 │                    │    └────┬─────┘
+                 │                    │         │
+                 │                    │    Retry limit?
+                 │                    │      │     │
+                 │                    │     No    Yes
+                 │                    │      │     │
+                 │                    │      └──┐  ▼
+                 │                    │         │ Flag
+                 │                    │         │ low
+                 └────────────────────┴─────────┘ confidence
+                              │
+                              ▼
+                       Build System Prompt
+                              │
+                              ▼
+                       Primary LLM Call
+                              │
+                       ┌──────┴──────┐
+                       │             │
+                    Success        Failure
+                       │             │
+                       │             ▼
+                       │        Fallback / Retry
+                       │             │
+                       │             ▼
+                       └──────┬──────┘
+                              ▼
+                         Final Response
+```
 
-Every college is fully isolated — own WhatsApp number, documents, students, staff. This isn't done with a single global tenant ID; almost every table is keyed on composite `(college_id, ...)` unique constraints and foreign keys instead, so a query can't accidentally leak across colleges just by forgetting a `WHERE` clause on one join. Staff can belong to multiple colleges (`staff_colleges` join table), each student is scoped to one college.
+### Query resolution
 
-## Data model (high level)
+Before performing a vector search, the system determines whether retrieval is necessary.
 
-`colleges` → `whatsapp_numbers`, `college_staff` ↔ `staff_colleges` ↔ `colleges`, `students` (with `profile_signals`, `lead_score`, `interest_signal_history` as JSONB/computed fields), `student_sessions` (auto-closed after 30 min idle via `pg_cron`), `messages`, `documents` → `chunks` (pgvector embeddings, HNSW index), `low_confidence_queries` (the human-handoff queue — staff replies here get re-embedded as retrievable, expiring chunks so the bot "learns" the answer for next time).
+Greetings, thanks, and simple conversational messages can bypass the document lookup entirely.
 
-## Running it
+For complex admissions questions, the resolver can split the message into multiple focused search queries.
 
-\```bash
-docker-compose up
-\```
+### Retrieval
 
-Spins up the FastAPI app, a Celery worker, Celery beat (for the scheduled document-processing / lead-scoring jobs), and Prometheus. Needs a `.env` in `backend/` — see `.env.example` for the required keys (Gemini API key, Supabase/Postgres URL, Redis URL, WhatsApp webhook secrets, LangSmith key).
+Each sub-query is embedded and searched against the college's vector store.
 
-## Known rough edges
+Results are filtered using a configurable cosine-distance threshold.
 
-Being upfront about this since it's still an active build, not a finished product:
+### Retrieval retry
 
-- No formal migration tool — `schema.sql` is the source of truth, but existing databases need manual `ALTER TABLE`s when it changes
-- CORS is wide open (`allow_origins=["*"]`) — fine for local dev, not for prod
-- No automated test suite yet
+If a query produces no sufficiently relevant result, Admiq asks the query model to rewrite it and retries retrieval.
+
+### Human escalation
+
+If retrieval remains unsuccessful after the configured retries, the question enters the **low-confidence queue** for staff review.
+
+Importantly, the student still receives a best-effort response rather than being left hanging.
+
+---
+
+# 👥 Student Intelligence
+
+Admiq isn't just a chatbot.
+
+Every conversation can contribute to a persistent student profile.
+
+When a session closes, a background task analyzes the conversation and updates the student's profile with information such as:
+
+* Course interest
+* Academic scores explicitly mentioned by the student
+* Current concerns or objections
+* Competing colleges
+* Parent/guardian involvement
+* Reason for conversation drop-off
+* Running conversation summary
+* Interest signal history
+
+For example, instead of a counsellor seeing:
+
+> **Rahul, 18, BTech enquiry**
+
+they can see useful context such as:
+
+```text
+Course interest:
+Computer Science Engineering
+
+Academic scores:
+Class 12: 91%
+JEE Main percentile: 94.2
+
+Open concern:
+Feels tuition fees are too high
+
+Competing colleges:
+College A
+College B
+
+Guardian involvement:
+Father is involved in the final decision
+
+Drop-off reason:
+Stopped responding after discussing fees
+```
+
+The point is to make the eventual human conversation significantly better.
+
+---
+
+# 📈 Lead Scoring
+
+Every student receives a **0–100 lead score**.
+
+The score is deliberately rule-based rather than another LLM call, keeping it inexpensive and deterministic.
+
+The score combines:
+
+| Signal                 |  Weight |
+| ---------------------- | ------: |
+| Recent interest trend  |      45 |
+| Recency of activity    |      35 |
+| Conversation frequency |      20 |
+| Unresolved concerns    | Penalty |
+| Competing colleges     | Penalty |
+| Drop-off reason        | Penalty |
+
+The score is recalculated:
+
+* When a session is processed
+* During the nightly batch recomputation
+
+This allows inactive leads to naturally become less valuable over time without requiring a new conversation.
+
+Students in the dashboard are sorted by lead score so staff can prioritize follow-ups.
+
+---
+
+# 🔁 Automated Re-engagement
+
+Admiq can identify students who stopped responding and attempt a personalized follow-up.
+
+The re-engagement system considers:
+
+* Student lead score
+* Recent interest signals
+* Conversation summary
+* Course interest
+* Open concerns
+* College strengths
+
+The generated message can use the college's configured strengths, such as:
+
+* Placement performance
+* Tuition fees
+* Hostel facilities
+* Campus facilities
+* Other differentiators
+
+The system deliberately avoids sending nudges to students with negative interest signals or sufficiently low lead scores.
+
+---
+
+# 🧑‍💼 Staff Dashboard
+
+Admiq includes a React-based staff dashboard.
+
+### Dashboard
+
+Provides a quick overview of:
+
+* Low-confidence questions waiting for staff
+* Students
+* Staff members with college access
+
+### Students
+
+Staff can:
+
+* Search students
+* Sort by lead score
+* View course interest
+* View contact information
+* Open a student's full profile
+* Read their conversation
+* Review AI-generated profile signals
+
+### Student Detail
+
+The student detail view combines:
+
+```text
+Student
+   │
+   ├── Lead score
+   ├── Course interest
+   ├── Academic scores
+   ├── Profile summary
+   ├── Open concerns
+   ├── Guardian involvement
+   ├── Competing colleges
+   ├── Drop-off reason
+   ├── Internal notes
+   │
+   └── Conversation history
+```
+
+### Low-Confidence Queue
+
+When the assistant isn't confident enough to answer a question, staff can see:
+
+* The student's question
+* The assistant's attempted answer
+* The unresolved query
+* A reply interface
+
+Staff responses can subsequently become temporary retrieval knowledge, allowing the system to benefit from answers that humans have already provided.
+
+### Staff Management
+
+College staff can be:
+
+* Added
+* Edited
+* Removed
+* Searched
+* Activated/deactivated
+
+### College Settings
+
+Staff can configure:
+
+* College name
+* Phone number
+* Email
+* Key college strengths
+
+---
+
+# 💬 WhatsApp Integration
+
+Admiq integrates with the **Meta WhatsApp Cloud API**.
+
+The production message flow is:
+
+```text
+Student
+   │
+   ▼
+WhatsApp
+   │
+   ▼
+Meta Webhook
+   │
+   ▼
+Admiq Webhook
+   │
+   ├── Verify webhook
+   ├── Validate signature
+   ├── Deduplicate message
+   ├── Identify college
+   ├── Find/create student
+   ├── Find/create session
+   │
+   ▼
+LangGraph Agent
+   │
+   ▼
+RAG / LLM
+   │
+   ▼
+Response
+   │
+   ▼
+WhatsApp Cloud API
+   │
+   ▼
+Student
+```
+
+Webhook message IDs are stored to protect against duplicate processing when Meta retries webhook deliveries.
+
+There is also a `/test-chat` endpoint that allows the assistant flow to be tested without a real WhatsApp number.
+
+---
+
+# 🏢 Multi-Tenancy
+
+Admiq is designed for multiple colleges from the beginning.
+
+Each college has its own:
+
+* WhatsApp number
+* Students
+* Staff
+* Documents
+* Knowledge base
+* Conversations
+* Low-confidence queue
+
+Tenant isolation is enforced through composite foreign keys and constraints rather than relying solely on developers remembering to add a `college_id` filter everywhere.
+
+Conceptually:
+
+```text
+                    Admiq
+                      │
+          ┌───────────┴───────────┐
+          │                       │
+       College A               College B
+          │                       │
+     ┌────┼────┐             ┌────┼────┐
+     │    │    │             │    │    │
+ Students Docs Staff      Students Docs Staff
+     │
+ Conversations
+     │
+ Profiles
+```
+
+Staff can also belong to multiple colleges through the `staff_colleges` join table.
+
+---
+
+# 🗃️ Data Model
+
+The main PostgreSQL entities are:
+
+```text
+colleges
+   │
+   ├── whatsapp_numbers
+   │
+   ├── documents
+   │      │
+   │      └── chunks
+   │
+   ├── students
+   │      │
+   │      └── student_sessions
+   │              │
+   │              └── messages
+   │
+   └── staff_colleges
+          │
+          └── college_staff
+
+low_confidence_queries
+   ├── student
+   ├── question message
+   └── answer message
+```
+
+The database uses:
+
+* PostgreSQL
+* `pgvector`
+* `pg_cron`
+* JSONB for flexible profile data
+* Composite tenant-aware foreign keys
+* HNSW vector indexes
+
+### Automated database jobs
+
+`pg_cron` handles:
+
+* Closing inactive sessions after 30 minutes
+* Removing expired staff-answer chunks
+
+Celery handles higher-level application jobs such as profile generation and lead scoring.
+
+---
+
+# ⚙️ Background Processing
+
+Admiq uses **Celery + Redis** for asynchronous workloads.
+
+Current scheduled jobs include:
+
+| Job                       |    Frequency | Purpose                               |
+| ------------------------- | -----------: | ------------------------------------- |
+| Closed session processing |  Every 5 min | Generate/merge student profiles       |
+| Lead score recomputation  |        Daily | Recalculate scores as activity decays |
+| Re-engagement check       | Every 10 min | Find eligible inactive leads          |
+
+Document processing is also performed asynchronously so PDF parsing and embedding generation don't block API requests.
+
+---
+
+# 📊 Observability
+
+The application exposes Prometheus metrics covering areas such as:
+
+* API latency
+* Agent latency
+* LLM input/output tokens
+* Retrieval distance
+* Retrieved chunks
+* Relevant chunks
+* Agent errors
+* Agent retries
+* Document ingestion latency
+* OCR method
+* Document quality scores
+* Celery task outcomes
+* Lead score distributions
+* Re-engagement outcomes
+
+**LangSmith** tracing is also integrated for LLM/agent observability.
+
+The Docker Compose stack includes:
+
+* Prometheus
+* Grafana
+* Node Exporter
+* Redis Exporter
+
+This makes it possible to monitor both application behavior and infrastructure.
+
+---
+
+# 🧱 Tech Stack
+
+## Backend
+
+* **Python 3.11**
+* **FastAPI**
+* **SQLAlchemy 2.0**
+* **PostgreSQL**
+* **pgvector**
+* **Celery**
+* **Redis**
+* **Pydantic**
+* **JWT authentication**
+
+## AI / RAG
+
+* **Google Gemini**
+
+  * `gemini-2.5-flash`
+  * `gemini-embedding-001`
+* **LangChain**
+* **LangGraph**
+* **LangSmith**
+* **Docling**
+* **EasyOCR**
+* **Tesseract**
+* **PyMuPDF**
+
+## Frontend
+
+* **React 19**
+* **Vite**
+* **React Router**
+* **TanStack Query**
+* **Tailwind CSS**
+* **Radix UI**
+* **Lucide React**
+
+## Infrastructure
+
+* **Docker / Docker Compose**
+* **Prometheus**
+* **Grafana**
+* **Redis Exporter**
+* **Node Exporter**
+* **Supabase**
+
+---
+
+# 🚀 Getting Started
+
+## Prerequisites
+
+You'll need:
+
+* Docker + Docker Compose
+* A PostgreSQL database with `pgvector` and `pg_cron`
+* Redis
+* Google Gemini API key
+* Supabase project/storage if using the included storage integration
+* Meta WhatsApp Cloud API credentials
+* LangSmith credentials if tracing is enabled
+
+---
+
+## 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd Admiq-main
+```
+
+---
+
+## 2. Configure the backend
+
+Create:
+
+```text
+.env
+```
+
+in the project root for Docker Compose.
+
+Use `.env.example` as the starting point.
+
+Important configuration includes:
+
+```env
+GEMINI_API_KEY=...
+
+LANGCHAIN_TRACING_KEY=true
+LANGCHAIN_API_KEY=...
+LANGCHAIN_PROJECT=CollegeChatbot
+
+DATABASE_URL=...
+REDIS_DATABASE_URL=...
+
+WHATSAPP_VERIFY_TOKEN=...
+META_APP_SECRET=...
+WHATSAPP_ACCESS_TOKEN=...
+```
+
+The backend also supports configuration for:
+
+* LLM models
+* Retrieval thresholds
+* Retry limits
+* Session token budgets
+* Logging
+* Storage
+* JWT authentication
+* Internal task authentication
+
+**Never commit real secrets to Git.**
+
+---
+
+## 3. Initialize the database
+
+The database schema is located at:
+
+```text
+backend/app/schema.sql
+```
+
+It creates:
+
+* Required PostgreSQL extensions
+* Application tables
+* Constraints
+* Vector indexes
+* Scheduled `pg_cron` jobs
+* The private document storage bucket
+
+Apply the schema to your PostgreSQL/Supabase database before running the application.
+
+---
+
+## 4. Start the backend stack
+
+```bash
+docker compose up --build
+```
+
+The Compose stack runs:
+
+```text
+backend
+celery_worker
+celery_beat
+prometheus
+grafana
+node-exporter
+redis-exporter
+```
+
+The API will be available at:
+
+```text
+http://localhost:8000
+```
+
+FastAPI's interactive API documentation is available through its standard Swagger/ReDoc endpoints.
+
+---
+
+# 🖥️ Running the Frontend
+
+The frontend is a separate Vite application.
+
+```bash
+cd frontend
+npm install
+```
+
+Create:
+
+```text
+frontend/.env
+```
+
+with:
+
+```env
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Start the development server:
+
+```bash
+npm run dev
+```
+
+Build for production:
+
+```bash
+npm run build
+```
+
+Run linting:
+
+```bash
+npm run lint
+```
+
+---
+
+# 🔌 API Surface
+
+The backend exposes routes for:
+
+| Area                                    | Purpose                                    |
+| --------------------------------------- | ------------------------------------------ |
+| `/api/v1/whatsapp/webhook`              | WhatsApp webhook verification and messages |
+| `/api/v1/router/test/chat`              | Test the chatbot without WhatsApp          |
+| `/api/v1/router/colleges/...`           | College management                         |
+| `/api/v1/router/staff/...`              | Staff management/authentication            |
+| `/api/v1/router/students/...`           | Student and conversation data              |
+| `/api/v1/router/colleges/.../documents` | Document upload/status                     |
+| `/api/v1/router/low_confidence/...`     | Human review queue                         |
+| Metrics endpoints                       | Prometheus/application metrics             |
+| Health endpoint                         | Service health checks                      |
+
+The exact request/response schemas are defined in:
+
+```text
+backend/app/schemas/
+```
+
+and the corresponding routers live under:
+
+```text
+backend/app/api/v1/routers/
+```
+
+---
+
+# 📁 Project Structure
+
+```text
+Admiq-main/
+│
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── v1/
+│   │   │       └── routers/
+│   │   │           ├── colleges.py
+│   │   │           ├── documents.py
+│   │   │           ├── health_check.py
+│   │   │           ├── low_confidence.py
+│   │   │           ├── metrics.py
+│   │   │           ├── staff.py
+│   │   │           ├── students.py
+│   │   │           ├── test_chat.py
+│   │   │           └── whatsapp_chat.py
+│   │   │
+│   │   ├── background_tasks/
+│   │   │   ├── celery_app.py
+│   │   │   ├── celery_tasks.py
+│   │   │   ├── lead_scoring_tasks.py
+│   │   │   ├── reengagement_tasks.py
+│   │   │   └── student_profile_tasks.py
+│   │   │
+│   │   ├── models/
+│   │   ├── monitoring/
+│   │   ├── rag/
+│   │   │   ├── agent.py
+│   │   │   ├── chunking.py
+│   │   │   ├── document_processor.py
+│   │   │   ├── retrieval.py
+│   │   │   ├── reengagement.py
+│   │   │   ├── security.py
+│   │   │   ├── staff_reply_context.py
+│   │   │   └── student_profile.py
+│   │   ├── schemas/
+│   │   ├── services/
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── main.py
+│   │   └── schema.sql
+│   │
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── frontend/
+│   ├── src/
+│   │   ├── components/
+│   │   ├── context/
+│   │   ├── hooks/
+│   │   ├── lib/
+│   │   └── pages/
+│   │       ├── DashboardHome.jsx
+│   │       ├── Login.jsx
+│   │       ├── LowConfidenceQueue.jsx
+│   │       ├── StaffManagement.jsx
+│   │       ├── StudentsList.jsx
+│   │       ├── StudentDetail.jsx
+│   │       └── CollegeSettings.jsx
+│   ├── package.json
+│   └── vite.config.js
+│
+├── docker-compose.yml
+├── prometheus.yml
+├── .env.example
+└── README.md
+```
+
+---
+
+# 🔐 Security
+
+Admiq includes several security mechanisms:
+
+* JWT-based authentication
+* Password hashing with Argon2
+* College membership verification
+* Tenant-aware database relationships
+* WhatsApp webhook verification
+* WhatsApp message deduplication
+* Rate limiting backed by Redis
+* Private document storage
+* Server-side Supabase service-role credentials
+* Structured request validation through Pydantic
+
+The Supabase service-role key must remain strictly server-side and must never be exposed to the frontend.
+
+---
+
+# 🧪 Testing the Assistant
+
+For development, the project includes a test-chat endpoint so the RAG system can be exercised without configuring a live WhatsApp number.
+
+The intended development flow is:
+
+```text
+Upload college documents
+        ↓
+Wait for document processing
+        ↓
+Verify chunks/embeddings
+        ↓
+Send test question
+        ↓
+Inspect response + sources
+        ↓
+Test low-confidence behavior
+        ↓
+Test staff response
+        ↓
+Verify staff answer becomes retrieval knowledge
+```
+
+This is particularly useful for testing the RAG pipeline before connecting Meta's webhook infrastructure.
+
+---
+
+# ⚠️ Current Limitations
+
+Admiq is an active build rather than a finished production SaaS product.
+
+Current known limitations include:
+
+* Automated test coverage is not yet established
+* Database schema changes are currently managed through `schema.sql` rather than a fully adopted migration workflow
+* CORS is currently configured broadly for development
+* Some production infrastructure and deployment configuration still needs hardening
+* Grafana dashboards are included in the architecture but still require further dashboard work
+* WhatsApp production configuration requires external Meta infrastructure
+* LLM model configuration is currently centered around Gemini
+
+These should be addressed before treating the repository as production-hardened.
+
+---
+
+# 🗺️ Roadmap
+
+Potential next steps include:
+
+* [ ] Comprehensive backend test suite
+* [ ] Frontend automated tests
+* [ ] Production CORS configuration
+* [ ] Formal database migration workflow
+* [ ] Production Grafana dashboards
+* [ ] More granular staff permissions/roles
+* [ ] Improved lead analytics
+* [ ] Richer admissions funnel analytics
+* [ ] More WhatsApp message types
+* [ ] Additional LLM providers/fallbacks
+* [ ] Production deployment automation
+* [ ] Improved document versioning
+* [ ] Better evaluation of RAG answer quality
+* [ ] Automated retrieval/response evaluation datasets
+
+---
+
+# 🎯 Product Philosophy
+
+Admiq is built around a simple distinction:
+
+### AI handles volume.
+
+Repeated questions, document lookup, basic admissions information, follow-ups, and routine conversations can be automated.
+
+### Humans handle intent.
+
+When a student has serious objections, is comparing colleges, is close to making a decision, or asks something the system cannot confidently answer, staff get the context they need to step in.
+
+The system therefore isn't trying to replace admissions counsellors.
+
+It's trying to make sure **their time is spent where it actually matters.**
+
+---
+
+## License
+
+No open-source license has currently been specified for this repository.
+
+Until a license is added, the default copyright protections apply to the codebase.
