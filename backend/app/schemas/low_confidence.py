@@ -14,7 +14,7 @@ class LowConfidenceResponse(BaseModel):
     resolved: bool
     resolved_at: Optional[datetime] = Field(default=None, description="Timestamp when the query was resolved, if applicable.")
     resolved_by: Optional[int] = Field(default=None, description="Staff ID of the user who resolved the query, if applicable.")
-
+    flagged_at: datetime = Field(description="Timestamp when the query was first flagged for human handoff.")
 
 class ReconstructedAnswer(BaseModel):
     question: str = Field(description="Self-contained version of the student's question, with all references resolved.")

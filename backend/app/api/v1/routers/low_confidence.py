@@ -26,12 +26,13 @@ logger = get_logger()
 router = APIRouter(tags=["low_confidence"])
 
 @router.get("/router/low_confidence/{college_id}", response_model=list[LowConfidenceResponse])
-async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
-    low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == False))
+async def get_low_confidence_queries(college_id: int, resolved: bool = False, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == resolved))
     low_confidence_queries = low_confidence_result.scalars().all()
-    LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
+    if not resolved:
+        LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
     if not low_confidence_queries:
-        raise HTTPException(status_code=404, detail="No queries need human handoff at this time.")
+        raise HTTPException(status_code=404, detail="No queries found.")
 
     responses = []
     for query in low_confidence_queries:
@@ -39,7 +40,7 @@ async def get_low_confidence_queries(college_id: int, db: AsyncSession = Depends
         question_content = question_content_result.scalars().first()
         answer_content_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.message_id == query.answer_message_id).limit(1))
         answer_content = answer_content_result.scalars().first()
-        responses.append(LowConfidenceResponse( query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None))
+        responses.append(LowConfidenceResponse(query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None, flagged_at=query.flagged_at))
     return responses
 
 
@@ -54,7 +55,7 @@ async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSess
     question_content = question_content_result.scalars().first()
     answer_content_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.message_id == query.answer_message_id).limit(1))
     answer_content = answer_content_result.scalars().first()
-    return LowConfidenceResponse(query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None)
+    return LowConfidenceResponse(query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None, flagged_at=query.flagged_at)
 
 
 
