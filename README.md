@@ -1,6 +1,6 @@
 # Admiq
 
-**AI-powered admissions support for colleges.**
+**ChatGPT for colleges.**
 
 Admiq is a multi-tenant admissions platform that lets colleges automate repetitive student queries over WhatsApp while giving admissions staff the context they need to follow up with high-intent students.
 
