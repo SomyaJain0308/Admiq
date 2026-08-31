@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -40,6 +41,7 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
         replyMessage,
         expiresAt: new Date(expiresAt).toISOString(),
       })
+      toast.success("Reply sent to student.")
       handleOpenChange(false)
     } catch {
       // error is already captured in resolveMutation.error and shown below
