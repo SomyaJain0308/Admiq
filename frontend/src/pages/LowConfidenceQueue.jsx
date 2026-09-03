@@ -1,9 +1,14 @@
-import { useState } from "react"
-import { Inbox, Loader2 } from "lucide-react"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { useMemo, useState } from "react"
+import { Inbox } from "lucide-react"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
+import { usePagination } from "@/hooks/usePagination"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
+import { PaginationControls } from "@/components/PaginationControls"
+import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { timeSince } from "@/lib/formatTime"
 import {
   Table,
   TableHeader,
@@ -15,8 +20,23 @@ import {
 
 export default function LowConfidenceQueue() {
   const { college, hasNoCollege } = useCurrentCollege()
-  const { data: queries, isLoading, isError, error } = useLowConfidenceQueries(college?.college_id)
+  const [view, setView] = useState("open") // "open" | "resolved"
+  const { data: queries, isLoading, isError, error } = useLowConfidenceQueries(college?.college_id, view === "resolved")
   const [activeQuery, setActiveQuery] = useState(null)
+
+  const sortedQueries = useMemo(() => {
+    if (!queries) return []
+    // Oldest first for the open queue - that's what actually needs attention
+    // soonest. For the resolved view, newest first reads more naturally as a
+    // recent-activity log.
+    return [...queries].sort((a, b) =>
+      view === "open"
+        ? new Date(a.flagged_at) - new Date(b.flagged_at)
+        : new Date(b.resolved_at) - new Date(a.resolved_at)
+    )
+  }, [queries, view])
+
+  const { page, setPage, totalPages, pageItems } = usePagination(sortedQueries, 15)
 
   if (hasNoCollege) {
     return (
@@ -29,19 +49,30 @@ export default function LowConfidenceQueue() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Low-confidence queue</h1>
-        <p className="text-muted-foreground">
-          Questions the assistant wasn't confident enough to answer on its own, for {college.college_name}.
-        </p>
-      </div>
-
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading queue...
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Low-confidence queue</h1>
+          <p className="text-muted-foreground">
+            Questions the assistant wasn't confident enough to answer on its own, for {college.college_name}.
+          </p>
         </div>
-      )}
+        <div className="flex gap-1 rounded-md border bg-muted/30 p-1">
+          <Button
+            variant={view === "open" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setView("open")}
+          >
+            Open
+          </Button>
+          <Button
+            variant={view === "resolved" ? "default" : "ghost"}
+            size="sm"
+            onClick={() => setView("resolved")}
+          >
+            Resolved
+          </Button>
+        </div>
+      </div>
 
       {isError && (
         <p className="text-sm text-destructive">
@@ -49,39 +80,57 @@ export default function LowConfidenceQueue() {
         </p>
       )}
 
-      {!isLoading && !isError && queries?.length === 0 && (
+      {!isLoading && !isError && sortedQueries.length === 0 && (
         <EmptyState
-          title="Nothing waiting on you"
-          description="Every flagged question has been resolved. New ones will show up here automatically."
+          title={view === "open" ? "Nothing waiting on you" : "Nothing resolved yet"}
+          description={
+            view === "open"
+              ? "Every flagged question has been resolved. New ones will show up here automatically."
+              : "Resolved questions will show up here once you've replied to some."
+          }
         />
       )}
 
-      {!isLoading && queries?.length > 0 && (
+      {(isLoading || pageItems.length > 0) && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Question</TableHead>
               <TableHead>Assistant's answer</TableHead>
+              <TableHead className="w-24">{view === "open" ? "Waiting" : "Resolved"}</TableHead>
               <TableHead className="w-24"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {queries.map((query) => (
-              <TableRow key={query.query_id}>
-                <TableCell className="max-w-xs whitespace-normal">{query.question_content}</TableCell>
-                <TableCell className="max-w-xs whitespace-normal text-muted-foreground">
-                  {query.answer_content}
-                </TableCell>
-                <TableCell>
-                  <Button size="sm" onClick={() => setActiveQuery(query)}>
-                    Reply
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {isLoading ? (
+              <TableSkeletonRows columns={4} />
+            ) : (
+              pageItems.map((query) => (
+                <TableRow key={query.query_id}>
+                  <TableCell className="max-w-xs whitespace-normal">{query.question_content}</TableCell>
+                  <TableCell className="max-w-xs whitespace-normal text-muted-foreground">
+                    {query.answer_content}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {timeSince(view === "open" ? query.flagged_at : query.resolved_at)}
+                  </TableCell>
+                  <TableCell>
+                    {view === "open" ? (
+                      <Button size="sm" onClick={() => setActiveQuery(query)}>
+                        Reply
+                      </Button>
+                    ) : (
+                      <Badge variant="secondary">Resolved</Badge>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       )}
+
+      {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
 
       <ReplyToQueryDialog
         query={activeQuery}

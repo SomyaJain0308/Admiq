@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { Toaster } from "sonner"
 import { AuthProvider } from "@/context/AuthContext"
+import { CollegeProvider } from "@/context/CollegeContext"
 import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { DashboardLayout } from "@/components/DashboardLayout"
@@ -29,21 +30,23 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
-            <Toaster richColors position="top-right" />
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route element={<ProtectedRoute />}>
-                <Route element={<DashboardLayout />}>
-                  <Route path="/" element={<DashboardHome />} />
-                  <Route path="/queue" element={<LowConfidenceQueue />} />
-                  <Route path="/staff" element={<StaffManagement />} />
-                  <Route path="/students" element={<StudentsList />} />
-                  <Route path="/students/:studentId" element={<StudentDetail />} />
-                  <Route path="/settings" element={<CollegeSettings />} />
+            <CollegeProvider>
+              <Toaster richColors position="top-right" />
+              <Routes>
+                <Route path="/login" element={<Login />} />
+                <Route element={<ProtectedRoute />}>
+                  <Route element={<DashboardLayout />}>
+                    <Route path="/" element={<DashboardHome />} />
+                    <Route path="/queue" element={<LowConfidenceQueue />} />
+                    <Route path="/staff" element={<StaffManagement />} />
+                    <Route path="/students" element={<StudentsList />} />
+                    <Route path="/students/:studentId" element={<StudentDetail />} />
+                    <Route path="/settings" element={<CollegeSettings />} />
+                  </Route>
                 </Route>
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </CollegeProvider>
           </AuthProvider>
         </BrowserRouter>
       </QueryClientProvider>

@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { Loader2, GraduationCap, Search } from "lucide-react"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { GraduationCap, Search, TriangleAlert } from "lucide-react"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useStudentList } from "@/hooks/useStudents"
+import { usePagination } from "@/hooks/usePagination"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { PaginationControls } from "@/components/PaginationControls"
+import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { leadScoreBand } from "@/lib/leadScore"
 import {
   Table,
@@ -33,6 +36,8 @@ export default function StudentsList() {
       : students
     return [...filtered].sort((a, b) => (b.lead_score ?? 0) - (a.lead_score ?? 0))
   }, [students, search])
+
+  const { page, setPage, totalPages, pageItems } = usePagination(sortedStudents, 15)
 
   if (hasNoCollege) {
     return (
@@ -63,13 +68,6 @@ export default function StudentsList() {
         )}
       </div>
 
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading students...
-        </div>
-      )}
-
       {isError && (
         <p className="text-sm text-destructive">
           {error?.message || "Failed to load students. Please try again."}
@@ -84,39 +82,57 @@ export default function StudentsList() {
         <p className="text-sm text-muted-foreground">No students match "{search}".</p>
       )}
 
-      {!isLoading && sortedStudents.length > 0 && (
+      {(isLoading || pageItems.length > 0) && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Phone</TableHead>
               <TableHead>Course interest</TableHead>
+              <TableHead>Signals</TableHead>
               <TableHead>Lead score</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedStudents.map((student) => {
-              const band = leadScoreBand(student.lead_score ?? 0)
-              return (
-                <TableRow key={student.student_id} className="cursor-pointer">
-                  <TableCell>
-                    <Link to={`/students/${student.student_id}`} className="hover:underline">
-                      {student.student_name || "Unnamed"}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{student.student_phone}</TableCell>
-                  <TableCell className="text-muted-foreground">{student.course_interest || "—"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={band.className}>
-                      {student.lead_score ?? 0} · {band.label}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+            {isLoading ? (
+              <TableSkeletonRows columns={5} />
+            ) : (
+              pageItems.map((student) => {
+                const band = leadScoreBand(student.lead_score ?? 0)
+                const concernCount = student.profile_signals?.concerns?.length || 0
+                return (
+                  <TableRow key={student.student_id} className="cursor-pointer">
+                    <TableCell>
+                      <Link to={`/students/${student.student_id}`} className="hover:underline">
+                        {student.student_name || "Unnamed"}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{student.student_phone}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.course_interest || "—"}</TableCell>
+                    <TableCell>
+                      {concernCount > 0 ? (
+                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700">
+                          <TriangleAlert className="size-3" />
+                          {concernCount} concern{concernCount > 1 ? "s" : ""}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={band.className}>
+                        {student.lead_score ?? 0} · {band.label}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
           </TableBody>
         </Table>
       )}
+
+      {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
     </div>
   )
 }

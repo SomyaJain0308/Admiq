@@ -1,11 +1,17 @@
 import { Link } from "react-router-dom"
+import { Suspense, lazy } from "react"
 import { Inbox, GraduationCap, Users, ArrowRight, Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { useStudentList } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
+
+// recharts is a heavy dependency (~340kB) - lazy-loaded so it's only fetched
+// when the dashboard home actually renders, not bundled into the main chunk
+// that loads on every single page, including the login screen.
+const LeadScoreChart = lazy(() => import("@/components/LeadScoreChart").then((m) => ({ default: m.LeadScoreChart })))
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -57,6 +63,20 @@ export default function DashboardHome() {
           description="With access to this college"
         />
       </div>
+
+      {studentsQuery.data?.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Lead score distribution</CardTitle>
+            <CardDescription>Where your student pool currently sits, from cold to hot.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Suspense fallback={<div className="h-[220px] animate-pulse rounded-md bg-accent" />}>
+              <LeadScoreChart students={studentsQuery.data} />
+            </Suspense>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

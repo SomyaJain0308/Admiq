@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useCollegeDetail, useUpdateCollege } from "@/hooks/useCollege"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"

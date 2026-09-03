@@ -45,7 +45,19 @@ export function useDeleteStaff(collegeId) {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (staffId) => api.delete(`/router/staff/${collegeId}/${staffId}`),
-    onSuccess: () => {
+    onMutate: async (staffId) => {
+      const queryKey = ["staff", collegeId]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      queryClient.setQueryData(queryKey, (old) => (old || []).filter((s) => s.staff_id !== staffId))
+      return { previous, queryKey }
+    },
+    onError: (_err, _vars, context) => {
+      if (context) {
+        queryClient.setQueryData(context.queryKey, context.previous)
+      }
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", collegeId] })
     },
   })

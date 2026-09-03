@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom"
 import { ArrowLeft, Loader2 } from "lucide-react"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useStudentDetail, useConversation } from "@/hooks/useStudents"
 import { ConversationView } from "@/components/ConversationView"
 import { Badge } from "@/components/ui/badge"

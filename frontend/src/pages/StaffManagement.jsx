@@ -1,10 +1,13 @@
 import { useMemo, useState } from "react"
-import { Loader2, Plus, Pencil, Trash2, Users, Search } from "lucide-react"
+import { Plus, Pencil, Trash2, Users, Search } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
-import { useCurrentCollege } from "@/hooks/useCurrentCollege"
+import { useCurrentCollege } from "@/context/CollegeContext"
 import { useStaffList, useDeleteStaff } from "@/hooks/useStaff"
+import { usePagination } from "@/hooks/usePagination"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
+import { PaginationControls } from "@/components/PaginationControls"
+import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -35,6 +38,8 @@ export default function StaffManagement() {
       (s) => s.staff_name?.toLowerCase().includes(query) || s.staff_email?.toLowerCase().includes(query)
     )
   }, [staff, search])
+
+  const { page, setPage, totalPages, pageItems } = usePagination(filteredStaff, 15)
 
   function openCreateDialog() {
     setEditingStaff(null)
@@ -92,13 +97,6 @@ export default function StaffManagement() {
         </div>
       </div>
 
-      {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" />
-          Loading staff...
-        </div>
-      )}
-
       {isError && (
         <p className="text-sm text-destructive">
           {error?.message || "Failed to load staff. Please try again."}
@@ -113,7 +111,7 @@ export default function StaffManagement() {
         <p className="text-sm text-muted-foreground">No staff match "{search}".</p>
       )}
 
-      {!isLoading && filteredStaff.length > 0 && (
+      {(isLoading || pageItems.length > 0) && (
         <Table>
           <TableHeader>
             <TableRow>
@@ -124,41 +122,47 @@ export default function StaffManagement() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredStaff.map((member) => {
-              const isSelf = member.staff_id === user?.staff_id
-              return (
-                <TableRow key={member.staff_id}>
-                  <TableCell>
-                    {member.staff_name}
-                    {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{member.staff_email}</TableCell>
-                  <TableCell>
-                    <Badge variant={member.is_active ? "default" : "secondary"}>
-                      {member.is_active ? "Active" : "Inactive"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => openEditDialog(member)}>
-                        <Pencil className="size-4" />
-                      </Button>
-                      {/* Self-delete is only blocked here in the UI - the backend
-                          doesn't stop you from deleting your own account, so this
-                          button is a safety net, not the real enforcement. */}
-                      {!isSelf && (
-                        <Button variant="ghost" size="icon" onClick={() => handleDelete(member)}>
-                          <Trash2 className="size-4 text-destructive" />
+            {isLoading ? (
+              <TableSkeletonRows columns={4} />
+            ) : (
+              pageItems.map((member) => {
+                const isSelf = member.staff_id === user?.staff_id
+                return (
+                  <TableRow key={member.staff_id}>
+                    <TableCell>
+                      {member.staff_name}
+                      {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{member.staff_email}</TableCell>
+                    <TableCell>
+                      <Badge variant={member.is_active ? "default" : "secondary"}>
+                        {member.is_active ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(member)}>
+                          <Pencil className="size-4" />
                         </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+                        {/* Self-delete is only blocked here in the UI - the backend
+                            doesn't stop you from deleting your own account, so this
+                            button is a safety net, not the real enforcement. */}
+                        {!isSelf && (
+                          <Button variant="ghost" size="icon" onClick={() => handleDelete(member)}>
+                            <Trash2 className="size-4 text-destructive" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            )}
           </TableBody>
         </Table>
       )}
+
+      {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
 
       <StaffFormDialog
         collegeId={college?.college_id}
