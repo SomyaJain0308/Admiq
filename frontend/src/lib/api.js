@@ -98,6 +98,11 @@ export const api = {
     return request(`${path}?${search}`, { method: "POST" })
   },
 
+  // For multipart/form-data uploads (e.g. document files). Deliberately
+  // does NOT set Content-Type - the browser sets it itself, including the
+  // multipart boundary, and setting it manually here would break the upload.
+  postFormData: (path, formData) => request(path, { method: "POST", body: formData }),
+
   // Auth endpoints need special handling: /token takes form-encoded data
   // (FastAPI's OAuth2PasswordRequestForm), not JSON like everything else.
   login: async (email, password) => {

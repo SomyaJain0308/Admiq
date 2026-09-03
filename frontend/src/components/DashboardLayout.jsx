@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { NavLink, Outlet } from "react-router-dom"
-import { LayoutDashboard, Inbox, Users, GraduationCap, Settings, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
+import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useTheme } from "@/hooks/useTheme"
@@ -12,6 +12,7 @@ const navItems = [
   { to: "/queue", label: "Low-confidence queue", icon: Inbox },
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/students", label: "Students", icon: GraduationCap },
+  { to: "/documents", label: "Documents", icon: FileText },
   { to: "/settings", label: "College settings", icon: Settings },
 ]
 

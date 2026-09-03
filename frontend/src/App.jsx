@@ -13,6 +13,7 @@ import StaffManagement from "@/pages/StaffManagement"
 import StudentsList from "@/pages/StudentsList"
 import StudentDetail from "@/pages/StudentDetail"
 import CollegeSettings from "@/pages/CollegeSettings"
+import DocumentsPage from "@/pages/DocumentsPage"
 import NotFound from "@/pages/NotFound"
 
 const queryClient = new QueryClient({
@@ -41,6 +42,7 @@ export default function App() {
                     <Route path="/staff" element={<StaffManagement />} />
                     <Route path="/students" element={<StudentsList />} />
                     <Route path="/students/:studentId" element={<StudentDetail />} />
+                    <Route path="/documents" element={<DocumentsPage />} />
                     <Route path="/settings" element={<CollegeSettings />} />
                   </Route>
                 </Route>

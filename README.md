@@ -93,8 +93,7 @@ The core assistant is implemented as a **LangGraph state machine**.
                  ┌────────────┴────────────┐
                  │                         │
           No retrieval needed        Retrieval needed
-                 │                         │
-                 │                         ▼
+                 │                         │                 │                         ▼
                  │                  ┌─────────────┐
                  │                  │   Retrieve  │
                  │                  └──────┬──────┘
