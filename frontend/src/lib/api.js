@@ -113,4 +113,11 @@ export const api = {
   },
   refresh: doRefresh,
   logout: (refreshToken) => request("/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }) }, { skipAuth: true }),
+
+  // Both intentionally skipAuth - the person isn't logged in yet when they
+  // need these.
+  forgotPassword: (staffEmail) =>
+    request("/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ staff_email: staffEmail }) }, { skipAuth: true }),
+  resetPassword: (token, newPassword) =>
+    request("/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, new_password: newPassword }) }, { skipAuth: true }),
 }

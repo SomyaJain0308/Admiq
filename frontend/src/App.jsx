@@ -7,6 +7,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary"
 import { ProtectedRoute } from "@/components/ProtectedRoute"
 import { DashboardLayout } from "@/components/DashboardLayout"
 import Login from "@/pages/Login"
+import ForgotPassword from "@/pages/ForgotPassword"
+import ResetPassword from "@/pages/ResetPassword"
 import DashboardHome from "@/pages/DashboardHome"
 import LowConfidenceQueue from "@/pages/LowConfidenceQueue"
 import StaffManagement from "@/pages/StaffManagement"
@@ -35,6 +37,8 @@ export default function App() {
               <Toaster richColors position="top-right" />
               <Routes>
                 <Route path="/login" element={<Login />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<ProtectedRoute />}>
                   <Route element={<DashboardLayout />}>
                     <Route path="/" element={<DashboardHome />} />
