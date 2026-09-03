@@ -25,7 +25,13 @@ export function CollegeProvider({ children }) {
     localStorage.setItem(SELECTED_COLLEGE_KEY, String(collegeId))
   }
 
-  const college = colleges.find((c) => c.college_id === selectedCollegeId) || null
+  // Falls back to the first college whenever selectedCollegeId hasn't been
+  // resolved yet (e.g. the very first render right after login, before the
+  // effect below has had a chance to run and set it from localStorage).
+  // Without this fallback there's a real render where colleges.length > 0
+  // (so hasNoCollege is false and pages proceed) but college is still null,
+  // which crashes any page that reads college.college_name directly.
+  const college = colleges.find((c) => c.college_id === selectedCollegeId) || colleges[0] || null
 
   const value = {
     college,
