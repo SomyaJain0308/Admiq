@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi_limiter import FastAPILimiter
 import redis.asyncio as redis
 import os
@@ -75,3 +76,18 @@ app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(low_confidence_router)
 app.include_router(students_router)
+
+
+# Without this, an unhandled exception in a route (anything that isn't a
+# clean HTTPException) is caught by Starlette's outermost error-handling
+# layer, which sits OUTSIDE CORSMiddleware - so the resulting 500 goes back
+# to the browser with no Access-Control-Allow-Origin header at all. The
+# browser can't tell that apart from an actual CORS misconfiguration, so it
+# reports it as one, which is exactly as confusing to debug as it sounds.
+# Registering a handler here keeps the response inside the layer that
+# CORSMiddleware wraps, so real errors show up as real errors (500, with the
+# actual detail) instead of masquerading as CORS failures.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception", extra={"extra_data": {"path": request.url.path}})
+    return JSONResponse(status_code=500, content={"detail": "Internal server error"})
