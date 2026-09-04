@@ -5,7 +5,8 @@ import { TriangleAlert, Building2, UserCheck, AlertOctagon } from "lucide-react"
 // list of many students at once. Ordered roughly by how urgently a staff
 // member would want to notice it - "gone quiet" outranks a garden-variety
 // concern, which outranks just knowing a guardian is involved.
-export function getSignalChips(signals = {}) {
+export function getSignalChips(signals) {
+  signals ??= {}
   const chips = []
 
   if (signals.dropoff_reason) {
