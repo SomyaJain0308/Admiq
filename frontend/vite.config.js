@@ -10,6 +10,16 @@ export default defineConfig({
       "@": path.resolve(import.meta.dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      input: {
+        // Static marketing landing page, served at "/".
+        landing: path.resolve(import.meta.dirname, "index.html"),
+        // React SPA (dashboard), served at "/app/".
+        app: path.resolve(import.meta.dirname, "app/index.html"),
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     globals: true,
