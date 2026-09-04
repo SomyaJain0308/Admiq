@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react"
-import { Plus, Pencil, Trash2, Users, Search } from "lucide-react"
+import { useState } from "react"
+import { Plus, Pencil, Trash2, Users, Search, Download, Loader2 } from "lucide-react"
 import { toast } from "sonner"
 import { useAuth } from "@/context/AuthContext"
 import { useCurrentCollege } from "@/context/CollegeContext"
-import { useStaffList, useDeleteStaff } from "@/hooks/useStaff"
-import { usePagination } from "@/hooks/usePagination"
+import { useStaffList, useDeleteStaff, exportStaff } from "@/hooks/useStaff"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
@@ -20,26 +20,35 @@ import {
   TableCell,
 } from "@/components/ui/table"
 
+const PAGE_SIZE = 15
+
 export default function StaffManagement() {
   const { user } = useAuth()
   const { college, hasNoCollege } = useCurrentCollege()
-  const { data: staff, isLoading, isError, error } = useStaffList(college?.college_id)
-  const deleteMutation = useDeleteStaff(college?.college_id)
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
   const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const [isExporting, setIsExporting] = useState(false)
+  const debouncedSearch = useDebouncedValue(search, 350)
 
-  const filteredStaff = useMemo(() => {
-    if (!staff) return []
-    const query = search.trim().toLowerCase()
-    if (!query) return staff
-    return staff.filter(
-      (s) => s.staff_name?.toLowerCase().includes(query) || s.staff_email?.toLowerCase().includes(query)
-    )
-  }, [staff, search])
+  const [prevSearch, setPrevSearch] = useState(debouncedSearch)
+  if (debouncedSearch !== prevSearch) {
+    setPrevSearch(debouncedSearch)
+    setPage(1)
+  }
 
-  const { page, setPage, totalPages, pageItems } = usePagination(filteredStaff, 15)
+  const { data, isLoading, isFetching, isError, error } = useStaffList(college?.college_id, {
+    page,
+    pageSize: PAGE_SIZE,
+    search: debouncedSearch,
+  })
+  const deleteMutation = useDeleteStaff(college?.college_id)
+
+  const staff = data?.items || []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   function openCreateDialog() {
     setEditingStaff(null)
@@ -62,6 +71,17 @@ export default function StaffManagement() {
     }
   }
 
+  async function handleExport() {
+    setIsExporting(true)
+    try {
+      await exportStaff(college.college_id, debouncedSearch)
+    } catch (err) {
+      toast.error(err?.message || "Failed to export. Please try again.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
+
   if (hasNoCollege) {
     return (
       <EmptyState
@@ -79,15 +99,20 @@ export default function StaffManagement() {
           <p className="text-muted-foreground">Manage who has access to {college.college_name}.</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          {staff?.length > 0 && (
-            <div className="relative w-full sm:w-56">
-              <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search name or email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-8"
-              />
+          {(total > 0 || debouncedSearch) && (
+            <div className="flex gap-2">
+              <div className="relative w-full sm:w-56">
+                <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search name or email..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-8"
+                />
+              </div>
+              <Button variant="outline" size="icon" onClick={handleExport} disabled={isExporting} title="Export to CSV">
+                {isExporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+              </Button>
             </div>
           )}
           <Button onClick={openCreateDialog} className="gap-2">
@@ -103,16 +128,16 @@ export default function StaffManagement() {
         </p>
       )}
 
-      {!isLoading && !isError && staff?.length === 0 && (
+      {!isLoading && !isError && total === 0 && !debouncedSearch && (
         <EmptyState title="No staff yet" description="Add the first staff member for this college." />
       )}
 
-      {!isLoading && staff?.length > 0 && filteredStaff.length === 0 && (
-        <p className="text-sm text-muted-foreground">No staff match "{search}".</p>
+      {!isLoading && total === 0 && debouncedSearch && (
+        <p className="text-sm text-muted-foreground">No staff match "{debouncedSearch}".</p>
       )}
 
-      {(isLoading || pageItems.length > 0) && (
-        <Table>
+      {(isLoading || staff.length > 0) && (
+        <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
@@ -125,7 +150,7 @@ export default function StaffManagement() {
             {isLoading ? (
               <TableSkeletonRows columns={4} />
             ) : (
-              pageItems.map((member) => {
+              staff.map((member) => {
                 const isSelf = member.staff_id === user?.staff_id
                 return (
                   <TableRow key={member.staff_id}>

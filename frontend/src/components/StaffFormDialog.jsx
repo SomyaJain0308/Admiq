@@ -18,6 +18,9 @@ const emptyForm = { staff_name: "", staff_email: "", password: "", is_active: tr
 export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff }) {
   const isEditMode = !!editingStaff
   const [form, setForm] = useState(emptyForm)
+  // Default to inviting new staff by email rather than setting a password
+  // for them directly - only relevant in create mode.
+  const [sendInvite, setSendInvite] = useState(true)
 
   const createMutation = useCreateStaff(collegeId)
   const updateMutation = useUpdateStaff(collegeId)
@@ -30,6 +33,7 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
           ? { staff_name: editingStaff.staff_name, staff_email: editingStaff.staff_email, password: "", is_active: editingStaff.is_active }
           : emptyForm
       )
+      setSendInvite(true)
       mutation.reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -47,6 +51,9 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
         }
         await updateMutation.mutateAsync({ staffId: editingStaff.staff_id, updates })
         toast.success("Staff member updated.")
+      } else if (sendInvite) {
+        await createMutation.mutateAsync({ staff_name: form.staff_name, staff_email: form.staff_email, is_active: form.is_active, password: null })
+        toast.success(`Invite sent to ${form.staff_email}.`)
       } else {
         await createMutation.mutateAsync(form)
         toast.success("Staff member added.")
@@ -90,18 +97,34 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
               onChange={(e) => setForm((f) => ({ ...f, staff_email: e.target.value }))}
             />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="password">{isEditMode ? "New password (optional)" : "Password"}</Label>
-            <Input
-              id="password"
-              type="password"
-              required={!isEditMode}
-              minLength={8}
-              value={form.password}
-              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-              placeholder={isEditMode ? "Leave blank to keep current password" : "At least 8 characters"}
-            />
-          </div>
+
+          {!isEditMode && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={sendInvite}
+                onChange={(e) => setSendInvite(e.target.checked)}
+                className="size-4 rounded border-input"
+              />
+              Email them a link to set their own password
+            </label>
+          )}
+
+          {(isEditMode || !sendInvite) && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="password">{isEditMode ? "New password (optional)" : "Password"}</Label>
+              <Input
+                id="password"
+                type="password"
+                required={!isEditMode}
+                minLength={8}
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+                placeholder={isEditMode ? "Leave blank to keep current password" : "At least 8 characters"}
+              />
+            </div>
+          )}
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -120,7 +143,7 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
 
           <DialogFooter>
             <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? "Saving..." : isEditMode ? "Save changes" : "Add staff"}
+              {mutation.isPending ? "Saving..." : isEditMode ? "Save changes" : sendInvite ? "Send invite" : "Add staff"}
             </Button>
           </DialogFooter>
         </form>

@@ -1,23 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api, ApiError } from "@/lib/api"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
+import { api } from "@/lib/api"
 
-export function useStaffList(collegeId) {
+export function useStaffList(collegeId, { page = 1, pageSize = 20, search = "" } = {}) {
   return useQuery({
-    queryKey: ["staff", collegeId],
-    queryFn: async () => {
-      try {
-        return await api.get(`/router/staff/${collegeId}`)
-      } catch (err) {
-        // 404 here means "no staff yet" (shouldn't really happen since the
-        // caller themselves is staff, but handle it the same way as the
-        // queue's empty state rather than showing a scary error).
-        if (err instanceof ApiError && err.status === 404) {
-          return []
-        }
-        throw err
-      }
+    queryKey: ["staff", collegeId, page, pageSize, search],
+    queryFn: () => {
+      const params = new URLSearchParams({ page, page_size: pageSize })
+      if (search) params.set("search", search)
+      return api.get(`/router/staff/${collegeId}?${params.toString()}`)
     },
     enabled: !!collegeId,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -26,6 +19,8 @@ export function useCreateStaff(collegeId) {
   return useMutation({
     mutationFn: (staffData) => api.post(`/router/staff/${collegeId}`, staffData),
     onSuccess: () => {
+      // Prefix match (no page/pageSize/search in this key) invalidates every
+      // cached page/search variant for this college, not just one.
       queryClient.invalidateQueries({ queryKey: ["staff", collegeId] })
     },
   })
@@ -48,17 +43,29 @@ export function useDeleteStaff(collegeId) {
     onMutate: async (staffId) => {
       const queryKey = ["staff", collegeId]
       await queryClient.cancelQueries({ queryKey })
-      const previous = queryClient.getQueryData(queryKey)
-      queryClient.setQueryData(queryKey, (old) => (old || []).filter((s) => s.staff_id !== staffId))
-      return { previous, queryKey }
+      // Snapshot every cached page/search variant so onError can restore all
+      // of them, not just whichever one happened to be active.
+      const previous = queryClient.getQueriesData({ queryKey })
+      queryClient.setQueriesData({ queryKey }, (old) => {
+        if (!old?.items) return old
+        return { ...old, items: old.items.filter((s) => s.staff_id !== staffId), total: Math.max(0, old.total - 1) }
+      })
+      return { previous }
     },
     onError: (_err, _vars, context) => {
-      if (context) {
-        queryClient.setQueryData(context.queryKey, context.previous)
-      }
+      context?.previous?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data)
+      })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["staff", collegeId] })
     },
   })
+}
+
+export function exportStaff(collegeId, search = "") {
+  const params = new URLSearchParams()
+  if (search) params.set("search", search)
+  const query = params.toString()
+  return api.downloadFile(`/router/staff/${collegeId}/export${query ? `?${query}` : ""}`)
 }

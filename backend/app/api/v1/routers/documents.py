@@ -33,6 +33,12 @@ async def upload_document(college_id: int, file: UploadFile = File(...), db: Ses
     process_document_task.delay(document_id = doc.document_id, college_id=college_id)
     return {"document_id": doc.document_id, "status": doc.document_status}
 
+@router.get("/router/colleges/{college_id}/documents")
+async def list_documents(college_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    result = await db.execute(select(Document).where(Document.college_id == college_id).order_by(Document.created_at.desc()))
+    docs = result.scalars().all()
+    return [{"document_id": d.document_id, "file_name": d.file_name, "status": d.document_status, "extraction_method": d.extraction_method, "quality_score": float(d.quality_score) if d.quality_score is not None else None, "num_pages": d.num_pages, "error": d.error, "created_at": d.created_at.isoformat()} for d in docs]
+
 @router.get("/router/colleges/{college_id}/documents/{document_id}")
 async def get_document_status(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))

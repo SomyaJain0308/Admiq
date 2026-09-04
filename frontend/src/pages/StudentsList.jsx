@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Link } from "react-router-dom"
-import { GraduationCap, Search, TriangleAlert } from "lucide-react"
+import { Download, GraduationCap, Loader2, Search, TriangleAlert } from "lucide-react"
+import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/CollegeContext"
-import { useStudentList } from "@/hooks/useStudents"
-import { usePagination } from "@/hooks/usePagination"
+import { useStudentList, exportStudents } from "@/hooks/useStudents"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { leadScoreBand } from "@/lib/leadScore"
@@ -18,26 +20,46 @@ import {
   TableCell,
 } from "@/components/ui/table"
 
+const PAGE_SIZE = 15
+
 export default function StudentsList() {
   const { college, hasNoCollege } = useCurrentCollege()
-  const { data: students, isLoading, isError, error } = useStudentList(college?.college_id)
   const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const debouncedSearch = useDebouncedValue(search, 350)
+  const [isExporting, setIsExporting] = useState(false)
 
-  const sortedStudents = useMemo(() => {
-    if (!students) return []
-    const query = search.trim().toLowerCase()
-    const filtered = query
-      ? students.filter(
-          (s) =>
-            s.student_name?.toLowerCase().includes(query) ||
-            s.student_phone?.toLowerCase().includes(query) ||
-            s.course_interest?.toLowerCase().includes(query)
-        )
-      : students
-    return [...filtered].sort((a, b) => (b.lead_score ?? 0) - (a.lead_score ?? 0))
-  }, [students, search])
+  // A new search term invalidates whatever page you were on - always land
+  // back on page 1 rather than a now-meaningless "page 4 of a 1-page result".
+  // Adjusting state directly during render (React's own recommended pattern
+  // for this) rather than a useEffect - no extra render/flicker, and avoids
+  // the setState-in-effect lint warning.
+  const [prevSearch, setPrevSearch] = useState(debouncedSearch)
+  if (debouncedSearch !== prevSearch) {
+    setPrevSearch(debouncedSearch)
+    setPage(1)
+  }
 
-  const { page, setPage, totalPages, pageItems } = usePagination(sortedStudents, 15)
+  const { data, isLoading, isFetching, isError, error } = useStudentList(college?.college_id, {
+    page,
+    pageSize: PAGE_SIZE,
+    search: debouncedSearch,
+  })
+
+  const students = data?.items || []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
+
+  async function handleExport() {
+    setIsExporting(true)
+    try {
+      await exportStudents(college.college_id, debouncedSearch)
+    } catch (err) {
+      toast.error(err?.message || "Failed to export. Please try again.")
+    } finally {
+      setIsExporting(false)
+    }
+  }
 
   if (hasNoCollege) {
     return (
@@ -55,15 +77,20 @@ export default function StudentsList() {
           <h1 className="text-2xl font-semibold">Students</h1>
           <p className="text-muted-foreground">Every student who's messaged {college.college_name}, sorted by lead score.</p>
         </div>
-        {students?.length > 0 && (
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search name, phone, course..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8"
-            />
+        {(total > 0 || debouncedSearch) && (
+          <div className="flex gap-2">
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search name, phone, course..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8"
+              />
+            </div>
+            <Button variant="outline" size="icon" onClick={handleExport} disabled={isExporting} title="Export to CSV">
+              {isExporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+            </Button>
           </div>
         )}
       </div>
@@ -74,16 +101,16 @@ export default function StudentsList() {
         </p>
       )}
 
-      {!isLoading && !isError && students?.length === 0 && (
+      {!isLoading && !isError && total === 0 && !debouncedSearch && (
         <EmptyState title="No students yet" description="Students will show up here once they message your WhatsApp number." />
       )}
 
-      {!isLoading && students?.length > 0 && sortedStudents.length === 0 && (
-        <p className="text-sm text-muted-foreground">No students match "{search}".</p>
+      {!isLoading && total === 0 && debouncedSearch && (
+        <p className="text-sm text-muted-foreground">No students match "{debouncedSearch}".</p>
       )}
 
-      {(isLoading || pageItems.length > 0) && (
-        <Table>
+      {(isLoading || students.length > 0) && (
+        <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
@@ -97,7 +124,7 @@ export default function StudentsList() {
             {isLoading ? (
               <TableSkeletonRows columns={5} />
             ) : (
-              pageItems.map((student) => {
+              students.map((student) => {
                 const band = leadScoreBand(student.lead_score ?? 0)
                 const concernCount = student.profile_signals?.concerns?.length || 0
                 return (
@@ -111,7 +138,7 @@ export default function StudentsList() {
                     <TableCell className="text-muted-foreground">{student.course_interest || "—"}</TableCell>
                     <TableCell>
                       {concernCount > 0 ? (
-                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700">
+                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
                           <TriangleAlert className="size-3" />
                           {concernCount} concern{concernCount > 1 ? "s" : ""}
                         </Badge>

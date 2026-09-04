@@ -50,7 +50,19 @@ async def lifespan(app: FastAPI): # Initialize all components on startup
 
 app = FastAPI(title="Admiq", description="A college admission chatbot.", version="1.0.0", lifespan=lifespan)
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]) # NOTE: change allow_origins in production.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://admiq-v1.vercel.app",
+        "http://localhost:5173",  # local frontend dev server
+    ],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    # Needed so the frontend's downloadFile() can read the server's suggested
+    # filename for CSV exports - browsers don't expose this header across
+    # origins by default even though the response includes it.
+    expose_headers=["Content-Disposition"],
+)
 
 
 app.include_router(documents_router)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from datetime import datetime
@@ -25,14 +25,35 @@ logger = get_logger()
 
 router = APIRouter(tags=["low_confidence"])
 
-@router.get("/router/low_confidence/{college_id}", response_model=list[LowConfidenceResponse])
-async def get_low_confidence_queries(college_id: int, resolved: bool = False, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
-    low_confidence_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == resolved))
-    low_confidence_queries = low_confidence_result.scalars().all()
+@router.get("/router/low_confidence/{college_id}")
+async def get_low_confidence_queries(
+    college_id: int,
+    resolved: bool = False,
+    page: int = 1,
+    page_size: int = 20,
+    db: AsyncSession = Depends(get_db),
+    membership: CollegeStaff = Depends(verify_college_access),
+):
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
+
+    base_filter = (LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.resolved == resolved)
+    total = (await db.execute(select(func.count()).select_from(LowConfidenceQuery).where(*base_filter))).scalar_one()
+
     if not resolved:
-        LOW_CONFIDENCE_QUERIES_OPEN.set(len(low_confidence_queries))
-    if not low_confidence_queries:
-        raise HTTPException(status_code=404, detail="No queries found.")
+        # Keep the live open-queue gauge reflecting the true total, not just
+        # what's on the current page.
+        LOW_CONFIDENCE_QUERIES_OPEN.set(total)
+
+    # Oldest-flagged-first for the open queue - whoever's been waiting
+    # longest should surface first, matching the "waiting time" column shown
+    # on this page. For the resolved view, newest-resolved-first reads more
+    # naturally as a recent-activity log instead.
+    order_column = LowConfidenceQuery.resolved_at.desc() if resolved else LowConfidenceQuery.flagged_at.asc()
+    low_confidence_result = await db.execute(
+        select(LowConfidenceQuery).where(*base_filter).order_by(order_column).offset((page - 1) * page_size).limit(page_size)
+    )
+    low_confidence_queries = low_confidence_result.scalars().all()
 
     responses = []
     for query in low_confidence_queries:
@@ -41,7 +62,7 @@ async def get_low_confidence_queries(college_id: int, resolved: bool = False, db
         answer_content_result = await db.execute(select(Message.content).where(Message.college_id == college_id, Message.message_id == query.answer_message_id).limit(1))
         answer_content = answer_content_result.scalars().first()
         responses.append(LowConfidenceResponse(query_id=query.query_id, college_id=query.college_id, student_id=query.student_id, question_message_id=query.question_message_id, question_content=question_content, answer_message_id=query.answer_message_id, answer_content=answer_content, resolved=query.resolved, resolved_at=query.resolved_at if query.resolved_at else None, resolved_by=query.resolved_by if query.resolved_by else None, flagged_at=query.flagged_at))
-    return responses
+    return {"items": responses, "total": total, "page": page, "page_size": page_size}
 
 
 

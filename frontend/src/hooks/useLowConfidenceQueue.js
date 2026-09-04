@@ -1,22 +1,12 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api, ApiError } from "@/lib/api"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
+import { api } from "@/lib/api"
 
-export function useLowConfidenceQueries(collegeId, resolved = false) {
+export function useLowConfidenceQueries(collegeId, resolved = false, { page = 1, pageSize = 20 } = {}) {
   return useQuery({
-    queryKey: ["low-confidence-queries", collegeId, resolved],
-    queryFn: async () => {
-      try {
-        return await api.get(`/router/low_confidence/${collegeId}?resolved=${resolved}`)
-      } catch (err) {
-        // The backend returns a 404 when there are none matching, rather
-        // than an empty array - that's a real, expected state here.
-        if (err instanceof ApiError && err.status === 404) {
-          return []
-        }
-        throw err
-      }
-    },
+    queryKey: ["low-confidence-queries", collegeId, resolved, page, pageSize],
+    queryFn: () => api.get(`/router/low_confidence/${collegeId}?resolved=${resolved}&page=${page}&page_size=${pageSize}`),
     enabled: !!collegeId,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -31,17 +21,22 @@ export function useResolveLowConfidenceQuery(collegeId) {
     // Optimistic update: remove the query from the open list immediately,
     // rather than waiting for the round trip - replying feels instant. If the
     // request actually fails, roll the cache back to what it was before.
+    // Prefix-matches every cached page of the open (resolved=false) queue,
+    // since the reply could've come from any page currently in cache.
     onMutate: async ({ queryId }) => {
       const queryKey = ["low-confidence-queries", collegeId, false]
       await queryClient.cancelQueries({ queryKey })
-      const previous = queryClient.getQueryData(queryKey)
-      queryClient.setQueryData(queryKey, (old) => (old || []).filter((q) => q.query_id !== queryId))
-      return { previous, queryKey }
+      const previous = queryClient.getQueriesData({ queryKey })
+      queryClient.setQueriesData({ queryKey }, (old) => {
+        if (!old?.items) return old
+        return { ...old, items: old.items.filter((q) => q.query_id !== queryId), total: Math.max(0, old.total - 1) }
+      })
+      return { previous }
     },
     onError: (_err, _vars, context) => {
-      if (context) {
-        queryClient.setQueryData(context.queryKey, context.previous)
-      }
+      context?.previous?.forEach(([key, data]) => {
+        queryClient.setQueryData(key, data)
+      })
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["low-confidence-queries", collegeId] })

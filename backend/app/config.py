@@ -60,6 +60,16 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     # Internal Schedules Tasks
     internal_task_token: str = ""
 
+    # Used to build links that get emailed out (e.g. password reset) - point
+    # this at the deployed Vercel URL in production, http://localhost:5173 locally.
+    frontend_url: str = "http://localhost:5173"
+
+    # Resend (email.resend.com) - free tier, used for password reset emails.
+    # resend_from_email must be on a domain verified in your Resend dashboard,
+    # or use the default "onboarding@resend.dev" for testing before that's set up.
+    resend_api_key: str = ""
+    resend_from_email: str = "onboarding@resend.dev"
+
 
     @property
     def is_production(self) -> bool:

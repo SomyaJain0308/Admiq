@@ -9,7 +9,12 @@ class StaffBase(BaseModel):
 
 
 class StaffCreate(StaffBase):
-    password: str = Field(min_length=8, max_length=100)
+    # Optional now: if left blank, the staff member is created with a random,
+    # never-revealed placeholder password and sent an invite email to set
+    # their own - see send_invite in the create_staff endpoint. Still
+    # settable directly for cases where an admin wants to hand someone
+    # credentials in person instead of relying on email.
+    password: str | None = Field(default=None, min_length=8, max_length=100)
     is_active: bool = Field(default=True)
 
 
@@ -51,3 +56,12 @@ class Token(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    staff_email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str = Field(min_length=8, max_length=100)

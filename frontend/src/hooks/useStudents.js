@@ -1,20 +1,19 @@
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, keepPreviousData } from "@tanstack/react-query"
 import { api, ApiError } from "@/lib/api"
 
-export function useStudentList(collegeId) {
+export function useStudentList(collegeId, { page = 1, pageSize = 20, search = "" } = {}) {
   return useQuery({
-    queryKey: ["students", collegeId],
-    queryFn: async () => {
-      try {
-        return await api.get(`/router/students/${collegeId}`)
-      } catch (err) {
-        if (err instanceof ApiError && err.status === 404) {
-          return []
-        }
-        throw err
-      }
+    queryKey: ["students", collegeId, page, pageSize, search],
+    queryFn: () => {
+      const params = new URLSearchParams({ page, page_size: pageSize })
+      if (search) params.set("search", search)
+      return api.get(`/router/students/${collegeId}?${params.toString()}`)
     },
     enabled: !!collegeId,
+    // Keeps showing the previous page's data (rather than a loading flash)
+    // while the next page/search result comes in - the list count and page
+    // number update as soon as the request lands.
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -41,4 +40,11 @@ export function useConversation(collegeId, studentId) {
     },
     enabled: !!collegeId && !!studentId,
   })
+}
+
+export function exportStudents(collegeId, search = "") {
+  const params = new URLSearchParams()
+  if (search) params.set("search", search)
+  const query = params.toString()
+  return api.downloadFile(`/router/students/${collegeId}/export${query ? `?${query}` : ""}`)
 }

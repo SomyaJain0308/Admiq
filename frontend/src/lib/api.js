@@ -120,4 +120,39 @@ export const api = {
     request("/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ staff_email: staffEmail }) }, { skipAuth: true }),
   resetPassword: (token, newPassword) =>
     request("/reset-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token, new_password: newPassword }) }, { skipAuth: true }),
+
+  // For file-download endpoints (CSV export) - these return a real file
+  // body, not JSON, so they can't go through request()'s response.json().
+  // Reuses the same token + one-retry-on-401 handling as everything else.
+  downloadFile: async (path) => {
+    const doFetch = () => {
+      const token = getAccessToken()
+      return fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    }
+    let response = await doFetch()
+    if (response.status === 401) {
+      try {
+        await refreshAccessToken()
+      } catch {
+        throw new ApiError("Session expired, please log in again", 401, null)
+      }
+      response = await doFetch()
+    }
+    if (!response.ok) {
+      throw new ApiError(`Request failed with status ${response.status}`, response.status, null)
+    }
+    const blob = await response.blob()
+    const disposition = response.headers.get("Content-Disposition") || ""
+    const match = disposition.match(/filename="?([^"]+)"?/)
+    const filename = match ? match[1] : "export.csv"
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  },
 }

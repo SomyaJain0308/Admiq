@@ -56,6 +56,50 @@ def create_refresh_token(data: dict, expires_delta: timedelta | None = None):
     return _create_token(data, expires_delta, token_type="refresh")
 
 
+# Short-lived (15 min), single-purpose token for the forgot-password flow.
+# Deliberately much shorter than access/refresh tokens since it's emailed as
+# a plain link - anyone who intercepts the email within the window could use
+# it, so the window needs to be tight.
+def create_password_reset_token(staff_id: int) -> str:
+    return _create_token({"sub": str(staff_id)}, timedelta(minutes=15), token_type="password_reset")
+
+
+# Same underlying token type as a password reset - it flows through the same
+# verify_password_reset_token / /reset-password endpoint, just with a longer
+# window (48h vs 15m) since an invite isn't as time-sensitive as a live
+# reset request and staff may not check email right away.
+def create_staff_invite_token(staff_id: int) -> str:
+    return _create_token({"sub": str(staff_id)}, timedelta(hours=48), token_type="password_reset")
+
+
+async def verify_password_reset_token(token: str) -> str | None:
+    payload = _decode_token(token, expected_type="password_reset")
+    if payload is None:
+        return None
+    jti = payload.get("jti")
+    if jti and await is_token_revoked(jti):
+        return None  # already used, or explicitly revoked
+    return payload.get("sub")
+
+
+async def revoke_password_reset_token(token: str) -> None:
+    # Called right after a reset token is used, so it can't be replayed if
+    # the email/link leaks after the fact. Same mechanism as refresh token
+    # revocation - mark the jti in Redis until it would've expired anyway.
+    payload = _decode_token(token, expected_type="password_reset")
+    if payload is None:
+        return
+    jti = payload.get("jti")
+    exp_ts = payload.get("exp")
+    if not jti or not exp_ts:
+        return
+    ttl_seconds = int(exp_ts - datetime.now(UTC).timestamp())
+    if ttl_seconds <= 0:
+        return
+    redis_client = get_redis_client()
+    await redis_client.set(f"revoked_jti:{jti}", "1", ex=ttl_seconds)
+
+
 def _decode_token(token: str, expected_type: str) -> str | None: # Given a token string decode the signature (the secret_key in .env which is server side)
     try:
         payload = jwt.decode(token, settings.secret_key.get_secret_value(), algorithms=[settings.algorithm], options={"require": ["exp", "sub", "jti"]})

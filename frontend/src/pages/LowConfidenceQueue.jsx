@@ -1,8 +1,7 @@
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { Inbox } from "lucide-react"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
-import { usePagination } from "@/hooks/usePagination"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
@@ -18,25 +17,30 @@ import {
   TableCell,
 } from "@/components/ui/table"
 
+const PAGE_SIZE = 15
+
 export default function LowConfidenceQueue() {
   const { college, hasNoCollege } = useCurrentCollege()
   const [view, setView] = useState("open") // "open" | "resolved"
-  const { data: queries, isLoading, isError, error } = useLowConfidenceQueries(college?.college_id, view === "resolved")
+  const [page, setPage] = useState(1)
   const [activeQuery, setActiveQuery] = useState(null)
 
-  const sortedQueries = useMemo(() => {
-    if (!queries) return []
-    // Oldest first for the open queue - that's what actually needs attention
-    // soonest. For the resolved view, newest first reads more naturally as a
-    // recent-activity log.
-    return [...queries].sort((a, b) =>
-      view === "open"
-        ? new Date(a.flagged_at) - new Date(b.flagged_at)
-        : new Date(b.resolved_at) - new Date(a.resolved_at)
-    )
-  }, [queries, view])
+  // Switching between Open/Resolved is effectively a different list -
+  // whatever page you were on in one view isn't meaningful in the other.
+  const [prevView, setPrevView] = useState(view)
+  if (view !== prevView) {
+    setPrevView(view)
+    setPage(1)
+  }
 
-  const { page, setPage, totalPages, pageItems } = usePagination(sortedQueries, 15)
+  const { data, isLoading, isFetching, isError, error } = useLowConfidenceQueries(college?.college_id, view === "resolved", {
+    page,
+    pageSize: PAGE_SIZE,
+  })
+
+  const queries = data?.items || []
+  const total = data?.total ?? 0
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   if (hasNoCollege) {
     return (
@@ -80,7 +84,7 @@ export default function LowConfidenceQueue() {
         </p>
       )}
 
-      {!isLoading && !isError && sortedQueries.length === 0 && (
+      {!isLoading && !isError && total === 0 && (
         <EmptyState
           title={view === "open" ? "Nothing waiting on you" : "Nothing resolved yet"}
           description={
@@ -91,8 +95,8 @@ export default function LowConfidenceQueue() {
         />
       )}
 
-      {(isLoading || pageItems.length > 0) && (
-        <Table>
+      {(isLoading || queries.length > 0) && (
+        <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
               <TableHead>Question</TableHead>
@@ -105,7 +109,7 @@ export default function LowConfidenceQueue() {
             {isLoading ? (
               <TableSkeletonRows columns={4} />
             ) : (
-              pageItems.map((query) => (
+              queries.map((query) => (
                 <TableRow key={query.query_id}>
                   <TableCell className="max-w-xs whitespace-normal">{query.question_content}</TableCell>
                   <TableCell className="max-w-xs whitespace-normal text-muted-foreground">

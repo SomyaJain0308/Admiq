@@ -17,9 +17,13 @@ export default function DashboardHome() {
   const { user } = useAuth()
   const { college, hasNoCollege } = useCurrentCollege()
 
-  const queueQuery = useLowConfidenceQueries(college?.college_id)
-  const studentsQuery = useStudentList(college?.college_id)
-  const staffQuery = useStaffList(college?.college_id)
+  const queueQuery = useLowConfidenceQueries(college?.college_id, false)
+  // Stat cards just need a total count (the backend returns that regardless
+  // of page size), but the lead-score chart below needs the full student
+  // pool to build an accurate distribution - a big page size gets both from
+  // one call rather than needing a separate "give me everyone" endpoint.
+  const studentsQuery = useStudentList(college?.college_id, { pageSize: 1000 })
+  const staffQuery = useStaffList(college?.college_id, { pageSize: 1000 })
 
   if (hasNoCollege) {
     return (
@@ -42,7 +46,7 @@ export default function DashboardHome() {
           to="/queue"
           icon={Inbox}
           label="Waiting on you"
-          count={queueQuery.data?.length}
+          count={queueQuery.data?.total}
           isLoading={queueQuery.isLoading}
           description="Low-confidence queries"
         />
@@ -50,7 +54,7 @@ export default function DashboardHome() {
           to="/students"
           icon={GraduationCap}
           label="Students"
-          count={studentsQuery.data?.length}
+          count={studentsQuery.data?.total}
           isLoading={studentsQuery.isLoading}
           description="Total conversations"
         />
@@ -58,13 +62,13 @@ export default function DashboardHome() {
           to="/staff"
           icon={Users}
           label="Staff"
-          count={staffQuery.data?.length}
+          count={staffQuery.data?.total}
           isLoading={staffQuery.isLoading}
           description="With access to this college"
         />
       </div>
 
-      {studentsQuery.data?.length > 0 && (
+      {studentsQuery.data?.items?.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Lead score distribution</CardTitle>
@@ -72,7 +76,7 @@ export default function DashboardHome() {
           </CardHeader>
           <CardContent>
             <Suspense fallback={<div className="h-[220px] animate-pulse rounded-md bg-accent" />}>
-              <LeadScoreChart students={studentsQuery.data} />
+              <LeadScoreChart students={studentsQuery.data.items} />
             </Suspense>
           </CardContent>
         </Card>
