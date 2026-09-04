@@ -22,14 +22,14 @@ router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])
 
 _module_logger = logging.getLogger(__name__)
 
-@router.get("/verify")
+@router.get("")
 async def verify_whatsapp_webhook(hub_verify_token: str | None = Query(None, alias="hub.verify_token"), hub_mode: str | None = Query(None, alias="hub.mode"), hub_challenge: str | None = Query(None, alias="hub.challenge")): # Defined in services/whatsapp_service.py
     if hub_mode == "subscribe" and hub_verify_token == get_settings().whatsapp_verify_token:
         return PlainTextResponse(hub_challenge or "")
     raise HTTPException(status_code=403, detail="Invalid verification token")
 
 
-@router.post("/callback")
+@router.post("")
 @traceable(name="whatsapp_chat_endpoint")
 async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     security: SecurityPipeline = request.app.state.security
