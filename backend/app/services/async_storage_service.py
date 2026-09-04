@@ -34,3 +34,14 @@ async def upload_file_bytes(
         },
     )
     return path
+
+
+async def delete_file(path: str) -> None:
+    bucket = await _bucket()
+    await bucket.remove([path])
+
+
+async def create_signed_url(path: str, expires_in: int = 3600) -> str:
+    bucket = await _bucket()
+    result = await bucket.create_signed_url(path, expires_in)
+    return result["signedURL"] if "signedURL" in result else result["signed_url"]

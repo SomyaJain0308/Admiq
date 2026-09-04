@@ -40,3 +40,29 @@ export function useUploadDocument(collegeId) {
     },
   })
 }
+
+export function useDeleteDocument(collegeId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId) => api.delete(`/router/colleges/${collegeId}/documents/${documentId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
+    },
+  })
+}
+
+export function useRetryDocument(collegeId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId) => api.post(`/router/colleges/${collegeId}/documents/${documentId}/retry`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
+    },
+  })
+}
+
+// Not a query - the signed URL is short-lived, so we fetch it fresh at the
+// moment the person actually wants to view the file rather than caching it.
+export function fetchDocumentUrl(collegeId, documentId) {
+  return api.get(`/router/colleges/${collegeId}/documents/${documentId}/url`)
+}

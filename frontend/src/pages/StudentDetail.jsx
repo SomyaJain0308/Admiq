@@ -87,7 +87,7 @@ export default function StudentDetail() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 lg:max-h-[600px] lg:overflow-y-auto lg:pr-1">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Profile</CardTitle>
