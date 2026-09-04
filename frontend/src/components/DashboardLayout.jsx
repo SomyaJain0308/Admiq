@@ -23,6 +23,8 @@ export function DashboardLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [collegeMenuOpen, setCollegeMenuOpen] = useState(false)
   const collegeMenuRef = useRef(null)
+  const collegeButtonRef = useRef(null)
+  const hamburgerButtonRef = useRef(null)
 
   // The college switcher is a plain div, not a native <select> or a Radix
   // popover, so nothing closes it automatically - without this it stays
@@ -35,23 +37,41 @@ export function DashboardLayout() {
         setCollegeMenuOpen(false)
       }
     }
-    function handleKeyDown(e) {
-      if (e.key === "Escape") setCollegeMenuOpen(false)
-    }
     document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
   }, [collegeMenuOpen])
+
+  // Escape closes whichever of the two custom (non-Radix) panels is open,
+  // and returns focus to the button that opened it - without this a
+  // keyboard user who dismisses either one loses their place entirely.
+  useEffect(() => {
+    if (!collegeMenuOpen && !mobileNavOpen) return
+    function handleKeyDown(e) {
+      if (e.key !== "Escape") return
+      if (collegeMenuOpen) {
+        setCollegeMenuOpen(false)
+        collegeButtonRef.current?.focus()
+      } else if (mobileNavOpen) {
+        setMobileNavOpen(false)
+        hamburgerButtonRef.current?.focus()
+      }
+    }
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [collegeMenuOpen, mobileNavOpen])
 
   return (
     <div className="flex min-h-screen">
       {/* Mobile top bar - only shown below lg, where the sidebar is hidden by default */}
       <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b bg-background px-4 lg:hidden">
         <span className="text-lg font-semibold">AdmiQ</span>
-        <Button variant="ghost" size="icon" onClick={() => setMobileNavOpen(true)} aria-label="Open navigation menu">
+        <Button
+          ref={hamburgerButtonRef}
+          variant="ghost"
+          size="icon"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open navigation menu"
+        >
           <Menu className="size-5" />
         </Button>
       </div>
@@ -80,6 +100,7 @@ export function DashboardLayout() {
         {colleges.length > 1 && (
           <div className="relative mb-4 px-2" ref={collegeMenuRef}>
             <button
+              ref={collegeButtonRef}
               type="button"
               onClick={() => setCollegeMenuOpen((o) => !o)}
               aria-haspopup="listbox"

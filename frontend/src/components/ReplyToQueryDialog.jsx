@@ -89,7 +89,7 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
             </div>
 
             {resolveMutation.isError && (
-              <p className="text-sm text-destructive">
+              <p role="alert" className="text-sm text-destructive">
                 {resolveMutation.error?.message || "Failed to send reply. Please try again."}
               </p>
             )}

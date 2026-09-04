@@ -1,4 +1,5 @@
 import { Navigate, Outlet } from "react-router-dom"
+import { Loader2 } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 
 export function ProtectedRoute() {
@@ -9,7 +10,8 @@ export function ProtectedRoute() {
   // bounced to /login for a split second on every page reload.
   if (isBootstrapping) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+      <div className="flex min-h-screen items-center justify-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
         Loading...
       </div>
     )

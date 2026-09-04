@@ -30,7 +30,7 @@ export function ConversationView({ messages }) {
                 isStudent
                   ? "bg-muted text-foreground"
                   : message.messager_role === "staff"
-                    ? "bg-blue-600 text-white"
+                    ? "bg-accent text-accent-foreground"
                     : "bg-primary text-primary-foreground"
               )}
             >

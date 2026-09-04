@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useCreateStaff, useUpdateStaff } from "@/hooks/useStaff"
 
 const emptyForm = { staff_name: "", staff_email: "", password: "", is_active: true }
@@ -99,15 +100,16 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
           </div>
 
           {!isEditMode && (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="send_invite"
                 checked={sendInvite}
-                onChange={(e) => setSendInvite(e.target.checked)}
-                className="size-4 rounded border-input accent-primary"
+                onCheckedChange={(checked) => setSendInvite(checked === true)}
               />
-              Email them a link to set their own password
-            </label>
+              <Label htmlFor="send_invite" className="font-normal">
+                Email them a link to set their own password
+              </Label>
+            </div>
           )}
 
           {(isEditMode || !sendInvite) && (
@@ -125,18 +127,19 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
             </div>
           )}
 
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="is_active"
               checked={form.is_active}
-              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-              className="size-4 rounded border-input accent-primary"
+              onCheckedChange={(checked) => setForm((f) => ({ ...f, is_active: checked === true }))}
             />
-            Active
-          </label>
+            <Label htmlFor="is_active" className="font-normal">
+              Active
+            </Label>
+          </div>
 
           {mutation.isError && (
-            <p className="text-sm text-destructive">
+            <p role="alert" className="text-sm text-destructive">
               {mutation.error?.message || "Something went wrong. Please try again."}
             </p>
           )}

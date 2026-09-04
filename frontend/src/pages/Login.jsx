@@ -74,7 +74,7 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
               />
             </div>
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           </CardContent>
           <CardFooter>
             <Button type="submit" className="w-full" disabled={isSubmitting}>

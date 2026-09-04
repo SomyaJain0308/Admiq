@@ -18,6 +18,11 @@ export function useTheme() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark")
     localStorage.setItem(THEME_KEY, theme)
+    // Keep the mobile browser chrome (address bar) in sync too - the
+    // meta tag is set synchronously on first load by the no-flash script
+    // in home/index.html, this just keeps it correct after a manual toggle.
+    const meta = document.getElementById("theme-color-meta")
+    if (meta) meta.content = theme === "dark" ? "#0a0a0a" : "#ffffff"
   }, [theme])
 
   function toggleTheme() {

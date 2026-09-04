@@ -115,7 +115,7 @@ export default function ResetPassword() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
               </CardContent>
               <CardFooter className="flex flex-col gap-2">
                 <Button type="submit" className="w-full" disabled={isSubmitting}>

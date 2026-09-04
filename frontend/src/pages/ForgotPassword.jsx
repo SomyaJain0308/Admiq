@@ -77,7 +77,7 @@ export default function ForgotPassword() {
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
                 <p className="text-xs text-muted-foreground">
                   Forgot your email too? Staff accounts are set up by your college admin - reach out to them
                   directly to get your login email confirmed.

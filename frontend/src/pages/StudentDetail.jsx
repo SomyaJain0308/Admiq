@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCurrentCollege } from "@/context/CollegeContext"
@@ -12,6 +13,17 @@ export default function StudentDetail() {
   const { college } = useCurrentCollege()
   const { data: student, isLoading: studentLoading, isError: studentError } = useStudentDetail(college?.college_id, studentId)
   const { data: messages, isLoading: convoLoading } = useConversation(college?.college_id, studentId)
+  const conversationRef = useRef(null)
+
+  // Jump to the most recent message once the conversation loads, and again
+  // any time it changes (e.g. after replying from the low-confidence queue) -
+  // otherwise a long thread opens scrolled to the oldest message instead of
+  // where the actual context for helping this student is.
+  useEffect(() => {
+    if (conversationRef.current) {
+      conversationRef.current.scrollTop = conversationRef.current.scrollHeight
+    }
+  }, [messages])
 
   if (studentLoading) {
     return (
@@ -23,7 +35,7 @@ export default function StudentDetail() {
   }
 
   if (studentError || !student) {
-    return <p className="text-sm text-destructive">Student not found.</p>
+    return <p role="alert" className="text-sm text-destructive">Student not found.</p>
   }
 
   const band = leadScoreBand(student.lead_score ?? 0)
@@ -58,7 +70,9 @@ export default function StudentDetail() {
                 Loading conversation...
               </div>
             ) : (
-              <ConversationView messages={messages} />
+              <div ref={conversationRef} className="max-h-[600px] overflow-y-auto pr-1">
+                <ConversationView messages={messages} />
+              </div>
             )}
           </CardContent>
         </Card>

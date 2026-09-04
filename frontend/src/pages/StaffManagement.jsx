@@ -8,6 +8,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -85,6 +86,7 @@ export default function StaffManagement() {
   if (hasNoCollege) {
     return (
       <EmptyState
+        icon={Users}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -123,17 +125,17 @@ export default function StaffManagement() {
       </div>
 
       {isError && (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {error?.message || "Failed to load staff. Please try again."}
         </p>
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && (
-        <EmptyState title="No staff yet" description="Add the first staff member for this college." />
+        <EmptyState icon={Users} title="No staff yet" description="Add the first staff member for this college." />
       )}
 
       {!isLoading && total === 0 && debouncedSearch && (
-        <p className="text-sm text-muted-foreground">No staff match "{debouncedSearch}".</p>
+        <FilteredEmptyState query={debouncedSearch} onClear={() => setSearch("")} itemLabel="staff" />
       )}
 
       {(isLoading || staff.length > 0) && (
@@ -155,7 +157,7 @@ export default function StaffManagement() {
                 return (
                   <TableRow key={member.staff_id}>
                     <TableCell>
-                      {member.staff_name}
+                      <span className="font-medium">{member.staff_name}</span>
                       {isSelf && <span className="ml-2 text-xs text-muted-foreground">(you)</span>}
                     </TableCell>
                     <TableCell className="text-muted-foreground">{member.staff_email}</TableCell>
@@ -209,12 +211,3 @@ export default function StaffManagement() {
   )
 }
 
-function EmptyState({ title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-      <Users className="size-8 text-muted-foreground" />
-      <p className="font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
-    </div>
-  )
-}

@@ -1,17 +1,12 @@
 import { Link } from "react-router-dom"
-import { Suspense, lazy } from "react"
-import { Inbox, GraduationCap, Users, ArrowRight, Loader2 } from "lucide-react"
+import { Inbox, GraduationCap, Users, ArrowRight, Loader2, TriangleAlert } from "lucide-react"
 import { useAuth } from "@/context/AuthContext"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { useStudentList } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
-
-// recharts is a heavy dependency (~340kB) - lazy-loaded so it's only fetched
-// when the dashboard home actually renders, not bundled into the main chunk
-// that loads on every single page, including the login screen.
-const LeadScoreChart = lazy(() => import("@/components/LeadScoreChart").then((m) => ({ default: m.LeadScoreChart })))
+import { LeadScoreChart } from "@/components/LeadScoreChart"
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -48,6 +43,7 @@ export default function DashboardHome() {
           label="Waiting on you"
           count={queueQuery.data?.total}
           isLoading={queueQuery.isLoading}
+          isError={queueQuery.isError}
           description="Low-confidence queries"
         />
         <StatCard
@@ -56,6 +52,7 @@ export default function DashboardHome() {
           label="Students"
           count={studentsQuery.data?.total}
           isLoading={studentsQuery.isLoading}
+          isError={studentsQuery.isError}
           description="Total conversations"
         />
         <StatCard
@@ -64,6 +61,7 @@ export default function DashboardHome() {
           label="Staff"
           count={staffQuery.data?.total}
           isLoading={staffQuery.isLoading}
+          isError={staffQuery.isError}
           description="With access to this college"
         />
       </div>
@@ -75,9 +73,7 @@ export default function DashboardHome() {
             <CardDescription>Where your student pool currently sits, from cold to hot.</CardDescription>
           </CardHeader>
           <CardContent>
-            <Suspense fallback={<div className="h-[220px] animate-pulse rounded-md bg-accent" />}>
-              <LeadScoreChart students={studentsQuery.data.items} />
-            </Suspense>
+            <LeadScoreChart students={studentsQuery.data.items} />
           </CardContent>
         </Card>
       )}
@@ -85,7 +81,7 @@ export default function DashboardHome() {
   )
 }
 
-function StatCard({ to, icon: Icon, label, count, isLoading, description }) {
+function StatCard({ to, icon: Icon, label, count, isLoading, isError, description }) {
   return (
     <Link to={to}>
       <Card className="transition-colors hover:bg-accent/50">
@@ -95,7 +91,19 @@ function StatCard({ to, icon: Icon, label, count, isLoading, description }) {
             <ArrowRight className="size-4 text-muted-foreground" />
           </div>
           <CardTitle className="pt-2 text-3xl font-semibold">
-            {isLoading ? <Loader2 className="size-6 animate-spin text-muted-foreground" /> : (count ?? 0)}
+            {isLoading ? (
+              <Loader2 className="size-6 animate-spin text-muted-foreground" />
+            ) : isError ? (
+              <span
+                className="flex items-center gap-1.5 text-lg text-muted-foreground"
+                title="Failed to load"
+              >
+                <TriangleAlert className="size-5 text-warm" />
+                {"\u2014"}
+              </span>
+            ) : (
+              (count ?? 0)
+            )}
           </CardTitle>
           <CardDescription>{label}</CardDescription>
         </CardHeader>

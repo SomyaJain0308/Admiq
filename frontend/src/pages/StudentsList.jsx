@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Download, GraduationCap, Loader2, Search, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/CollegeContext"
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { leadScoreBand } from "@/lib/leadScore"
 import {
   Table,
@@ -24,6 +25,7 @@ const PAGE_SIZE = 15
 
 export default function StudentsList() {
   const { college, hasNoCollege } = useCurrentCollege()
+  const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const debouncedSearch = useDebouncedValue(search, 350)
@@ -64,6 +66,7 @@ export default function StudentsList() {
   if (hasNoCollege) {
     return (
       <EmptyState
+        icon={GraduationCap}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -96,17 +99,21 @@ export default function StudentsList() {
       </div>
 
       {isError && (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {error?.message || "Failed to load students. Please try again."}
         </p>
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && (
-        <EmptyState title="No students yet" description="Students will show up here once they message your WhatsApp number." />
+        <EmptyState
+          icon={GraduationCap}
+          title="No students yet"
+          description="Students will show up here once they message your WhatsApp number."
+        />
       )}
 
       {!isLoading && total === 0 && debouncedSearch && (
-        <p className="text-sm text-muted-foreground">No students match "{debouncedSearch}".</p>
+        <FilteredEmptyState query={debouncedSearch} onClear={() => setSearch("")} itemLabel="students" />
       )}
 
       {(isLoading || students.length > 0) && (
@@ -128,9 +135,20 @@ export default function StudentsList() {
                 const band = leadScoreBand(student.lead_score ?? 0)
                 const concernCount = student.profile_signals?.concerns?.length || 0
                 return (
-                  <TableRow key={student.student_id} className="cursor-pointer">
+                  <TableRow
+                    key={student.student_id}
+                    className="cursor-pointer"
+                    onClick={(e) => {
+                      // The name cell already has its own <Link> (for
+                      // middle-click/ctrl-click "open in new tab" and for
+                      // screen readers) - skip the extra navigate when the
+                      // click originated on that link so it doesn't fire twice.
+                      if (e.target.closest("a")) return
+                      navigate(`/students/${student.student_id}`)
+                    }}
+                  >
                     <TableCell>
-                      <Link to={`/students/${student.student_id}`} className="hover:underline">
+                      <Link to={`/students/${student.student_id}`} className="font-medium hover:underline">
                         {student.student_name || "Unnamed"}
                       </Link>
                     </TableCell>
@@ -164,12 +182,3 @@ export default function StudentsList() {
   )
 }
 
-function EmptyState({ title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-      <GraduationCap className="size-8 text-muted-foreground" />
-      <p className="font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
-    </div>
-  )
-}

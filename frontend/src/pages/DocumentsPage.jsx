@@ -6,6 +6,7 @@ import { useDocuments, useUploadDocument } from "@/hooks/useDocuments"
 import { usePagination } from "@/hooks/usePagination"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { timeSince } from "@/lib/formatTime"
@@ -119,19 +120,17 @@ export default function DocumentsPage() {
       </div>
 
       {isError && (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {error?.message || "Failed to load documents. Please try again."}
         </p>
       )}
 
       {!isLoading && !isError && documents?.length === 0 && (
-        <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-          <FileText className="size-8 text-muted-foreground" />
-          <p className="font-medium">No documents yet</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Upload a PDF above to get started - the assistant will use it to answer student questions.
-          </p>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="No documents yet"
+          description="Upload a PDF above to get started - the assistant will use it to answer student questions."
+        />
       )}
 
       {(isLoading || pageItems.length > 0) && (

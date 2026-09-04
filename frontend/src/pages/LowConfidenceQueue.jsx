@@ -5,6 +5,7 @@ import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { timeSince } from "@/lib/formatTime"
@@ -45,6 +46,7 @@ export default function LowConfidenceQueue() {
   if (hasNoCollege) {
     return (
       <EmptyState
+        icon={Inbox}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -79,13 +81,14 @@ export default function LowConfidenceQueue() {
       </div>
 
       {isError && (
-        <p className="text-sm text-destructive">
+        <p role="alert" className="text-sm text-destructive">
           {error?.message || "Failed to load the queue. Please try again."}
         </p>
       )}
 
       {!isLoading && !isError && total === 0 && (
         <EmptyState
+          icon={Inbox}
           title={view === "open" ? "Nothing waiting on you" : "Nothing resolved yet"}
           description={
             view === "open"
@@ -111,7 +114,7 @@ export default function LowConfidenceQueue() {
             ) : (
               queries.map((query) => (
                 <TableRow key={query.query_id}>
-                  <TableCell className="max-w-xs whitespace-normal">{query.question_content}</TableCell>
+                  <TableCell className="max-w-xs font-medium whitespace-normal">{query.question_content}</TableCell>
                   <TableCell className="max-w-xs whitespace-normal text-muted-foreground">
                     {query.answer_content}
                   </TableCell>
@@ -146,12 +149,3 @@ export default function LowConfidenceQueue() {
   )
 }
 
-function EmptyState({ title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-      <Inbox className="size-8 text-muted-foreground" />
-      <p className="font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
-    </div>
-  )
-}
