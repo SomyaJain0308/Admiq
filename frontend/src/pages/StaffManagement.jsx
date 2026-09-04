@@ -139,6 +139,7 @@ export default function StaffManagement() {
       )}
 
       {(isLoading || staff.length > 0) && (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -185,6 +186,7 @@ export default function StaffManagement() {
                             size="icon"
                             onClick={() => handleDelete(member)}
                             aria-label={`Remove ${member.staff_name}`}
+                            className="hover:bg-destructive/10 hover:text-destructive"
                           >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
@@ -197,6 +199,7 @@ export default function StaffManagement() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

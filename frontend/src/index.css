@@ -34,6 +34,21 @@
   --warm-foreground: #78350f;
   --cold: #52525b;
   --cold-foreground: #3f3f46;
+
+  /* Second brand hue, paired with --primary for gradients/richness so the
+     app doesn't read as flat single-color blue everywhere. Chosen to sit
+     close to --primary on the wheel (blue -> violet) so gradients stay
+     cohesive rather than looking like a random rainbow. */
+  --brand-2: #7c3aed;
+  --brand-2-foreground: #f5f3ff;
+  --gradient-brand: linear-gradient(135deg, #2354c9 0%, #4338ca 55%, #7c3aed 100%);
+  --gradient-brand-soft: linear-gradient(135deg, color-mix(in oklab, #2354c9 14%, transparent), color-mix(in oklab, #7c3aed 14%, transparent));
+  /* A third, distinct hue purely for visual variety across stat cards /
+     category chips so the dashboard doesn't rely on one blue for
+     everything - a warm teal, far enough from both blue and violet to
+     read as a genuinely different color rather than a shade of the same one. */
+  --teal: #0d9488;
+  --teal-foreground: #f0fdfa;
 }
 
 .dark {
@@ -88,6 +103,10 @@
   --color-warm-foreground: var(--warm-foreground);
   --color-cold: var(--cold);
   --color-cold-foreground: var(--cold-foreground);
+  --color-brand-2: var(--brand-2);
+  --color-brand-2-foreground: var(--brand-2-foreground);
+  --color-teal: var(--teal);
+  --color-teal-foreground: var(--teal-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -106,6 +125,76 @@
     font-family: "Space Grotesk", system-ui, sans-serif;
     letter-spacing: -0.01em;
   }
+}
+
+/* Utility for brand wordmark / display numerals outside h1-h3 (e.g. the
+   sidebar/login "AdmiQ" text, stat card figures) so they share the same
+   Space Grotesk display face used on the marketing landing page instead
+   of falling back to the body system font. */
+.font-display {
+  font-family: "Space Grotesk", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+/* Elevation scale shared across cards/popovers/menus so depth reads as one
+   deliberate system instead of each component picking its own ad-hoc
+   shadow. Kept subtle in light mode (a color-tinted shadow, not pure
+   black) and near-invisible in dark mode, where a shadow reads as a
+   border/ring instead - matches the hero-visual treatment already used on
+   the marketing landing page (frontend/home/index.html). */
+:root {
+  --shadow-color: 220 30% 32%;
+  --shadow-xs: 0 1px 2px hsl(var(--shadow-color) / 0.05);
+  --shadow-sm: 0 1px 2px hsl(var(--shadow-color) / 0.06), 0 1px 1px hsl(var(--shadow-color) / 0.04);
+  --shadow-md: 0 2px 6px hsl(var(--shadow-color) / 0.07), 0 1px 2px hsl(var(--shadow-color) / 0.05);
+  --shadow-lg: 0 8px 24px hsl(var(--shadow-color) / 0.10), 0 2px 6px hsl(var(--shadow-color) / 0.06);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dark {
+  --shadow-xs: 0 1px 2px hsl(0 0% 0% / 0.30);
+  --shadow-sm: 0 1px 3px hsl(0 0% 0% / 0.35);
+  --shadow-md: 0 4px 10px hsl(0 0% 0% / 0.38);
+  --shadow-lg: 0 12px 28px hsl(0 0% 0% / 0.45);
+  --brand-2: #a78bfa;
+  --brand-2-foreground: #1e1533;
+  --gradient-brand: linear-gradient(135deg, #5b8def 0%, #818cf8 55%, #a78bfa 100%);
+  --gradient-brand-soft: linear-gradient(135deg, color-mix(in oklab, #5b8def 20%, transparent), color-mix(in oklab, #a78bfa 20%, transparent));
+  --teal: #2dd4bf;
+  --teal-foreground: #042f2c;
+}
+
+/* AdmiQ triangle logomark, matching the marketing landing page's inline
+   SVG favicon/brand mark exactly, but as a reusable component so the
+   dashboard (sidebar, login, loading states) shares the same identity
+   instead of falling back to a plain text wordmark. Uses the two-tone
+   brand gradient (blue -> violet) rather than the landing page's flat
+   near-black, since the dashboard chrome leans into color while the
+   marketing page stays neutral. */
+.brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: var(--gradient-brand);
+  color: #fff;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px color-mix(in oklab, var(--primary) 45%, transparent);
+}
+
+/* Reusable gradient utilities - one gradient definition (--gradient-brand),
+   used consistently for primary CTAs, active states, and headline accents
+   instead of every component inventing its own two-color mix. */
+.bg-gradient-brand {
+  background-image: var(--gradient-brand);
+}
+.bg-gradient-brand-soft {
+  background-image: var(--gradient-brand-soft);
+}
+.text-gradient-brand {
+  background-image: var(--gradient-brand);
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
 }
 
 /* Small entrance transition for pages that render immediately with no data

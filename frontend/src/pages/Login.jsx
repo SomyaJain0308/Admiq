@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { BrandMark } from "@/components/BrandMark"
+import { AuthShell } from "@/components/AuthShell"
 
 export default function Login() {
   const { login } = useAuth()
@@ -39,10 +41,12 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <Card className="w-full max-w-sm">
+    <AuthShell>
+      <Card className="overflow-hidden shadow-[var(--shadow-lg)]">
+        <div className="-mt-6 h-1 bg-gradient-brand" />
         <CardHeader>
-          <CardTitle className="text-xl">AdmiQ staff login</CardTitle>
+          <BrandMark size={36} className="mb-3" />
+          <CardTitle className="font-display text-xl">AdmiQ staff login</CardTitle>
           <CardDescription>Sign in with your staff email and password.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -83,6 +87,6 @@ export default function Login() {
           </CardFooter>
         </form>
       </Card>
-    </div>
+    </AuthShell>
   )
 }

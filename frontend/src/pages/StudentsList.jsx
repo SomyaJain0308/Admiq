@@ -119,6 +119,7 @@ export default function StudentsList() {
       )}
 
       {(isLoading || students.length > 0) && (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -223,6 +224,7 @@ export default function StudentsList() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

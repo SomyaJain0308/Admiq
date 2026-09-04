@@ -26,12 +26,12 @@ export function ConversationView({ messages }) {
           >
             <div
               className={cn(
-                "max-w-md rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                "max-w-md rounded-2xl px-3.5 py-2.5 text-sm whitespace-pre-wrap shadow-[var(--shadow-xs)]",
                 isStudent
-                  ? "bg-muted text-foreground"
+                  ? "rounded-bl-sm bg-muted text-foreground"
                   : message.messager_role === "staff"
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-primary text-primary-foreground"
+                    ? "rounded-br-sm bg-accent text-accent-foreground"
+                    : "rounded-br-sm bg-gradient-brand text-primary-foreground"
               )}
             >
               {message.content}

@@ -81,11 +81,13 @@ export default function DocumentsPage() {
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
-        className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed py-10 text-center transition-colors ${
+        className={`flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed py-12 text-center transition-colors duration-150 ${
           isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25"
         }`}
       >
-        <Upload className="size-8 text-muted-foreground" />
+        <span className="flex size-12 items-center justify-center rounded-full bg-gradient-brand-soft text-primary">
+          <Upload className="size-6" />
+        </span>
         <div>
           <p className="font-medium">Drag and drop a PDF here</p>
           <p className="text-sm text-muted-foreground">or click below to browse - max {MAX_FILE_SIZE_MB}MB per file</p>
@@ -134,6 +136,7 @@ export default function DocumentsPage() {
       )}
 
       {(isLoading || pageItems.length > 0) && (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table>
           <TableHeader>
             <TableRow>
@@ -151,6 +154,7 @@ export default function DocumentsPage() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

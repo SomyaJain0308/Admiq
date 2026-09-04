@@ -62,7 +62,7 @@ export default function LowConfidenceQueue() {
             Questions the assistant wasn't confident enough to answer on its own, for {college.college_name}.
           </p>
         </div>
-        <div className="flex gap-1 rounded-md border bg-muted/30 p-1">
+        <div className="flex gap-1 rounded-md border bg-muted/30 p-1 shadow-[var(--shadow-xs)]">
           <Button
             variant={view === "open" ? "default" : "ghost"}
             size="sm"
@@ -99,6 +99,7 @@ export default function LowConfidenceQueue() {
       )}
 
       {(isLoading || queries.length > 0) && (
+        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -135,6 +136,7 @@ export default function LowConfidenceQueue() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

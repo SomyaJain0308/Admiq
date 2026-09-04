@@ -13,10 +13,10 @@ import { Button } from "@/components/ui/button"
 
 export function EmptyState({ icon: Icon, title, description, action }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed py-16 text-center">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed py-16 text-center">
       {Icon && (
-        <div className="flex size-12 items-center justify-center rounded-full bg-muted">
-          <Icon className="size-6 text-muted-foreground" />
+        <div className="flex size-12 items-center justify-center rounded-full bg-gradient-brand-soft">
+          <Icon className="size-6 text-primary" />
         </div>
       )}
       <div className="flex flex-col gap-1">
