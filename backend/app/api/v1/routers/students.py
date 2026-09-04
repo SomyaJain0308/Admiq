@@ -16,7 +16,7 @@ router = APIRouter(tags=["Students"], prefix="/router/students")
 async def get_students(
     college_id: int,
     page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=20, ge=1, le=100),
+    page_size: int = Query(default=20, ge=1, le=1000),
     search: str | None = Query(default=None, max_length=200),
     db: AsyncSession = Depends(get_db),
     membership: CollegeStaff = Depends(verify_college_access),

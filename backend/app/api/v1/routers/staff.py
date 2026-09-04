@@ -11,6 +11,7 @@ from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.College import College
 from backend.app.schemas.staff import RefreshTokenRequest, StaffCreate, StaffResponse, StaffUpdate, Token, CurrentStaffResponse, ForgotPasswordRequest, ResetPasswordRequest
+from backend.app.schemas.staff import StaffResponse
 from backend.app.services.auth_services import create_access_token, revoke_refresh_token, verify_college_access, get_current_staff, verify_password, hash_password, create_refresh_token, verify_refresh_token, create_password_reset_token, verify_password_reset_token, revoke_password_reset_token, create_staff_invite_token
 from backend.app.services.email_service import send_password_reset_email, send_staff_invite_email
 from backend.app.services.csv_export import rows_to_csv_response
@@ -32,14 +33,7 @@ async def read_current_staff(current_staff: CollegeStaff = Depends(get_current_s
     
 
 @router.get("/router/staff/{college_id}")
-async def get_staff(
-    college_id: int,
-    page: int = 1,
-    page_size: int = 20,
-    search: str | None = None,
-    db: AsyncSession = Depends(get_db),
-    current_staff: CollegeStaff = Depends(verify_college_access),
-):
+async def get_staff(college_id: int, page: int = 1, page_size: int = 20, search: str | None = None, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
@@ -61,7 +55,7 @@ async def get_staff(
     base_query = base_query.order_by(CollegeStaff.staff_name.asc()).offset((page - 1) * page_size).limit(page_size)
     staff_results = await db.execute(base_query)
     staff = staff_results.scalars().all()
-    return {"items": [s.staff_member for s in staff], "total": total, "page": page, "page_size": page_size}
+    return {"items": [StaffResponse.model_validate(s.staff_member) for s in staff], "total": total, "page": page, "page_size": page_size}
 
 
 @router.get("/router/staff/{college_id}/export")
