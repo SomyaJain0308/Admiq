@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Checkbox } from "@/components/ui/checkbox"
 import { useCreateStaff, useUpdateStaff } from "@/hooks/useStaff"
 
 const emptyForm = { staff_name: "", staff_email: "", password: "", is_active: true }
@@ -100,16 +99,15 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
           </div>
 
           {!isEditMode && (
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="send_invite"
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
                 checked={sendInvite}
-                onCheckedChange={(checked) => setSendInvite(checked === true)}
+                onChange={(e) => setSendInvite(e.target.checked)}
+                className="size-4 rounded border-input accent-primary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
               />
-              <Label htmlFor="send_invite" className="font-normal">
-                Email them a link to set their own password
-              </Label>
-            </div>
+              Email them a link to set their own password
+            </label>
           )}
 
           {(isEditMode || !sendInvite) && (
@@ -127,16 +125,15 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
             </div>
           )}
 
-          <div className="flex items-center gap-2">
-            <Checkbox
-              id="is_active"
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
               checked={form.is_active}
-              onCheckedChange={(checked) => setForm((f) => ({ ...f, is_active: checked === true }))}
+              onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
+              className="size-4 rounded border-input accent-primary outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             />
-            <Label htmlFor="is_active" className="font-normal">
-              Active
-            </Label>
-          </div>
+            Active
+          </label>
 
           {mutation.isError && (
             <p role="alert" className="text-sm text-destructive">

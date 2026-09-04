@@ -5,7 +5,6 @@ import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
-import { EmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { timeSince } from "@/lib/formatTime"
@@ -46,7 +45,6 @@ export default function LowConfidenceQueue() {
   if (hasNoCollege) {
     return (
       <EmptyState
-        icon={Inbox}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -62,7 +60,7 @@ export default function LowConfidenceQueue() {
             Questions the assistant wasn't confident enough to answer on its own, for {college.college_name}.
           </p>
         </div>
-        <div className="flex gap-1 rounded-md border bg-muted/30 p-1 shadow-[var(--shadow-xs)]">
+        <div className="flex gap-1 rounded-md border bg-muted/30 p-1">
           <Button
             variant={view === "open" ? "default" : "ghost"}
             size="sm"
@@ -88,7 +86,6 @@ export default function LowConfidenceQueue() {
 
       {!isLoading && !isError && total === 0 && (
         <EmptyState
-          icon={Inbox}
           title={view === "open" ? "Nothing waiting on you" : "Nothing resolved yet"}
           description={
             view === "open"
@@ -99,7 +96,6 @@ export default function LowConfidenceQueue() {
       )}
 
       {(isLoading || queries.length > 0) && (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -136,7 +132,6 @@ export default function LowConfidenceQueue() {
             )}
           </TableBody>
         </Table>
-        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
@@ -151,3 +146,12 @@ export default function LowConfidenceQueue() {
   )
 }
 
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
+      <Inbox className="size-8 text-muted-foreground" />
+      <p className="font-medium">{title}</p>
+      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+    </div>
+  )
+}

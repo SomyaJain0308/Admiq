@@ -60,13 +60,15 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     # Internal Schedules Tasks
     internal_task_token: str = ""
 
-    frontend_url: str = "http://admiq-v1.vercel.app"
+    frontend_url: str = "https://admiq-v1.vercel.app"
 
-    # Resend (email.resend.com) - free tier, used for password reset emails.
-    # resend_from_email must be on a domain verified in your Resend dashboard,
-    # or use the default "onboarding@resend.dev" for testing before that's set up.
+    # Resend (email.resend.com) - free tier, used for password reset and staff
+    # invite emails. resend_from_email must be on a domain verified in your
+    # Resend dashboard, OR the default below ("onboarding@resend.dev") which
+    # works with zero setup but can only deliver to the email address you
+    # signed up to Resend with - fine for testing, not for real staff invites.
     resend_api_key: str = ""
-    resend_from_email: str = "somyaj515@gmail.com"
+    resend_from_email: str = "onboarding@resend.dev"
 
 
     @property

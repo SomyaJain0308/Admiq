@@ -15,7 +15,7 @@ function Table({ className, ...props }) {
 }
 
 function TableHeader({ className, ...props }) {
-  return <thead data-slot="table-header" className={cn("bg-muted/30 [&_tr]:border-b", className)} {...props} />
+  return <thead data-slot="table-header" className={cn("[&_tr]:border-b", className)} {...props} />
 }
 
 function TableBody({ className, ...props }) {
@@ -33,7 +33,7 @@ function TableRow({ className, ...props }) {
     <tr
       data-slot="table-row"
       className={cn(
-        "hover:bg-primary/[0.04] data-[state=selected]:bg-muted border-b transition-colors",
+        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
         className
       )}
       {...props}
@@ -46,7 +46,7 @@ function TableHead({ className, ...props }) {
     <th
       data-slot="table-head"
       className={cn(
-        "h-10 px-3 text-left align-middle text-xs font-semibold tracking-wide text-muted-foreground uppercase whitespace-nowrap",
+        "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap",
         className
       )}
       {...props}
@@ -58,7 +58,7 @@ function TableCell({ className, ...props }) {
   return (
     <td
       data-slot="table-cell"
-      className={cn("p-3 align-middle whitespace-nowrap", className)}
+      className={cn("p-2 align-middle whitespace-nowrap", className)}
       {...props}
     />
   )

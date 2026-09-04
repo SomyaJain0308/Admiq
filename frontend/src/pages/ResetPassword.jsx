@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { BrandMark } from "@/components/BrandMark"
-import { AuthShell } from "@/components/AuthShell"
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
@@ -53,12 +51,10 @@ export default function ResetPassword() {
   // to request one.
   if (!token) {
     return (
-      <AuthShell>
-        <Card className="overflow-hidden shadow-[var(--shadow-lg)]">
-        <div className="-mt-6 h-1 bg-gradient-brand" />
+      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+        <Card className="w-full max-w-sm">
           <CardHeader>
-            <BrandMark size={36} className="mb-3" />
-            <CardTitle className="font-display text-xl">Invalid reset link</CardTitle>
+            <CardTitle className="text-xl">Invalid reset link</CardTitle>
             <CardDescription>This link is missing or malformed. Request a new one to continue.</CardDescription>
           </CardHeader>
           <CardFooter>
@@ -67,20 +63,18 @@ export default function ResetPassword() {
             </Button>
           </CardFooter>
         </Card>
-      </AuthShell>
+      </div>
     )
   }
 
   return (
-    <AuthShell>
-      <Card className="overflow-hidden shadow-[var(--shadow-lg)]">
-        <div className="-mt-6 h-1 bg-gradient-brand" />
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-sm">
         {success ? (
           <>
             <CardHeader>
-              <BrandMark size={36} className="mb-3" />
               <CheckCircle2 className="mb-2 size-6 text-muted-foreground" />
-              <CardTitle className="font-display text-xl">Password reset</CardTitle>
+              <CardTitle className="text-xl">Password reset</CardTitle>
               <CardDescription>Your password has been updated. You can now sign in with it.</CardDescription>
             </CardHeader>
             <CardFooter>
@@ -92,8 +86,7 @@ export default function ResetPassword() {
         ) : (
           <>
             <CardHeader>
-              <BrandMark size={36} className="mb-3" />
-              <CardTitle className="font-display text-xl">Set a new password</CardTitle>
+              <CardTitle className="text-xl">Set a new password</CardTitle>
               <CardDescription>Choose a new password for your account.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>
@@ -139,6 +132,6 @@ export default function ResetPassword() {
           </>
         )}
       </Card>
-    </AuthShell>
+    </div>
   )
 }

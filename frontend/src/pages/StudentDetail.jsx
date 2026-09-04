@@ -45,27 +45,17 @@ export default function StudentDetail() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <Link to="/students" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link to="/students" className="mb-2 flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-4" />
           Back to students
         </Link>
         <div className="flex items-center gap-3">
-          <div
-            className={`flex size-11 shrink-0 items-center justify-center rounded-full text-base font-semibold ${band.avatarClassName}`}
-            aria-hidden="true"
-          >
-            {(student.student_name || "?").trim().charAt(0).toUpperCase() || "?"}
-          </div>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="font-display text-2xl font-semibold">{student.student_name || "Unnamed student"}</h1>
-              <Badge variant="outline" className={band.className}>
-                {student.lead_score ?? 0} · {band.label}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground">{student.student_phone}</p>
-          </div>
+          <h1 className="text-2xl font-semibold">{student.student_name || "Unnamed student"}</h1>
+          <Badge variant="outline" className={band.className}>
+            {student.lead_score ?? 0} · {band.label}
+          </Badge>
         </div>
+        <p className="text-muted-foreground">{student.student_phone}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -87,7 +77,7 @@ export default function StudentDetail() {
           </CardContent>
         </Card>
 
-        <div className="flex flex-col gap-4 lg:max-h-[600px] lg:overflow-y-auto lg:pr-1">
+        <div className="flex flex-col gap-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Profile</CardTitle>

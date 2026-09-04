@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { Download, GraduationCap, Loader2, Search, ChevronRight } from "lucide-react"
+import { Download, GraduationCap, Loader2, Search, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useStudentList, exportStudents } from "@/hooks/useStudents"
@@ -10,10 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
-import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { leadScoreBand } from "@/lib/leadScore"
-import { getSignalChips } from "@/lib/studentSignals"
-import { timeSince } from "@/lib/formatTime"
 import {
   Table,
   TableHeader,
@@ -68,7 +65,6 @@ export default function StudentsList() {
   if (hasNoCollege) {
     return (
       <EmptyState
-        icon={GraduationCap}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -107,27 +103,27 @@ export default function StudentsList() {
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && (
-        <EmptyState
-          icon={GraduationCap}
-          title="No students yet"
-          description="Students will show up here once they message your WhatsApp number."
-        />
+        <EmptyState title="No students yet" description="Students will show up here once they message your WhatsApp number." />
       )}
 
       {!isLoading && total === 0 && debouncedSearch && (
-        <FilteredEmptyState query={debouncedSearch} onClear={() => setSearch("")} itemLabel="students" />
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          No students match "{debouncedSearch}".
+          <Button variant="link" size="sm" className="h-auto p-0 text-sm" onClick={() => setSearch("")}>
+            Clear search
+          </Button>
+        </p>
       )}
 
       {(isLoading || students.length > 0) && (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
-              <TableHead>Student</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Phone</TableHead>
+              <TableHead>Course interest</TableHead>
               <TableHead>Signals</TableHead>
-              <TableHead>Active</TableHead>
               <TableHead>Lead score</TableHead>
-              <TableHead className="w-8"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -136,15 +132,11 @@ export default function StudentsList() {
             ) : (
               students.map((student) => {
                 const band = leadScoreBand(student.lead_score ?? 0)
-                const score = student.lead_score ?? 0
-                const chips = getSignalChips(student.profile_signals)
-                const visibleChips = chips.slice(0, 2)
-                const overflowChips = chips.slice(2)
-                const lastActive = student.lead_score_updated_at || student.created_at
+                const concernCount = student.profile_signals?.concerns?.length || 0
                 return (
                   <TableRow
                     key={student.student_id}
-                    className="group cursor-pointer"
+                    className="cursor-pointer"
                     onClick={(e) => {
                       // The name cell already has its own <Link> (for
                       // middle-click/ctrl-click "open in new tab" and for
@@ -154,69 +146,27 @@ export default function StudentsList() {
                       navigate(`/students/${student.student_id}`)
                     }}
                   >
-                    <TableCell className="whitespace-normal">
-                      <div className="flex items-start gap-3">
-                        <div
-                          className={`flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${band.avatarClassName}`}
-                          aria-hidden="true"
-                        >
-                          {(student.student_name || "?").trim().charAt(0).toUpperCase() || "?"}
-                        </div>
-                        <div className="flex min-w-0 flex-col">
-                          <Link to={`/students/${student.student_id}`} className="font-medium hover:underline">
-                            {student.student_name || "Unnamed"}
-                          </Link>
-                          <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
-                            <span>{student.student_phone}</span>
-                            {student.course_interest && (
-                              <>
-                                <span aria-hidden="true">·</span>
-                                <span className="truncate">{student.course_interest}</span>
-                              </>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    </TableCell>
                     <TableCell>
-                      {chips.length > 0 ? (
-                        <div className="flex flex-wrap gap-1">
-                          {visibleChips.map((chip) => (
-                            <Badge key={chip.key} variant="outline" title={chip.title} className={`gap-1 ${chip.className}`}>
-                              <chip.icon className="size-3" />
-                              {chip.label}
-                            </Badge>
-                          ))}
-                          {overflowChips.length > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="text-muted-foreground"
-                              title={overflowChips.map((c) => c.label).join(", ")}
-                            >
-                              +{overflowChips.length}
-                            </Badge>
-                          )}
-                        </div>
+                      <Link to={`/students/${student.student_id}`} className="font-medium hover:underline">
+                        {student.student_name || "Unnamed"}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{student.student_phone}</TableCell>
+                    <TableCell className="text-muted-foreground">{student.course_interest || "—"}</TableCell>
+                    <TableCell>
+                      {concernCount > 0 ? (
+                        <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                          <TriangleAlert className="size-3" />
+                          {concernCount} concern{concernCount > 1 ? "s" : ""}
+                        </Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{lastActiveLabel(lastActive)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="h-1.5 w-14 overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={`h-full rounded-full ${band.barClassName}`}
-                            style={{ width: `${Math.min(100, Math.max(0, score))}%` }}
-                          />
-                        </div>
-                        <Badge variant="outline" className={band.className}>
-                          {score} · {band.label}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <ChevronRight className="size-4 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+                      <Badge variant="outline" className={band.className}>
+                        {student.lead_score ?? 0} · {band.label}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 )
@@ -224,7 +174,6 @@ export default function StudentsList() {
             )}
           </TableBody>
         </Table>
-        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
@@ -232,10 +181,12 @@ export default function StudentsList() {
   )
 }
 
-// "3h ago" reads fine, but timeSince's own "just now" already implies
-// recency without an "ago" - stacking them ("just now ago") doesn't.
-function lastActiveLabel(iso) {
-  if (!iso) return "—"
-  const rel = timeSince(iso)
-  return rel === "just now" ? rel : `${rel} ago`
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
+      <GraduationCap className="size-8 text-muted-foreground" />
+      <p className="font-medium">{title}</p>
+      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+    </div>
+  )
 }

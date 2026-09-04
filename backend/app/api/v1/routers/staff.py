@@ -155,7 +155,7 @@ async def create_staff(college_id: int, staff: StaffCreate, db: AsyncSession = D
 
     if invite_sent:
         invite_token = create_staff_invite_token(new_staff.staff_id)
-        invite_link = f"{settings.frontend_url}/reset-password?token={invite_token}"
+        invite_link = f"{settings.frontend_url}/home/reset-password?token={invite_token}"
         await send_staff_invite_email(new_staff.staff_email, new_staff.staff_name, college_name, invite_link)
 
     return new_staff
@@ -246,7 +246,7 @@ async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Dep
     staff = staff_result.scalars().first()
     if staff:
         reset_token = create_password_reset_token(staff.staff_id)
-        reset_link = f"{settings.frontend_url}/reset-password?token={reset_token}"
+        reset_link = f"{settings.frontend_url}/home/reset-password?token={reset_token}"
         await send_password_reset_email(staff.staff_email, reset_link)
 
 

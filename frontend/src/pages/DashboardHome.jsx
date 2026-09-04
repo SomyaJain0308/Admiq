@@ -7,7 +7,6 @@ import { useStudentList } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { LeadScoreChart } from "@/components/LeadScoreChart"
-import { cn } from "@/lib/utils"
 
 export default function DashboardHome() {
   const { user } = useAuth()
@@ -33,10 +32,8 @@ export default function DashboardHome() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">
-          Welcome back{user?.staff_name ? <>, <span className="text-gradient-brand">{user.staff_name}</span></> : ""}
-        </h1>
-        <p className="mt-1 text-muted-foreground">Here's what's happening at {college.college_name}.</p>
+        <h1 className="text-2xl font-semibold">Welcome back{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
+        <p className="text-muted-foreground">Here's what's happening at {college.college_name}.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -48,7 +45,6 @@ export default function DashboardHome() {
           isLoading={queueQuery.isLoading}
           isError={queueQuery.isError}
           description="Low-confidence queries"
-          accent="primary"
         />
         <StatCard
           to="/students"
@@ -58,7 +54,6 @@ export default function DashboardHome() {
           isLoading={studentsQuery.isLoading}
           isError={studentsQuery.isError}
           description="Total conversations"
-          accent="brand-2"
         />
         <StatCard
           to="/staff"
@@ -68,13 +63,11 @@ export default function DashboardHome() {
           isLoading={staffQuery.isLoading}
           isError={staffQuery.isError}
           description="With access to this college"
-          accent="teal"
         />
       </div>
 
       {studentsQuery.data?.items?.length > 0 && (
-        <Card className="overflow-hidden">
-          <div className="-mt-6 h-1 bg-gradient-brand" />
+        <Card>
           <CardHeader>
             <CardTitle className="text-base">Lead score distribution</CardTitle>
             <CardDescription>Where your student pool currently sits, from cold to hot.</CardDescription>
@@ -88,40 +81,16 @@ export default function DashboardHome() {
   )
 }
 
-// Each card gets its own hue (brand blue / violet / teal) purely for
-// visual variety across the row - they aren't semantically tied to
-// anything (unlike the hot/warm/cold lead-temperature colors), so picking
-// three distinct, deliberately-chosen brand hues reads as richer than
-// three identical blue icons in a row.
-const ACCENTS = {
-  primary: {
-    chip: "bg-primary/12 text-primary",
-    bar: "bg-primary",
-  },
-  "brand-2": {
-    chip: "bg-brand-2/12 text-brand-2",
-    bar: "bg-brand-2",
-  },
-  teal: {
-    chip: "bg-teal/12 text-teal",
-    bar: "bg-teal",
-  },
-}
-
-function StatCard({ to, icon: Icon, label, count, isLoading, isError, description, accent = "primary" }) {
-  const { chip, bar } = ACCENTS[accent]
+function StatCard({ to, icon: Icon, label, count, isLoading, isError, description }) {
   return (
-    <Link to={to} className="group block">
-      <Card className="overflow-hidden transition-all duration-150 ease-[var(--ease-out)] group-hover:-translate-y-0.5 group-hover:border-ring/30 group-hover:shadow-[var(--shadow-md)]">
-        <div className={cn("-mt-6 h-1", bar)} />
+    <Link to={to}>
+      <Card className="transition-colors hover:bg-accent/50">
         <CardHeader>
           <div className="flex items-center justify-between">
-            <span className={cn("flex size-9 items-center justify-center rounded-lg", chip)}>
-              <Icon className="size-4.5" />
-            </span>
-            <ArrowRight className="size-4 text-muted-foreground transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground" />
+            <Icon className="size-5 text-muted-foreground" />
+            <ArrowRight className="size-4 text-muted-foreground" />
           </div>
-          <CardTitle className="font-display pt-3 text-3xl font-semibold tabular-nums">
+          <CardTitle className="pt-2 text-3xl font-semibold">
             {isLoading ? (
               <Loader2 className="size-6 animate-spin text-muted-foreground" />
             ) : isError ? (

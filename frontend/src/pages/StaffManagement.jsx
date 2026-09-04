@@ -8,7 +8,6 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
-import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -86,7 +85,6 @@ export default function StaffManagement() {
   if (hasNoCollege) {
     return (
       <EmptyState
-        icon={Users}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -131,15 +129,19 @@ export default function StaffManagement() {
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && (
-        <EmptyState icon={Users} title="No staff yet" description="Add the first staff member for this college." />
+        <EmptyState title="No staff yet" description="Add the first staff member for this college." />
       )}
 
       {!isLoading && total === 0 && debouncedSearch && (
-        <FilteredEmptyState query={debouncedSearch} onClear={() => setSearch("")} itemLabel="staff" />
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+          No staff match "{debouncedSearch}".
+          <Button variant="link" size="sm" className="h-auto p-0 text-sm" onClick={() => setSearch("")}>
+            Clear search
+          </Button>
+        </p>
       )}
 
       {(isLoading || staff.length > 0) && (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[var(--shadow-sm)]">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -186,7 +188,6 @@ export default function StaffManagement() {
                             size="icon"
                             onClick={() => handleDelete(member)}
                             aria-label={`Remove ${member.staff_name}`}
-                            className="hover:bg-destructive/10 hover:text-destructive"
                           >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
@@ -199,7 +200,6 @@ export default function StaffManagement() {
             )}
           </TableBody>
         </Table>
-        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
@@ -214,3 +214,12 @@ export default function StaffManagement() {
   )
 }
 
+function EmptyState({ title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
+      <Users className="size-8 text-muted-foreground" />
+      <p className="font-medium">{title}</p>
+      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
+    </div>
+  )
+}

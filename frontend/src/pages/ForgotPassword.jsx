@@ -6,8 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
-import { BrandMark } from "@/components/BrandMark"
-import { AuthShell } from "@/components/AuthShell"
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("")
@@ -37,15 +35,13 @@ export default function ForgotPassword() {
   }
 
   return (
-    <AuthShell>
-      <Card className="overflow-hidden shadow-[var(--shadow-lg)]">
-        <div className="-mt-6 h-1 bg-gradient-brand" />
+    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-sm">
         {submitted ? (
           <>
             <CardHeader>
-              <BrandMark size={36} className="mb-3" />
               <MailCheck className="mb-2 size-6 text-muted-foreground" />
-              <CardTitle className="font-display text-xl">Check your email</CardTitle>
+              <CardTitle className="text-xl">Check your email</CardTitle>
               <CardDescription>
                 If an account exists for {email}, we've sent a link to reset the password. It expires in 15
                 minutes.
@@ -63,8 +59,7 @@ export default function ForgotPassword() {
         ) : (
           <>
             <CardHeader>
-              <BrandMark size={36} className="mb-3" />
-              <CardTitle className="font-display text-xl">Forgot password?</CardTitle>
+              <CardTitle className="text-xl">Forgot password?</CardTitle>
               <CardDescription>
                 Enter your staff email and we'll send you a link to reset your password.
               </CardDescription>
@@ -103,6 +98,6 @@ export default function ForgotPassword() {
           </>
         )}
       </Card>
-    </AuthShell>
+    </div>
   )
 }
