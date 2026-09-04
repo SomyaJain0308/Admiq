@@ -31,7 +31,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter basename="/app">
+        <BrowserRouter basename="/home">
           <AuthProvider>
             <CollegeProvider>
               <Toaster richColors position="top-right" />

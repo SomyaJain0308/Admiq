@@ -15,8 +15,8 @@ export default defineConfig({
       input: {
         // Static marketing landing page, served at "/".
         landing: path.resolve(import.meta.dirname, "index.html"),
-        // React SPA (dashboard), served at "/app/".
-        app: path.resolve(import.meta.dirname, "app/index.html"),
+        // React SPA (dashboard), served at "/home/".
+        home: path.resolve(import.meta.dirname, "home/index.html"),
       },
     },
   },
