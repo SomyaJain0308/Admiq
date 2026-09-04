@@ -41,13 +41,18 @@ async def get_staff(college_id: int, page: int = 1, page_size: int = 20, search:
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
 
-    base_query = select(StaffCollege).where(StaffCollege.college_id == college_id).options(selectinload(StaffCollege.staff_member))
+    base_query = (
+        select(StaffCollege)
+        .join(CollegeStaff, CollegeStaff.staff_id == StaffCollege.staff_id)
+        .where(StaffCollege.college_id == college_id)
+        .options(selectinload(StaffCollege.staff_member))
+    )
     count_query = select(func.count()).select_from(StaffCollege).join(CollegeStaff, CollegeStaff.staff_id == StaffCollege.staff_id).where(StaffCollege.college_id == college_id)
 
     if search:
         term = f"%{search.strip()}%"
         search_filter = or_(CollegeStaff.staff_name.ilike(term), CollegeStaff.staff_email.ilike(term))
-        base_query = base_query.join(CollegeStaff, CollegeStaff.staff_id == StaffCollege.staff_id).where(search_filter)
+        base_query = base_query.where(search_filter)
         count_query = count_query.where(search_filter)
 
     total = (await db.execute(count_query)).scalar_one()
@@ -65,10 +70,15 @@ async def export_staff(
     db: AsyncSession = Depends(get_db),
     current_staff: CollegeStaff = Depends(verify_college_access),
 ):
-    query = select(StaffCollege).where(StaffCollege.college_id == college_id).options(selectinload(StaffCollege.staff_member))
+    query = (
+        select(StaffCollege)
+        .join(CollegeStaff, CollegeStaff.staff_id == StaffCollege.staff_id)
+        .where(StaffCollege.college_id == college_id)
+        .options(selectinload(StaffCollege.staff_member))
+    )
     if search:
         term = f"%{search.strip()}%"
-        query = query.join(CollegeStaff, CollegeStaff.staff_id == StaffCollege.staff_id).where(or_(CollegeStaff.staff_name.ilike(term), CollegeStaff.staff_email.ilike(term)))
+        query = query.where(or_(CollegeStaff.staff_name.ilike(term), CollegeStaff.staff_email.ilike(term)))
     query = query.order_by(CollegeStaff.staff_name.asc())
     staff_results = await db.execute(query)
     staff = [s.staff_member for s in staff_results.scalars().all()]
