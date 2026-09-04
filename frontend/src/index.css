@@ -2,6 +2,12 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Brand tokens matched to the marketing landing page (index.html) - that
+   page already established AdmiQ's real palette (accent blue #2354c9,
+   hot/warm/cold lead-temperature colors, Space Grotesk display type). The
+   dashboard was left on unmodified shadcn defaults (zero-chroma grays,
+   no accent) and didn't actually match its own landing page. This brings
+   it into line instead of inventing a second, competing identity. */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -10,18 +16,24 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: #2354c9;
+  --primary-foreground: #f5f8ff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.472 0 0);
+  --accent: oklch(0.94 0.03 255);
+  --accent-foreground: #17357a;
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --ring: #2354c9;
+  --hot: #b91c1c;
+  --hot-foreground: #7f1d1d;
+  --warm: #b45309;
+  --warm-foreground: #78350f;
+  --cold: #52525b;
+  --cold-foreground: #3f3f46;
 }
 
 .dark {
@@ -31,18 +43,24 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
+  --primary: #5b8def;
+  --primary-foreground: #071227;
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
   --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --accent: oklch(0.3 0.06 255);
+  --accent-foreground: #dbe6ff;
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --ring: #5b8def;
+  --hot: #f87171;
+  --hot-foreground: #fecaca;
+  --warm: #fbbf24;
+  --warm-foreground: #fde68a;
+  --cold: #a1a1aa;
+  --cold-foreground: #d4d4d8;
 }
 
 @theme inline {
@@ -64,6 +82,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-hot: var(--hot);
+  --color-hot-foreground: var(--hot-foreground);
+  --color-warm: var(--warm);
+  --color-warm-foreground: var(--warm-foreground);
+  --color-cold: var(--cold);
+  --color-cold-foreground: var(--cold-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -77,5 +101,9 @@
   body {
     @apply bg-background text-foreground;
     font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1, h2, h3 {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    letter-spacing: -0.01em;
   }
 }

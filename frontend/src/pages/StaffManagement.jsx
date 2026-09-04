@@ -166,14 +166,24 @@ export default function StaffManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => openEditDialog(member)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(member)}
+                          aria-label={`Edit ${member.staff_name}`}
+                        >
                           <Pencil className="size-4" />
                         </Button>
                         {/* Self-delete is only blocked here in the UI - the backend
                             doesn't stop you from deleting your own account, so this
                             button is a safety net, not the real enforcement. */}
                         {!isSelf && (
-                          <Button variant="ghost" size="icon" onClick={() => handleDelete(member)}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(member)}
+                            aria-label={`Remove ${member.staff_name}`}
+                          >
                             <Trash2 className="size-4 text-destructive" />
                           </Button>
                         )}

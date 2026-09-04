@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react"
 
-const THEME_KEY = "admiq_theme"
+// Matches the key the no-flash inline script in home/index.html reads
+// before first paint, and the one the static landing page (index.html)
+// uses - keeping the two in sync means a theme choice made in the
+// dashboard is respected on the landing page too, and vice versa.
+const THEME_KEY = "admiq-theme"
 
 function getInitialTheme() {
   const stored = localStorage.getItem(THEME_KEY)

@@ -104,7 +104,7 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
                 type="checkbox"
                 checked={sendInvite}
                 onChange={(e) => setSendInvite(e.target.checked)}
-                className="size-4 rounded border-input"
+                className="size-4 rounded border-input accent-primary"
               />
               Email them a link to set their own password
             </label>
@@ -130,7 +130,7 @@ export function StaffFormDialog({ collegeId, open, onOpenChange, editingStaff })
               type="checkbox"
               checked={form.is_active}
               onChange={(e) => setForm((f) => ({ ...f, is_active: e.target.checked }))}
-              className="size-4 rounded border-input"
+              className="size-4 rounded border-input accent-primary"
             />
             Active
           </label>

@@ -42,7 +42,7 @@ export default function Login() {
     <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle className="text-xl">Admiq Staff Login</CardTitle>
+          <CardTitle className="text-xl">AdmiQ staff login</CardTitle>
           <CardDescription>Sign in with your staff email and password.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
