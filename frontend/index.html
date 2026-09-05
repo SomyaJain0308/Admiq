@@ -6,6 +6,23 @@
 <title>AdmiQ — AI admissions assistant for colleges</title>
 <meta name="description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cpath d='M16 7 L24 24 H20.2 L18.3 19.5 H13.7 L11.8 24 H8 Z M16 12.2 L14.2 16.4 H17.8 Z' fill='%23fafafa'/%3E%3C/svg%3E" />
+
+<!-- Open Graph / Twitter card - controls the preview shown when this link is
+     shared in Slack, WhatsApp, iMessage, Twitter, etc. og:url and the image's
+     absolute path below assume the site is served from its own domain root;
+     swap TODO_DOMAIN for the real one once it's live. -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="AdmiQ" />
+<meta property="og:title" content="AdmiQ — AI admissions assistant for colleges" />
+<meta property="og:description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
+<meta property="og:image" content="https://TODO_DOMAIN/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:url" content="https://TODO_DOMAIN/" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="AdmiQ — AI admissions assistant for colleges" />
+<meta name="twitter:description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
+<meta name="twitter:image" content="https://TODO_DOMAIN/og-image.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -182,6 +199,73 @@
   .nav-links a:not(.btn):hover { color: var(--foreground); }
   @media (max-width: 720px) {
     .nav-links a:not(.btn) { display: none; }
+    /* The 28px desktop gap was sized for 4 text links + button + toggle
+       all having breathing room. On mobile only the demo button, theme
+       toggle, and (new) hamburger remain, but 28px between three items -
+       one of them a wide button - was pushing the hamburger past the
+       edge of the viewport on narrow phones. */
+    .nav-links { gap: 10px; }
+  }
+  @media (max-width: 380px) {
+    /* On the narrowest phones even the tightened gap plus a full "Book a
+       Demo" button button doesn't leave room for the hamburger - shrink
+       the button's padding rather than let anything clip off-screen. */
+    .nav-links .btn-primary { padding: 10px 14px; font-size: 0.88rem; }
+  }
+  @media (max-width: 340px) {
+    /* Still tight at true small-phone widths (320-340px) even with the
+       shrunk button - drop the wordmark and keep just the mark icon so
+       the demo button + toggles stay fully on-screen. */
+    .nav .brand-name { display: none; }
+  }
+
+  /* ---- mobile menu (hamburger) ----
+     The four plain nav links vanish above at 720px with nothing to replace
+     them - this reproduces them in a dropdown panel instead, toggled by a
+     hamburger button that mirrors the existing theme-toggle's look. */
+  .menu-toggle {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--foreground);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .menu-toggle:hover { background: var(--muted); }
+  .menu-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .menu-toggle svg { width: 19px; height: 19px; }
+  .menu-toggle .icon-close { display: none; }
+  .nav.menu-open .menu-toggle .icon-burger { display: none; }
+  .nav.menu-open .menu-toggle .icon-close { display: block; }
+  @media (max-width: 720px) {
+    .menu-toggle { display: inline-flex; }
+  }
+
+  .mobile-menu {
+    display: none;
+    flex-direction: column;
+    border-top: 1px solid var(--border);
+    padding: 4px 24px 12px;
+  }
+  .mobile-menu a {
+    padding: 14px 0;
+    font-size: 0.98rem;
+    text-decoration: none;
+    color: var(--foreground);
+    border-bottom: 1px solid var(--border);
+  }
+  .mobile-menu a:last-child { border-bottom: none; }
+  .nav.menu-open .mobile-menu { display: flex; }
+  /* Guard against the menu staying open (e.g. opened on a phone, then the
+     window/orientation resizes wider) once we're back past the breakpoint
+     where the regular nav links are visible again. */
+  @media (min-width: 721px) {
+    .mobile-menu { display: none !important; }
   }
 
   /* ---- hero ---- */
@@ -275,6 +359,16 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
+  }
+  /* Below ~560px, two side-by-side panels leave each one too narrow for the
+     chat bubbles and queue rows to read comfortably (this can still trigger
+     on tablets in the 720-900px range where .hero-grid has already stacked
+     to one column but the visual itself is still full-width there, which is
+     roomy enough - the squeeze only shows up once the whole page is this
+     narrow). Stack the two panels instead. */
+  @media (max-width: 560px) {
+    .hero-visual-grid { grid-template-columns: 1fr; }
+    .hv-panel { min-height: 0; }
   }
   .hv-panel {
     background: var(--background);
@@ -503,7 +597,7 @@
 </head>
 <body>
 
-<nav class="nav">
+<nav class="nav" id="site-nav">
   <div class="wrap nav-inner">
     <a href="#" class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
@@ -522,7 +616,17 @@
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
       </button>
+      <button class="menu-toggle" id="menu-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="mobile-menu" type="button">
+        <svg class="icon-burger" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+        <svg class="icon-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
     </div>
+  </div>
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="#how-it-works">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#product">Product</a>
+    <a href="/home/login">Staff Login</a>
   </div>
 </nav>
 
@@ -805,6 +909,31 @@
     root.classList.toggle("light", !goingDark);
     localStorage.setItem("admiq-theme", goingDark ? "dark" : "light");
   });
+
+  (function () {
+    var nav = document.getElementById("site-nav");
+    var menuToggle = document.getElementById("menu-toggle");
+    var mobileMenu = document.getElementById("mobile-menu");
+
+    function setOpen(open) {
+      nav.classList.toggle("menu-open", open);
+      menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+
+    menuToggle.addEventListener("click", function () {
+      setOpen(!nav.classList.contains("menu-open"));
+    });
+
+    // Tapping a link should navigate/scroll AND close the panel, rather than
+    // leaving it open over the section it just jumped to.
+    mobileMenu.addEventListener("click", function (event) {
+      if (event.target.tagName === "A") setOpen(false);
+    });
+
+    window.addEventListener("resize", function () {
+      if (window.innerWidth > 720) setOpen(false);
+    });
+  })();
 </script>
 </body>
 </html>

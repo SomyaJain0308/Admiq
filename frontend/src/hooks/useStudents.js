@@ -1,4 +1,4 @@
-import { useQuery, keepPreviousData } from "@tanstack/react-query"
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api, ApiError } from "@/lib/api"
 
 export function useStudentList(collegeId, { page = 1, pageSize = 20, search = "" } = {}) {
@@ -39,6 +39,45 @@ export function useConversation(collegeId, studentId) {
       }
     },
     enabled: !!collegeId && !!studentId,
+  })
+}
+
+export function useMessageStudent(collegeId, studentId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (content) => api.post(`/router/students/${collegeId}/${studentId}/message`, { content }),
+    // The conversation view reads from the "conversation" query cache, so
+    // once the message is saved, refetch it - otherwise the staff member's
+    // own message wouldn't show up in the thread until some unrelated
+    // refetch happened to fire.
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversation", collegeId, studentId] })
+    },
+  })
+}
+
+export function useUpdateStudentNotes(collegeId, studentId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (internalNotes) => api.patch(`/router/students/${collegeId}/${studentId}/notes`, { internal_notes: internalNotes }),
+    onSuccess: () => {
+      // Also invalidates the list ("students", collegeId, ...) - not just
+      // this one detail record - in case a notes preview ever shows up
+      // there too.
+      queryClient.invalidateQueries({ queryKey: ["student", collegeId, studentId] })
+      queryClient.invalidateQueries({ queryKey: ["students", collegeId] })
+    },
+  })
+}
+
+export function useAssignStudent(collegeId, studentId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (assignedTo) => api.patch(`/router/students/${collegeId}/${studentId}/assign`, { assigned_to: assignedTo }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["student", collegeId, studentId] })
+      queryClient.invalidateQueries({ queryKey: ["students", collegeId] })
+    },
   })
 }
 

@@ -4,6 +4,9 @@ import { ArrowLeft, Loader2 } from "lucide-react"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useStudentDetail, useConversation } from "@/hooks/useStudents"
 import { ConversationView } from "@/components/ConversationView"
+import { MessageStudentBox } from "@/components/MessageStudentBox"
+import { InternalNotesCard } from "@/components/InternalNotesCard"
+import { AssignStaffSelect } from "@/components/AssignStaffSelect"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { leadScoreBand } from "@/lib/leadScore"
@@ -63,7 +66,7 @@ export default function StudentDetail() {
           <CardHeader>
             <CardTitle>Conversation</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="flex flex-col gap-3">
             {convoLoading ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="size-4 animate-spin" />
@@ -74,6 +77,7 @@ export default function StudentDetail() {
                 <ConversationView messages={messages} />
               </div>
             )}
+            <MessageStudentBox collegeId={college?.college_id} studentId={studentId} />
           </CardContent>
         </Card>
 
@@ -83,6 +87,7 @@ export default function StudentDetail() {
               <CardTitle className="text-base">Profile</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
+              <AssignStaffSelect collegeId={college?.college_id} studentId={studentId} assignedTo={student.assigned_to} />
               <Field label="Course interest" value={student.course_interest} />
               {Object.keys(academicScores).length > 0 && (
                 <div>
@@ -118,14 +123,7 @@ export default function StudentDetail() {
             </CardContent>
           </Card>
 
-          {student.internal_notes && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Internal notes</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground">{student.internal_notes}</CardContent>
-            </Card>
-          )}
+          <InternalNotesCard key={studentId} collegeId={college?.college_id} studentId={studentId} initialNotes={student.internal_notes} />
         </div>
       </div>
     </div>
