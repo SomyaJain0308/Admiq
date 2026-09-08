@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -71,11 +73,19 @@ async def create_college(college: CollegeCreate, db: AsyncSession = Depends(get_
     if existing_phone_number:
         raise HTTPException(status_code=409, detail=f"Phone Number '{college.college_phone}' already exists")
 
+    # Server-generated, never client-supplied: 24 bytes of urlsafe randomness
+    # (192 bits) makes a collision astronomically unlikely, so a single
+    # generation is fine - no retry loop needed the way the name/email/phone
+    # checks above are.
+    widget_public_key = "admiq_pub_" + secrets.token_urlsafe(24)
+
     new_college = College(
         college_name=college.college_name,
         college_phone=college.college_phone,
         college_email=college.college_email,
-        college_strengths=college.college_strengths
+        college_strengths=college.college_strengths,
+        widget_public_key=widget_public_key,
+        widget_allowed_origin=college.widget_allowed_origin,
     )
     
     db.add(new_college)

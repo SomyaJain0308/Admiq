@@ -1,4 +1,5 @@
 from backend.app.models.WhatsappNumber import WhatsAppNumber
+from backend.app.models.College import College
 from backend.app.models.Student import Student
 from backend.app.models.Message import Message
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
@@ -16,6 +17,17 @@ async def resolve_college_from_phone_number_id(db, phone_number_id) -> int:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="College not found with this WhatsApp Number (Unknown Tenant)")
     
     return whatsapp_number.college_id
+
+
+async def resolve_college_from_widget_key(db, widget_public_key: str) -> int:
+    # query colleges where widget_public_key = key supplied by the embedded widget
+    # if not found -> reject request / unknown tenant
+    result = await db.execute(select(College).where(College.widget_public_key == widget_public_key))
+    college = result.scalars().first()
+    if college is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid widget key")
+
+    return college.college_id
 
 
 
@@ -44,6 +56,30 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
         whatsapp_user_id=whatsapp_user_id,
         student_phone=student_phone,
         student_name=student_name
+    )
+
+    db.add(new_student)
+    await db.commit()
+    await db.refresh(new_student)
+    return new_student
+
+
+async def get_or_create_web_student(db, college_id, web_visitor_id, student_name=None) -> Student:
+    # find student by college_id + web_visitor_id, update name if existing name is None, else create student
+    result = await db.execute(select(Student).where(Student.college_id == college_id, Student.web_visitor_id == web_visitor_id))
+    student = result.scalars().first()
+    if student is not None:
+        if student.student_name is None and student_name is not None:
+            student.student_name = student_name
+            await db.commit()
+            await db.refresh(student)
+        return student
+
+    new_student = Student(
+        college_id=college_id,
+        channel="web",
+        web_visitor_id=web_visitor_id,
+        student_name=student_name,
     )
 
     db.add(new_student)

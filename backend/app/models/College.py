@@ -25,6 +25,8 @@ class College(Base):
     college_phone: Mapped[str] = mapped_column(Text, nullable=False)
     college_email: Mapped[str] = mapped_column(Text, nullable=False)
     college_strengths: Mapped[list | None] = mapped_column(JSONB)
+    widget_public_key: Mapped[str | None] = mapped_column(Text, unique=True)
+    widget_allowed_origin: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     students: Mapped[list["Student"]] = relationship(back_populates="college", cascade="all, delete-orphan")

@@ -17,6 +17,7 @@ class StudentSession(Base):
     session_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     college_id: Mapped[int] = mapped_column(Integer, ForeignKey("colleges.college_id", ondelete="CASCADE"), nullable=False)
     student_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    channel: Mapped[str] = mapped_column(Text, nullable=False, server_default="whatsapp")
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, server_default=func.now())
     last_message_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, server_default=func.now())
     ended_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
@@ -33,6 +34,7 @@ class StudentSession(Base):
 
     __table_args__ = (
         CheckConstraint("session_status IN ('active', 'closed')"),
+        CheckConstraint("channel IN ('whatsapp', 'web')"),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
         UniqueConstraint("college_id", "session_id"),
         Index("one_active_session_per_student", "college_id", "student_id", unique=True, postgresql_where=(session_status == "active")),
