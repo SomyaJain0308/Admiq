@@ -1,12 +1,13 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query"
 import { api, ApiError } from "@/lib/api"
 
-export function useStudentList(collegeId, { page = 1, pageSize = 20, search = "" } = {}) {
+export function useStudentList(collegeId, { page = 1, pageSize = 20, search = "", assignedTo = "" } = {}) {
   return useQuery({
-    queryKey: ["students", collegeId, page, pageSize, search],
+    queryKey: ["students", collegeId, page, pageSize, search, assignedTo],
     queryFn: () => {
       const params = new URLSearchParams({ page, page_size: pageSize })
       if (search) params.set("search", search)
+      if (assignedTo) params.set("assigned_to", assignedTo)
       return api.get(`/router/students/${collegeId}?${params.toString()}`)
     },
     enabled: !!collegeId,

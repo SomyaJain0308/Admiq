@@ -4,13 +4,14 @@ from backend.app.models.College import College
 from backend.app.models.Message import Message
 
 
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langsmith import traceable
 
 import logging
 import time
+from datetime import datetime, timezone
 
 
 logger = logging.getLogger(__name__)
@@ -138,7 +139,21 @@ async def get_relevant_documents_scored(db, query: str, college_id: int, k: int)
         logger.error("Embedding call failed college_id=%s query=%r error=%s", college_id, query[:200], e, exc_info=True)
         raise # intentionally raised. Caller (agent.py's `retrieve()` node) catches this and falls back to a default SYSTEM_PROMPT so the conversation still continues. Do NOT call build_system_prompt() from anywhere that doesn't have an equivalent fallback in place this function is not safe to call bare.
     try:
-        results = await db.execute(select(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("distance")).where(Chunk.college_id == college_id).options(selectinload(Chunk.document), selectinload(Chunk.source_query)).order_by("distance").limit(k))
+        # Excludes staff-answer chunks whose expires_at has passed - without
+        # this, the expiry staff pick when replying to a low-confidence
+        # query (e.g. "scholarship deadline extended to Friday") was stored
+        # but never enforced, so a stale time-boxed answer would keep being
+        # retrieved and presented as current fact indefinitely. Document
+        # chunks always have expires_at IS NULL (enforced by a DB check
+        # constraint), so this never affects them.
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        results = await db.execute(
+            select(Chunk, Chunk.embedding.cosine_distance(query_embedding).label("distance"))
+            .where(Chunk.college_id == college_id, or_(Chunk.expires_at.is_(None), Chunk.expires_at > now))
+            .options(selectinload(Chunk.document), selectinload(Chunk.source_query))
+            .order_by("distance")
+            .limit(k)
+        )
         results = results.all()
     except Exception as e:
         logger.error("chunk retrieval query failed college_id=%s k=%s error=%s", college_id, k, e, exc_info=True)

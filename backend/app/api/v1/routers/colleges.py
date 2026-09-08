@@ -5,8 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.database import get_db
 from backend.app.models.College import College
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
+from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.services.auth_services import verify_college_access
 from backend.app.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeResponse
+from backend.app.schemas.whatsapp_number import WhatsAppNumberCreate, WhatsAppNumberResponse
 from backend.app.config import get_settings
 
 
@@ -107,3 +109,49 @@ async def delete_college(college_id: int, db: AsyncSession = Depends(get_db), x_
         raise HTTPException(status_code=404, detail="College not Found")
     await db.delete(existing_college)
     await db.commit()
+
+
+# Registering a college's WhatsApp Business number is ops-only for the same
+# reason create_college is: there's no natural staff-level authorization for
+# it, and the values involved (Meta's phone_number_id and WhatsApp Business
+# Account ID) come from a college's Meta Business Manager setup that AdmiQ's
+# own team coordinates during onboarding, not something college staff supply
+# through their dashboard. Without a row here, the webhook has no way to
+# match an inbound message's phone_number_id to a college at all - this was
+# previously only reachable by inserting directly into the database.
+@router.post("/router/college/{college_id}/whatsapp-number", response_model=WhatsAppNumberResponse, status_code=201)
+async def create_whatsapp_number(college_id: int, payload: WhatsAppNumberCreate, db: AsyncSession = Depends(get_db), x_admin_token: str | None = Header(default=None)):
+    _verify_admin_token(x_admin_token)
+
+    existing_college_result = await db.execute(select(College).where(College.college_id == college_id).limit(1))
+    existing_college = existing_college_result.scalars().first()
+    if not existing_college:
+        raise HTTPException(status_code=404, detail="College not Found")
+
+    existing_number_result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.phone_number_id == payload.phone_number_id).limit(1))
+    existing_number = existing_number_result.scalars().first()
+    if existing_number:
+        raise HTTPException(status_code=409, detail=f"phone_number_id '{payload.phone_number_id}' is already registered (college_id={existing_number.college_id})")
+
+    new_number = WhatsAppNumber(
+        college_id=college_id,
+        phone_number_id=payload.phone_number_id,
+        whatsapp_business_account_id=payload.whatsapp_business_account_id,
+        display_number=payload.display_number,
+    )
+    db.add(new_number)
+    await db.commit()
+    await db.refresh(new_number)
+    return new_number
+
+
+@router.get("/router/college/{college_id}/whatsapp-number", response_model=WhatsAppNumberResponse)
+async def get_whatsapp_number(college_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    # Staff-level (not admin-gated) - unlike registering one, checking
+    # whether your own college's WhatsApp number is connected is a
+    # reasonable thing for that college's own staff to see.
+    number_result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.college_id == college_id).limit(1))
+    number = number_result.scalars().first()
+    if not number:
+        raise HTTPException(status_code=404, detail="No WhatsApp number is connected for this college yet")
+    return number

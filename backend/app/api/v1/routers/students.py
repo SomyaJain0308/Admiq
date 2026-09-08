@@ -6,12 +6,13 @@ from sqlalchemy.orm import selectinload
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.Student import Student
+from backend.app.models.StudentSession import StudentSession
 from backend.app.models.Message import Message
 from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.services.auth_services import verify_college_access
 from backend.app.services.csv_export import rows_to_csv_response
 from backend.app.services.tenant_service import save_staff_message
-from backend.app.services.whatsapp_service import send_whatsapp_text_message
+from backend.app.services.whatsapp_service import send_staff_initiated_message
 from backend.app.schemas.students import StudentMessageCreate, StudentMessageResponse, StudentNotesUpdate, StudentAssignUpdate
 from backend.app.config import get_settings
 from backend.app.monitoring.logging_utils import get_logger
@@ -27,6 +28,7 @@ async def get_students(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=1000),
     search: str | None = Query(default=None, max_length=200),
+    assigned_to: str | None = Query(default=None, description="A staff_id to filter to that staff member's students, or 'unassigned' for students with no assigned staff member"),
     db: AsyncSession = Depends(get_db),
     membership: CollegeStaff = Depends(verify_college_access),
 ):
@@ -42,6 +44,21 @@ async def get_students(
         search_filter = or_(Student.student_name.ilike(term), Student.student_phone.ilike(term), Student.course_interest.ilike(term))
         query = query.where(search_filter)
         count_query = count_query.where(search_filter)
+
+    if assigned_to is not None:
+        # "Assigned to" only means something once staff can actually filter
+        # by it - otherwise it's a label nobody can query, which is the
+        # exact gap this closes.
+        if assigned_to.strip().lower() == "unassigned":
+            assigned_filter = Student.assigned_to.is_(None)
+        else:
+            try:
+                assigned_staff_id = int(assigned_to)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="assigned_to must be a staff id or 'unassigned'")
+            assigned_filter = Student.assigned_to == assigned_staff_id
+        query = query.where(assigned_filter)
+        count_query = count_query.where(assigned_filter)
 
     total = (await db.execute(count_query)).scalar_one()
 
@@ -130,9 +147,31 @@ async def message_student(
     if not whatsapp_number:
         raise HTTPException(status_code=503, detail="No WhatsApp number configured for this college")
 
-    send_result = await send_whatsapp_text_message(phone_number_id=whatsapp_number.phone_number_id, to=student.whatsapp_user_id, message=payload.content, access_token=settings.whatsapp_access_token)
+    # WhatsApp only allows free-form text within 24h of the STUDENT's last
+    # message to us - a staff-initiated message like this one is exactly
+    # the case where that window may have already closed, so this looks up
+    # the student's own last inbound activity (not our own last reply,
+    # which doesn't extend the window) and falls back to a template send if
+    # it's been too long.
+    last_session_result = await db.execute(
+        select(StudentSession.last_message_at)
+        .where(StudentSession.college_id == college_id, StudentSession.student_id == student_id)
+        .order_by(StudentSession.last_message_at.desc())
+        .limit(1)
+    )
+    last_inbound_message_at = last_session_result.scalars().first()
+
+    send_result = await send_staff_initiated_message(
+        phone_number_id=whatsapp_number.phone_number_id,
+        to=student.whatsapp_user_id,
+        message=payload.content,
+        access_token=settings.whatsapp_access_token,
+        last_inbound_message_at=last_inbound_message_at,
+        template_name=settings.whatsapp_staff_template_name,
+        template_language_code=settings.whatsapp_staff_template_language_code,
+    )
     if not send_result["ok"]:
-        logger.error(f"Failed to deliver staff message to student_id={student_id}")
+        logger.error(f"Failed to deliver staff message to student_id={student_id} (channel={send_result.get('channel')})")
 
     # Save it either way, matching the low-confidence reply endpoint's
     # behavior - the message was genuinely sent by staff even if WhatsApp's
@@ -146,6 +185,7 @@ async def message_student(
         content=staff_message.content,
         created_at=staff_message.created_at,
         delivered=send_result["ok"],
+        channel=send_result.get("channel", "text"),
     )
 
 

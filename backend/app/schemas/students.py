@@ -16,6 +16,12 @@ class StudentMessageResponse(BaseModel):
     content: str
     created_at: datetime
     delivered: bool
+    # "text" = sent as a normal free-form WhatsApp message; "template" = the
+    # 24h customer-service window had closed, so it went out via the
+    # pre-approved template fallback instead (see whatsapp_service.
+    # send_staff_initiated_message) and may read differently to the student
+    # than the exact text staff typed.
+    channel: str = "text"
 
 
 class StudentNotesUpdate(BaseModel):

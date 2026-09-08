@@ -6,10 +6,12 @@ from backend.app.database import get_db
 from backend.app.models.Document import Document
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
 from backend.app.services.auth_services import verify_college_access
-from backend.app.services.async_storage_service import upload_file_bytes
+from backend.app.services.async_storage_service import upload_file_bytes, delete_file_bytes
 from backend.app.services.document_service import async_create_document_row
 from backend.app.background_tasks.celery_tasks import process_document_task
+from backend.app.monitoring.logging_utils import get_logger
 
+logger = get_logger()
 
 router = APIRouter(tags=["Upload Documents"])
 
@@ -46,3 +48,28 @@ async def get_document_status(college_id: int, document_id: int, db: Session = D
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"document_id": doc.document_id, "file_name": doc.file_name, "status": doc.document_status, "extraction_method": doc.extraction_method, "quality_score": float(doc.quality_score) if doc.quality_score is not None else None, "num_pages": doc.num_pages, "error": doc.error, "created_at": doc.created_at.isoformat()}
+
+@router.delete("/router/colleges/{college_id}/documents/{document_id}", status_code=204)
+async def delete_document(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))
+    doc = result.scalars().first()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    storage_path = doc.storage_path
+    await db.delete(doc)
+    await db.commit()
+    # The FK from chunks.document_id is ondelete="CASCADE", so the delete
+    # above already removed every chunk of this document from the retrieval
+    # index - that's the part that actually stops the assistant from citing
+    # it. Deleting the underlying file from storage is best-effort cleanup
+    # after that: it runs after the commit (not before, and not in the same
+    # transaction) so a storage hiccup can never leave the DB row/chunks
+    # half-deleted or block staff from retiring a document from the
+    # knowledge base. A leftover blob in the bucket is just an orphaned
+    # file; a stuck DB row still feeding wrong answers is the real harm.
+    if storage_path:
+        try:
+            await delete_file_bytes(storage_path)
+        except Exception as e:
+            logger.error(f"Failed to delete storage object '{storage_path}' for document_id={document_id}: {e}")

@@ -9,11 +9,12 @@ from backend.app.services.auth_services import verify_college_access
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_OPEN, LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS, LOW_CONFIDENCE_QUERIES_RESOLVED
 from backend.app.config import get_settings
-from backend.app.services.whatsapp_service import send_whatsapp_text_message
+from backend.app.services.whatsapp_service import send_staff_initiated_message
 from backend.app.database import get_db
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
 from backend.app.models.Message import Message
 from backend.app.models.Student import Student
+from backend.app.models.StudentSession import StudentSession
 from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.models.Chunk import Chunk
 from backend.app.schemas.low_confidence import LowConfidenceResponse
@@ -102,9 +103,28 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
 
     whatsapp_number_result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.college_id == college_id).limit(1))
     whatsapp_number = whatsapp_number_result.scalars().first()
-    send_result = await send_whatsapp_text_message(phone_number_id=whatsapp_number.phone_number_id, to=student.whatsapp_user_id, message=reply_message, access_token=settings.whatsapp_access_token)
+    # Same 24h customer-service-window concern as the direct-message
+    # endpoint applies here if anything more so - a low-confidence query can
+    # sit unanswered for a while before staff get to it, so by the time a
+    # reply goes out the window has very plausibly already closed.
+    last_session_result = await db.execute(
+        select(StudentSession.last_message_at)
+        .where(StudentSession.college_id == college_id, StudentSession.student_id == query.student_id)
+        .order_by(StudentSession.last_message_at.desc())
+        .limit(1)
+    )
+    last_inbound_message_at = last_session_result.scalars().first()
+    send_result = await send_staff_initiated_message(
+        phone_number_id=whatsapp_number.phone_number_id,
+        to=student.whatsapp_user_id,
+        message=reply_message,
+        access_token=settings.whatsapp_access_token,
+        last_inbound_message_at=last_inbound_message_at,
+        template_name=settings.whatsapp_staff_template_name,
+        template_language_code=settings.whatsapp_staff_template_language_code,
+    )
     if not send_result["ok"]:
-        logger.error(f"Failed to deliver staff reply to student_id={query.student_id}")
+        logger.error(f"Failed to deliver staff reply to student_id={query.student_id} (channel={send_result.get('channel')})")
     # Embed + Store as a retrievable chunk
     embedder = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, api_key=settings.gemini_api_key, output_dimensionality=settings.vector_size)
     chunk_text = f"Question: {reconstructed.question}\nAnswer: {reconstructed.answer}"
@@ -117,6 +137,6 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
     LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS.observe((query.resolved_at - query.flagged_at).total_seconds())
     await db.commit()
 
-    return {"status": "resolved", "reconstructed_question": reconstructed.question, "expires_at": expires_at}
+    return {"status": "resolved", "reconstructed_question": reconstructed.question, "expires_at": expires_at, "channel": send_result.get("channel", "text")}
     
     

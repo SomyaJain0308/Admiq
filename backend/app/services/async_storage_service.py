@@ -34,3 +34,8 @@ async def upload_file_bytes(
         },
     )
     return path
+
+
+async def delete_file_bytes(path: str) -> None:
+    bucket = await _bucket()
+    await bucket.remove([path])

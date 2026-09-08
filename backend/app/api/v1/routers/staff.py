@@ -206,19 +206,33 @@ async def logout(payload: RefreshTokenRequest):
     await revoke_refresh_token(payload.refresh_token)
 
 
-@router.post("/token", response_model=Token)
+@router.post("/token", response_model=Token, dependencies=[Depends(RateLimiter(times=10, minutes=15))])
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+    # Rate limited (per client IP, via FastAPILimiter's default identifier) -
+    # this is the endpoint that actually checks a submitted password, so
+    # it's the real brute-force target. forgot-password already had this
+    # protection; login itself didn't, which is backwards given login is
+    # what an attacker would actually want to guess their way into.
     staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
     staff = staff_result.scalars().first()
     if not staff or not verify_password(form_data.password, staff.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"}) # password or email is incorrect is the norm, otherwise it would be very easy for hackers to attack
+    if not staff.is_active:
+        # Deliberately the same 401 + generic-sounding shape as a wrong
+        # password, rather than 403 "account deactivated" - that would let
+        # someone probe which emails belong to deactivated accounts.
+        raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
     access_token = create_access_token(data={"sub": str(staff.staff_id)})
     refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer")
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Token, dependencies=[Depends(RateLimiter(times=30, minutes=15))])
 async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db)):
+    # Looser than /token (refreshing is routine background app behavior, not
+    # a one-shot human login), but still capped - an unlimited refresh
+    # endpoint is an unlimited way to keep testing guessed/stolen refresh
+    # tokens.
     staff_id = await verify_refresh_token(payload.refresh_token)
     if staff_id is None:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token", headers={"WWW-Authenticate": "Bearer"})
@@ -230,6 +244,11 @@ async def refresh_access_token(payload: RefreshTokenRequest, db: AsyncSession = 
     staff = staff_result.scalars().first()
     if not staff:
         raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
+    if not staff.is_active:
+        # A staff member deactivated mid-session shouldn't be able to keep
+        # renewing their access via a refresh token that was issued back
+        # when they were still active.
+        raise HTTPException(status_code=401, detail="This account has been deactivated", headers={"WWW-Authenticate": "Bearer"})
     new_access_token = create_access_token(data={"sub": str(staff.staff_id)})
     new_refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
     await revoke_refresh_token(payload.refresh_token) # Expire the old token as soon as a new one is issued

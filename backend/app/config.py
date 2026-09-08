@@ -43,6 +43,18 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     meta_app_secret: str = ""
     whatsapp_access_token: str = ""
 
+    # Outside WhatsApp's 24-hour customer service window (i.e. more than 24h
+    # since the student's last inbound message), only a pre-approved template
+    # message can be sent - free-form text is rejected by the API. These two
+    # values name the template staff-initiated sends (direct messages,
+    # low-confidence-queue replies) fall back to when that window has closed.
+    # PLACEHOLDER: "staff_followup_v1" is not a real approved template - it
+    # must be created and approved in Meta Business Manager first (with a
+    # single body text variable, since that's what the fallback fills with
+    # the staff member's message), then swapped in here via env vars.
+    whatsapp_staff_template_name: str = "staff_followup_v1"
+    whatsapp_staff_template_language_code: str = "en_US"
+
     # Database
     database_url: str = ""
     redis_url: str = ""

@@ -40,3 +40,23 @@ export function useUploadDocument(collegeId) {
     },
   })
 }
+
+export function useDeleteDocument(collegeId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId) => api.delete(`/router/colleges/${collegeId}/documents/${documentId}`),
+    onMutate: async (documentId) => {
+      const queryKey = ["documents", collegeId]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      queryClient.setQueryData(queryKey, (old) => (old ? old.filter((d) => d.document_id !== documentId) : old))
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(["documents", collegeId], context.previous)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
+    },
+  })
+}

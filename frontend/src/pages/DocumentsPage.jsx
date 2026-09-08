@@ -1,8 +1,8 @@
 import { useRef, useState } from "react"
-import { FileText, Loader2, CheckCircle2, XCircle, Upload } from "lucide-react"
+import { FileText, Loader2, CheckCircle2, XCircle, Upload, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/CollegeContext"
-import { useDocuments, useUploadDocument } from "@/hooks/useDocuments"
+import { useDocuments, useUploadDocument, useDeleteDocument } from "@/hooks/useDocuments"
 import { usePagination } from "@/hooks/usePagination"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
@@ -24,10 +24,22 @@ export default function DocumentsPage() {
   const { college, hasNoCollege } = useCurrentCollege()
   const { data: documents, isLoading, isError, error } = useDocuments(college?.college_id)
   const uploadMutation = useUploadDocument(college?.college_id)
+  const deleteMutation = useDeleteDocument(college?.college_id)
   const fileInputRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const { page, setPage, totalPages, pageItems } = usePagination(documents || [], 15)
+
+  async function handleDelete(doc) {
+    const confirmed = window.confirm(`Delete "${doc.file_name}"? The assistant will stop using it to answer questions - this can't be undone.`)
+    if (!confirmed) return
+    try {
+      await deleteMutation.mutateAsync(doc.document_id)
+      toast.success(`${doc.file_name} deleted.`)
+    } catch (err) {
+      toast.error(err?.message || "Failed to delete document.")
+    }
+  }
 
   async function handleFiles(fileList) {
     const files = Array.from(fileList || [])
@@ -142,13 +154,21 @@ export default function DocumentsPage() {
               <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-20">Pages</TableHead>
               <TableHead className="w-24">Uploaded</TableHead>
+              <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableSkeletonRows columns={4} />
+              <TableSkeletonRows columns={5} />
             ) : (
-              pageItems.map((doc) => <DocumentRow key={doc.document_id} doc={doc} />)
+              pageItems.map((doc) => (
+                <DocumentRow
+                  key={doc.document_id}
+                  doc={doc}
+                  onDelete={handleDelete}
+                  isDeleting={deleteMutation.isPending && deleteMutation.variables === doc.document_id}
+                />
+              ))
             )}
           </TableBody>
         </Table>
@@ -159,7 +179,7 @@ export default function DocumentsPage() {
   )
 }
 
-function DocumentRow({ doc }) {
+function DocumentRow({ doc, onDelete, isDeleting }) {
   return (
     <TableRow>
       <TableCell className="max-w-xs truncate font-medium" title={doc.error || undefined}>
@@ -170,6 +190,18 @@ function DocumentRow({ doc }) {
       </TableCell>
       <TableCell className="text-muted-foreground">{doc.num_pages ?? "-"}</TableCell>
       <TableCell className="text-muted-foreground">{timeSince(doc.created_at)}</TableCell>
+      <TableCell>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Delete ${doc.file_name}`}
+          disabled={isDeleting}
+          onClick={() => onDelete(doc)}
+        >
+          {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-muted-foreground" />}
+        </Button>
+      </TableCell>
     </TableRow>
   )
 }

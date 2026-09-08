@@ -18,6 +18,13 @@ export function MessageStudentBox({ collegeId, studentId }) {
       setContent("")
       if (result?.delivered === false) {
         toast.warning("Message saved, but WhatsApp delivery failed. The student may not have received it.")
+      } else if (result?.channel === "template") {
+        // WhatsApp only allows free-form text within 24h of the student's
+        // last message - past that, the send falls back to the approved
+        // template, which reads differently to the student than what was
+        // typed here (the typed text fills the template's one variable but
+        // is wrapped in the template's own fixed wording).
+        toast.success("Sent via template — this student hasn't messaged in over 24h, so WhatsApp required an approved template instead of your exact text.")
       } else {
         toast.success("Message sent.")
       }

@@ -142,6 +142,13 @@ async def get_current_staff(token: str = Depends(oauth2_scheme), db: AsyncSessio
     staff = staff_result.scalars().first()
     if not staff: # confirm the staff member still actually exists (they might have been deleted after the token was issued)
         raise HTTPException(status_code=401, detail="Staff not found", headers={"WWW-Authenticate": "Bearer"})
+    if not staff.is_active:
+        # Without this, deactivating someone only stopped future logins - an
+        # access token issued before the toggle would keep working for its
+        # full lifetime (get_current_staff backs every protected route, so
+        # this is the one place that can cut an in-progress session off
+        # immediately rather than waiting for the token to expire on its own).
+        raise HTTPException(status_code=401, detail="This account has been deactivated", headers={"WWW-Authenticate": "Bearer"})
     return staff
 
 
