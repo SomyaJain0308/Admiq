@@ -67,7 +67,7 @@ class AgentTurnOutput(BaseModel): # What the assistant sends back
     response: str
     updated_session_summary: str
     sources: list[str] = Field(default_factory=list, description="list of source filenames/queries used to answer, empty list if none were used")
-    wants_human_handoff: bool = Field(default=False)
+    wants_human_handoff: bool = Field(default=False, description="True if the response tells the student their query is being raised with the team, or the student explicitly asked for a human/staff member. False otherwise.")
 
 
 class QueryRewrite(BaseModel):
