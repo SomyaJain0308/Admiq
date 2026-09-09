@@ -39,3 +39,15 @@ async def upload_file_bytes(
 async def delete_file_bytes(path: str) -> None:
     bucket = await _bucket()
     await bucket.remove([path])
+
+
+async def create_signed_url(path: str, expires_in: int = 300) -> str:
+    # The bucket is private (uploads/downloads only ever go through the
+    # service-role key on the backend), so there's no public URL a browser
+    # can hit directly. A signed URL is a short-lived, scoped exception to
+    # that - safe to hand to the frontend without exposing the bucket or
+    # the service-role key itself. 5 minutes is plenty for opening/
+    # downloading one PDF and short enough that a leaked link is low-risk.
+    bucket = await _bucket()
+    result = await bucket.create_signed_url(path, expires_in)
+    return result["signedURL"]

@@ -1,8 +1,8 @@
 import { useRef, useState } from "react"
-import { FileText, Loader2, CheckCircle2, XCircle, Upload, Trash2 } from "lucide-react"
+import { FileText, Loader2, CheckCircle2, XCircle, Upload, Trash2, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/CollegeContext"
-import { useDocuments, useUploadDocument, useDeleteDocument } from "@/hooks/useDocuments"
+import { useDocuments, useUploadDocument, useDeleteDocument, useViewDocument } from "@/hooks/useDocuments"
 import { usePagination } from "@/hooks/usePagination"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
@@ -25,10 +25,19 @@ export default function DocumentsPage() {
   const { data: documents, isLoading, isError, error } = useDocuments(college?.college_id)
   const uploadMutation = useUploadDocument(college?.college_id)
   const deleteMutation = useDeleteDocument(college?.college_id)
+  const viewMutation = useViewDocument(college?.college_id)
   const fileInputRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
 
   const { page, setPage, totalPages, pageItems } = usePagination(documents || [], 15)
+
+  async function handleView(doc) {
+    try {
+      await viewMutation.mutateAsync(doc.document_id)
+    } catch (err) {
+      toast.error(err?.message || `Failed to open ${doc.file_name}.`)
+    }
+  }
 
   async function handleDelete(doc) {
     const confirmed = window.confirm(`Delete "${doc.file_name}"? The assistant will stop using it to answer questions - this can't be undone.`)
@@ -154,7 +163,7 @@ export default function DocumentsPage() {
               <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-20">Pages</TableHead>
               <TableHead className="w-24">Uploaded</TableHead>
-              <TableHead className="w-12"></TableHead>
+              <TableHead className="w-20"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -167,6 +176,8 @@ export default function DocumentsPage() {
                   doc={doc}
                   onDelete={handleDelete}
                   isDeleting={deleteMutation.isPending && deleteMutation.variables === doc.document_id}
+                  onView={handleView}
+                  isViewing={viewMutation.isPending && viewMutation.variables === doc.document_id}
                 />
               ))
             )}
@@ -179,11 +190,19 @@ export default function DocumentsPage() {
   )
 }
 
-function DocumentRow({ doc, onDelete, isDeleting }) {
+function DocumentRow({ doc, onDelete, isDeleting, onView, isViewing }) {
   return (
     <TableRow>
       <TableCell className="max-w-xs truncate font-medium" title={doc.error || undefined}>
-        {doc.file_name}
+        <button
+          type="button"
+          onClick={() => onView(doc)}
+          disabled={isViewing}
+          className="truncate text-left hover:underline disabled:cursor-wait disabled:no-underline disabled:opacity-70"
+          title={`Open ${doc.file_name}`}
+        >
+          {doc.file_name}
+        </button>
       </TableCell>
       <TableCell>
         <StatusBadge status={doc.status} error={doc.error} />
@@ -191,16 +210,28 @@ function DocumentRow({ doc, onDelete, isDeleting }) {
       <TableCell className="text-muted-foreground">{doc.num_pages ?? "-"}</TableCell>
       <TableCell className="text-muted-foreground">{timeSince(doc.created_at)}</TableCell>
       <TableCell>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label={`Delete ${doc.file_name}`}
-          disabled={isDeleting}
-          onClick={() => onDelete(doc)}
-        >
-          {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-muted-foreground" />}
-        </Button>
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`View ${doc.file_name}`}
+            disabled={isViewing}
+            onClick={() => onView(doc)}
+          >
+            {isViewing ? <Loader2 className="size-4 animate-spin" /> : <Eye className="size-4 text-muted-foreground" />}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Delete ${doc.file_name}`}
+            disabled={isDeleting}
+            onClick={() => onDelete(doc)}
+          >
+            {isDeleting ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4 text-muted-foreground" />}
+          </Button>
+        </div>
       </TableCell>
     </TableRow>
   )

@@ -6,7 +6,7 @@ from backend.app.database import get_db
 from backend.app.models.Document import Document
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
 from backend.app.services.auth_services import verify_college_access
-from backend.app.services.async_storage_service import upload_file_bytes, delete_file_bytes
+from backend.app.services.async_storage_service import upload_file_bytes, delete_file_bytes, create_signed_url
 from backend.app.services.document_service import async_create_document_row
 from backend.app.background_tasks.celery_tasks import process_document_task
 from backend.app.monitoring.logging_utils import get_logger
@@ -48,6 +48,21 @@ async def get_document_status(college_id: int, document_id: int, db: Session = D
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found.")
     return {"document_id": doc.document_id, "file_name": doc.file_name, "status": doc.document_status, "extraction_method": doc.extraction_method, "quality_score": float(doc.quality_score) if doc.quality_score is not None else None, "num_pages": doc.num_pages, "error": doc.error, "created_at": doc.created_at.isoformat()}
+
+@router.get("/router/colleges/{college_id}/documents/{document_id}/view-url")
+async def get_document_view_url(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))
+    doc = result.scalars().first()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if not doc.storage_path:
+        # Row exists but the upload never finished writing storage_path
+        # (e.g. crashed between async_create_document_row and the storage
+        # upload completing) - nothing to sign a URL for.
+        raise HTTPException(status_code=404, detail="This file isn't available in storage.")
+    url = await create_signed_url(doc.storage_path)
+    return {"url": url}
+
 
 @router.delete("/router/colleges/{college_id}/documents/{document_id}", status_code=204)
 async def delete_document(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):

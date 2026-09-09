@@ -41,6 +41,20 @@ export function useUploadDocument(collegeId) {
   })
 }
 
+export function useViewDocument(collegeId) {
+  return useMutation({
+    mutationFn: async (documentId) => {
+      const { url } = await api.get(`/router/colleges/${collegeId}/documents/${documentId}/view-url`)
+      return url
+    },
+    onSuccess: (url) => {
+      // Signed URL is short-lived (5 min) and scoped to this one file -
+      // open immediately rather than storing it anywhere.
+      window.open(url, "_blank", "noopener,noreferrer")
+    },
+  })
+}
+
 export function useDeleteDocument(collegeId) {
   const queryClient = useQueryClient()
   return useMutation({
