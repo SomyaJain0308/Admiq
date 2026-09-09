@@ -11,11 +11,7 @@ class CollegeBase(BaseModel):
 
 
 class CollegeCreate(CollegeBase):
-    # widget_public_key is intentionally NOT accepted here - it's always
-    # server-generated in create_college so it can never be client-supplied
-    # or guessed. widget_allowed_origin can be set at creation time, or left
-    # null and set later via PATCH once the college's site URL is confirmed.
-    widget_allowed_origin: str | None = Field(default=None, max_length=255)
+    pass
 
 
 class CollegeUpdate(BaseModel):
@@ -23,7 +19,6 @@ class CollegeUpdate(BaseModel):
     college_phone: str | None = Field(default=None, min_length=10, max_length=15)
     college_email: EmailStr | None = Field(default=None, max_length=150)
     college_strengths: list[str] | None = Field(default=None)
-    widget_allowed_origin: str | None = Field(default=None, max_length=255)
 
 
 class CollegeResponse(CollegeBase):
@@ -31,5 +26,3 @@ class CollegeResponse(CollegeBase):
 
     college_id: int
     created_at: datetime
-    widget_public_key: str | None = None
-    widget_allowed_origin: str | None = None

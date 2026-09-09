@@ -18,10 +18,8 @@ class Student(Base):
 
     student_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     college_id: Mapped[int] = mapped_column(Integer, ForeignKey("colleges.college_id", ondelete="CASCADE"), nullable=False)
-    channel: Mapped[str] = mapped_column(Text, nullable=False, server_default="whatsapp")
-    student_phone: Mapped[str | None] = mapped_column(Text)
-    whatsapp_user_id: Mapped[str | None] = mapped_column(Text)
-    web_visitor_id: Mapped[str | None] = mapped_column(Text)
+    student_phone: Mapped[str] = mapped_column(Text, nullable=False)
+    whatsapp_user_id: Mapped[str] = mapped_column(Text, nullable=False)
     student_name: Mapped[str | None] = mapped_column(Text)
     course_interest: Mapped[str | None] = mapped_column(Text)
     academic_scores: Mapped[dict | None] = mapped_column(JSONB)  # e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
@@ -38,10 +36,6 @@ class Student(Base):
         UniqueConstraint("college_id", "student_id"),
         UniqueConstraint("college_id", "whatsapp_user_id"),
         UniqueConstraint("college_id", "student_phone"),
-        UniqueConstraint("college_id", "web_visitor_id"),
-        CheckConstraint("channel IN ('whatsapp', 'web')"),
-        CheckConstraint("channel <> 'whatsapp' OR (student_phone IS NOT NULL AND whatsapp_user_id IS NOT NULL)"),
-        CheckConstraint("channel <> 'web' OR web_visitor_id IS NOT NULL"),
         Index("ix_students_college_id", "college_id"),
         Index("ix_students_college_id_lead_score", "college_id", "lead_score"),
         ForeignKeyConstraint(["college_id", "assigned_to"], ["staff_colleges.college_id", "staff_colleges.staff_id"])

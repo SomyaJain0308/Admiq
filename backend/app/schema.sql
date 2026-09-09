@@ -2,14 +2,12 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
 CREATE TABLE colleges (
-    college_id            SERIAL PRIMARY KEY,
-    college_name          TEXT NOT NULL,
-    college_phone         TEXT NOT NULL,
-    college_email         TEXT NOT NULL,
-    college_strengths     JSONB,
-    widget_public_key     TEXT UNIQUE,
-    widget_allowed_origin TEXT,
-    created_at            TIMESTAMP DEFAULT NOW()
+    college_id          SERIAL PRIMARY KEY,
+    college_name        TEXT NOT NULL,
+    college_phone       TEXT NOT NULL,
+    college_email       TEXT NOT NULL,
+    college_strengths   JSONB,
+    created_at          TIMESTAMP DEFAULT NOW()
 );
 
 CREATE TABLE whatsapp_numbers (
@@ -43,10 +41,8 @@ CREATE TABLE staff_colleges (
 CREATE TABLE students (
     student_id              SERIAL PRIMARY KEY,
     college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    channel                  TEXT NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp', 'web')),
-    student_phone           TEXT,
-    whatsapp_user_id        TEXT,
-    web_visitor_id           TEXT,
+    student_phone           TEXT NOT NULL,
+    whatsapp_user_id        TEXT NOT NULL,
     student_name            TEXT,
     course_interest         TEXT,
     academic_scores         JSONB,  -- e.g. {"jee_main_percentile": 95.2, "class_12_percentage": 92}
@@ -62,9 +58,6 @@ CREATE TABLE students (
     UNIQUE (college_id, student_phone),
     UNIQUE (college_id, student_id),
     UNIQUE (college_id, whatsapp_user_id),
-    UNIQUE (college_id, web_visitor_id),
-    CHECK (channel <> 'whatsapp' OR (student_phone IS NOT NULL AND whatsapp_user_id IS NOT NULL)),
-    CHECK (channel <> 'web' OR web_visitor_id IS NOT NULL),
     FOREIGN KEY (college_id, assigned_to) REFERENCES staff_colleges(college_id, staff_id)
 );
 
@@ -72,7 +65,6 @@ CREATE TABLE student_sessions (
     session_id              SERIAL PRIMARY KEY,
     college_id              INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
     student_id              INT NOT NULL,
-    channel                  TEXT NOT NULL DEFAULT 'whatsapp' CHECK (channel IN ('whatsapp', 'web')),
     started_at              TIMESTAMP DEFAULT NOW(),
     last_message_at         TIMESTAMP DEFAULT NOW(),
     ended_at                TIMESTAMP,
