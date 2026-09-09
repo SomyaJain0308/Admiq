@@ -62,7 +62,7 @@ def add_context_to_chunks(document_text: str, chunks: List[Document]) -> List[Do
     cache = None
     if use_explicit_cache:
         cache = create_context_cache(base_llm, messages=[SystemMessage(content=SYSTEM_INSTRUCTION), HumanMessage(content=document_text)], ttl=settings.cache_ttl_seconds)
-        cached_llm = ChatGoogleGenerativeAI(model=settings.contextual_retrieval_model, api_key=settings.gemini_api_key, cached_content=cache.name)
+        cached_llm = ChatGoogleGenerativeAI(model=settings.contextual_retrieval_model, api_key=settings.gemini_api_key, cached_content=cache)
         structured_llm = cached_llm.with_structured_output(ChunkContexts, method="json_schema", include_raw=True)
     else:
         structured_llm = base_llm.with_structured_output(ChunkContexts, method="json_schema", include_raw=True)
@@ -98,9 +98,9 @@ def add_context_to_chunks(document_text: str, chunks: List[Document]) -> List[Do
         if cache is not None:
             # No LangChain-native delete yet, drop to the raw client just for this.
             try:
-                _raw_genai.Client().caches.delete(name=cache.name)
+                _raw_genai.Client().caches.delete(name=cache)
             except Exception as e:
-                logger.warning(f"Failed to delete context cache {cache.name}: {e}")
+                logger.warning(f"Failed to delete context cache {cache}: {e}")
     return contextualized
 
 
