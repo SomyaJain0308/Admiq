@@ -2,6 +2,8 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 from typing import Optional
 
+from backend.app.schemas.staff import StaffCreate
+
 
 class CollegeBase(BaseModel):
     college_name: str = Field(min_length=2, max_length=100)
@@ -11,7 +13,13 @@ class CollegeBase(BaseModel):
 
 
 class CollegeCreate(CollegeBase):
-    pass
+    # A brand-new college has no staff, so create_college takes the first
+    # staff member's details in the same request and creates both rows in
+    # one transaction - otherwise you'd need an already-logged-in staff
+    # member to call create_staff afterwards, which nothing satisfies for
+    # the very first college/staff pair in the system. Same StaffCreate
+    # schema used by create_staff: password optional -> invite email flow.
+    first_staff: StaffCreate
 
 
 class CollegeUpdate(BaseModel):

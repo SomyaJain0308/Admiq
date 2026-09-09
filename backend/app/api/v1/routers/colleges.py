@@ -1,18 +1,22 @@
+import secrets
+
 from fastapi import APIRouter, Depends, Header, HTTPException
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.database import get_db
 from backend.app.models.College import College
-from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
+from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
 from backend.app.models.WhatsappNumber import WhatsAppNumber
-from backend.app.services.auth_services import verify_college_access
+from backend.app.services.auth_services import verify_college_access, hash_password, create_staff_invite_token
+from backend.app.services.email_service import send_staff_invite_email
 from backend.app.schemas.colleges import CollegeCreate, CollegeUpdate, CollegeResponse
 from backend.app.schemas.whatsapp_number import WhatsAppNumberCreate, WhatsAppNumberResponse
 from backend.app.config import get_settings
 
 
 router = APIRouter(tags=["colleges"])
+settings = get_settings()
 
 
 # create_college, delete_college, and get_colleges (list-all) are ops-only
@@ -77,10 +81,46 @@ async def create_college(college: CollegeCreate, db: AsyncSession = Depends(get_
         college_email=college.college_email,
         college_strengths=college.college_strengths
     )
-    
     db.add(new_college)
+    await db.flush()  # assigns new_college.college_id without committing yet - staff creation below can still fail and roll both back
+
+    # Bootstrap the first staff member in the same transaction: a brand-new
+    # college has no staff, and create_staff's own bootstrap path (any
+    # logged-in staff can create the first staff row for an empty college)
+    # still requires *some* staff account to already be logged in. Doing it
+    # here instead removes that dependency entirely for the first college.
+    staff_in = college.first_staff
+    existing_staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == staff_in.staff_email.lower()).limit(1))
+    existing_staff = existing_staff_result.scalars().first()
+
+    if existing_staff:
+        # Same email already has an account elsewhere - attach them to this
+        # college instead of creating a second account, mirroring create_staff.
+        new_staff = existing_staff
+        invite_sent = False
+    else:
+        invite_sent = staff_in.password is None
+        actual_password = staff_in.password or secrets.token_urlsafe(32)
+        new_staff = CollegeStaff(
+            staff_name=staff_in.staff_name,
+            staff_email=staff_in.staff_email.lower(),
+            is_active=staff_in.is_active,
+            hashed_password=hash_password(actual_password),
+        )
+        db.add(new_staff)
+        await db.flush()  # assigns new_staff.staff_id
+
+    membership = StaffCollege(staff_id=new_staff.staff_id, college_id=new_college.college_id)
+    db.add(membership)
+
     await db.commit()
     await db.refresh(new_college)
+
+    if invite_sent:
+        invite_token = create_staff_invite_token(new_staff.staff_id)
+        invite_link = f"{settings.frontend_url}/home/reset-password?token={invite_token}"
+        await send_staff_invite_email(new_staff.staff_email, new_staff.staff_name, new_college.college_name, invite_link)
+
     return new_college
 
 
