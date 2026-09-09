@@ -32,16 +32,14 @@ export function EmptyState({ icon: Icon, title, description, action }) {
   )
 }
 
-export function FilteredEmptyState({ query, onClear, itemLabel = "results" }) {
+export function FilteredEmptyState({ query, onClear, itemLabel = "results", message, clearLabel = "Clear search" }) {
   return (
     <div className="flex flex-col items-center justify-center gap-1.5 py-10 text-center">
       <SearchX className="size-5 text-muted-foreground/60" />
       <p className="flex flex-wrap items-center justify-center gap-x-1 gap-y-1 text-sm text-muted-foreground">
-        <span>
-          No {itemLabel} match &quot;{query}&quot;.
-        </span>
+        <span>{message ?? `No ${itemLabel} match "${query}".`}</span>
         <Button variant="link" size="sm" className="h-auto p-0 text-sm" onClick={onClear}>
-          Clear search
+          {clearLabel}
         </Button>
       </p>
     </div>

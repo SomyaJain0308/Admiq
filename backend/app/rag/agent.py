@@ -197,8 +197,16 @@ class Agent:
             attempt = state["fallback_retry_count"] + 1
             start = time.perf_counter()
             response = None
-            prev_input_tokens = 0
-            prev_output_tokens = 0
+            # Carry forward whatever the primary model's (possibly several)
+            # attempts already used, same as process_message does two
+            # functions up - these used to be hardcoded to 0, which meant
+            # every retried primary attempt's token usage got silently
+            # dropped from the running total the moment a request fell
+            # through to fallback (AgentState has no reducers, so returning
+            # a smaller total here overwrites state's total rather than
+            # adding to it).
+            prev_input_tokens = state.get("input_tokens", 0)
+            prev_output_tokens = state.get("output_tokens", 0)
             try:
                 response = await self.fallback_llm.ainvoke(state["prompt"])
                 if response["parsing_error"] is not None:

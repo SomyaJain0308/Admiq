@@ -8,6 +8,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
@@ -85,6 +86,7 @@ export default function StaffManagement() {
   if (hasNoCollege) {
     return (
       <EmptyState
+        icon={Users}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -129,16 +131,11 @@ export default function StaffManagement() {
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && (
-        <EmptyState title="No staff yet" description="Add the first staff member for this college." />
+        <EmptyState icon={Users} title="No staff yet" description="Add the first staff member for this college." />
       )}
 
       {!isLoading && total === 0 && debouncedSearch && (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          No staff match "{debouncedSearch}".
-          <Button variant="link" size="sm" className="h-auto p-0 text-sm" onClick={() => setSearch("")}>
-            Clear search
-          </Button>
-        </p>
+        <FilteredEmptyState itemLabel="staff" query={debouncedSearch} onClear={() => setSearch("")} />
       )}
 
       {(isLoading || staff.length > 0) && (
@@ -179,9 +176,8 @@ export default function StaffManagement() {
                         >
                           <Pencil className="size-4" />
                         </Button>
-                        {/* Self-delete is only blocked here in the UI - the backend
-                            doesn't stop you from deleting your own account, so this
-                            button is a safety net, not the real enforcement. */}
+                        {/* Backend also rejects self-delete now (400) - this hides
+                            the button too so it's not a dead-end error click. */}
                         {!isSelf && (
                           <Button
                             variant="ghost"
@@ -210,16 +206,6 @@ export default function StaffManagement() {
         onOpenChange={setDialogOpen}
         editingStaff={editingStaff}
       />
-    </div>
-  )
-}
-
-function EmptyState({ title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-      <Users className="size-8 text-muted-foreground" />
-      <p className="font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
     </div>
   )
 }

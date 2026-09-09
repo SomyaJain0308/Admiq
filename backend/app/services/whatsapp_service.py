@@ -1,8 +1,10 @@
-import httpx, hashlib, hmac
+import httpx, hashlib, hmac, logging
 from datetime import datetime, timedelta, timezone
 
 from backend.app.monitoring.api_metrics import WHATSAPP_SEND_LATENCY_SECONDS, WHATSAPP_SEND_OUTCOMES
 from backend.app.schemas.models import InboundWhatsAppMessage
+
+logger = logging.getLogger(__name__)
 
 # WhatsApp only allows free-form text within 24h of the user's last message
 # to us; outside that a pre-approved template message is required instead.
@@ -138,28 +140,79 @@ def verify_meta_signature(raw_body: bytes, signature_header: str | None, app_sec
 
 
 def extract_whatsapp_message_events(payload) -> list[InboundWhatsAppMessage]:
-    value = payload["entry"][0]["changes"][0]["value"]
-    messages = value.get("messages", [])
-    if not messages:
-        return []
+    # Meta can (and regularly does) batch more than one message into a
+    # single webhook delivery - e.g. a student sending two texts back to
+    # back before the first delivery finishes, or multiple "changes" landing
+    # together. This used to index straight to entry[0]/changes[0]/
+    # messages[0], so anything past the very first message in the payload
+    # was silently dropped - never saved, never answered, never logged.
+    # Walking every entry -> every change -> every message instead means a
+    # burst of messages actually all get processed.
+    events: list[InboundWhatsAppMessage] = []
 
-    if payload["entry"][0]["changes"][0]["value"]["messages"][0]["type"] != "text":
-        return []
+    for entry in payload.get("entry", []):
+        whatsapp_business_account_id = entry.get("id")
+        for change in entry.get("changes", []):
+            value = change.get("value", {})
+            messages = value.get("messages", [])
+            if not messages:
+                continue
 
-    event = InboundWhatsAppMessage(
-    whatsapp_business_account_id = payload["entry"][0]["id"],
-    phone_number_id = value["metadata"]["phone_number_id"],
-    display_phone_number = value["metadata"]["display_phone_number"],
-    
-    whatsapp_user_id = value["contacts"][0]["wa_id"],
-    student_name = value["contacts"][0]["profile"]["name"],
-    student_phone = value["messages"][0]["from"],
-    whatsapp_message_id = value["messages"][0]["id"],
-    whatsapp_timestamp = datetime.fromtimestamp(int(value["messages"][0]["timestamp"]), tz=timezone.utc,),
-    message_type = value["messages"][0]["type"],
-    content = value["messages"][0]["text"]["body"],
-    
-    raw_payload = payload,
-    )
-    
-    return [event]  
+            metadata = value.get("metadata", {})
+            # Cloud API groups a batch of messages from the same
+            # conversation under one "value", so there's normally exactly
+            # one contact for however many messages are in it - contacts[0]
+            # is the right one for every message in this value, not just
+            # the first.
+            contact = (value.get("contacts") or [{}])[0]
+
+            for message in messages:
+                message_type = message.get("type")
+                if message_type != "text":
+                    # Non-text messages (images, stickers, reactions, etc.)
+                    # aren't handled yet - skip just this one message rather
+                    # than the whole batch, and say so, instead of silently
+                    # discarding it (and anything after it) like before.
+                    logger.info(
+                        "Skipping non-text WhatsApp message type=%s message_id=%s",
+                        message_type,
+                        message.get("id"),
+                    )
+                    continue
+
+                text_body = message.get("text", {}).get("body")
+                if text_body is None:
+                    logger.warning("Skipping WhatsApp text message with no body message_id=%s", message.get("id"))
+                    continue
+
+                event = _build_event(payload, whatsapp_business_account_id, metadata, contact, message, message_type, text_body)
+                if event is not None:
+                    events.append(event)
+
+    return events
+
+
+def _build_event(payload, whatsapp_business_account_id, metadata, contact, message, message_type, text_body) -> InboundWhatsAppMessage | None:
+    try:
+        return InboundWhatsAppMessage(
+            whatsapp_business_account_id=whatsapp_business_account_id,
+            phone_number_id=metadata.get("phone_number_id"),
+            display_phone_number=metadata.get("display_phone_number"),
+            whatsapp_user_id=contact.get("wa_id"),
+            student_name=contact.get("profile", {}).get("name"),
+            student_phone=message.get("from"),
+            whatsapp_message_id=message.get("id"),
+            whatsapp_timestamp=datetime.fromtimestamp(int(message["timestamp"]), tz=timezone.utc),
+            message_type=message_type,
+            content=text_body,
+            # Keep the whole webhook payload, not just this message - same
+            # as before, just no longer implying (via a per-message copy)
+            # that each event arrived in its own delivery.
+            raw_payload=payload,
+        )
+    except Exception as e:
+        # One malformed message record (missing field, bad timestamp, etc.)
+        # shouldn't take down every other message in the same batch with
+        # it - log and skip just this one.
+        logger.error("Failed to parse WhatsApp message, skipping message_id=%s error=%s", message.get("id"), e, exc_info=True)
+        return None

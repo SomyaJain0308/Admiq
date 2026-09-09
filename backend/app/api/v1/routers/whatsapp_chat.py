@@ -43,10 +43,20 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
     payload = await request.json()
     events = extract_whatsapp_message_events(payload) # Defined in services/whatsapp_service.py
+    processed_count = 0
 
     for event in events:
         request_id = uuid.uuid4().hex[:12]
-        college_id = await resolve_college_from_phone_number_id(db, event.phone_number_id) # Defined in services/tenant_service.py
+        try:
+            college_id = await resolve_college_from_phone_number_id(db, event.phone_number_id) # Defined in services/tenant_service.py
+        except HTTPException:
+            # Now that a single webhook delivery can carry several events
+            # (see extract_whatsapp_message_events), one message from an
+            # unmapped/unknown number shouldn't 404 the whole request and
+            # take every other, valid event in the same batch down with it -
+            # skip just this one and keep going. resolve_college_from_
+            # phone_number_id already logs the unknown-tenant warning.
+            continue
         student = await get_or_create_student(db, college_id=college_id, student_phone=event.student_phone, whatsapp_user_id=event.whatsapp_user_id, student_name=event.student_name) # Defined in services/tenant_service.py
         session = await get_or_create_active_session(db=db, college_id=college_id, student_id=student.student_id) # Defined in services/session_service.py
         logger = ContextLoggerAdapter(_module_logger, {"request_id": request_id})
@@ -110,4 +120,5 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 logger.error("Failed to send Whatsapp reply", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": send_result}})
             if security_notes:
                 logger.info("Security notes", extra={"extra_data": {"notes": security_notes, "college_id": college_id, "student_id": student.student_id}})
-    return {"status": "ok", "messages_processed": len(events)}
+        processed_count += 1
+    return {"status": "ok", "messages_processed": processed_count}

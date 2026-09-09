@@ -7,12 +7,20 @@ from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_FLAGGED
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+import logging
+
+logger = logging.getLogger(__name__)
 
 async def resolve_college_from_phone_number_id(db, phone_number_id) -> int:
     # query whatsapp_numbers where phone_number_id = webhook metadata.phone_number_id if not found -> reject webhook / log unknown tenant return college_id
     result = await db.execute(select(WhatsAppNumber).where(WhatsAppNumber.phone_number_id == phone_number_id))
     whatsapp_number = result.scalars().first()
     if whatsapp_number is None:
+        # Previously raised with no log line at all, despite the comment
+        # above saying this should be logged - a misconfigured/unmapped
+        # WhatsApp number showed up as a bare 404 with nothing in the logs
+        # to explain why. Log it before raising so it's actually visible.
+        logger.warning("Webhook for unknown/unmapped WhatsApp phone_number_id=%s", phone_number_id)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="College not found with this WhatsApp Number (Unknown Tenant)")
     
     return whatsapp_number.college_id

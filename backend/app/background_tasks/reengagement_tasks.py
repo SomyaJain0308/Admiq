@@ -96,6 +96,20 @@ async def _check_and_send_reenagegement_nudges_async():
                             else:
                                 logger.error(f"Failed to send reengagement nudge to student {student.student_id}: {send_result}")
                                 REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="send_failed").inc()
+                                # Mark it done rather than leaving the flag
+                                # unset. Every other rejection path above
+                                # this point marks the session terminal;
+                                # leaving this one open only buys a retry
+                                # for the few minutes left before the
+                                # session ages out of the ~36-minute window
+                                # above, after which it's dropped for good
+                                # anyway with no record it was ever
+                                # attempted. The error log and the
+                                # send_failed metric above are what make
+                                # this failure visible/alertable - the flag
+                                # here is just about not leaving a silent,
+                                # unqueryable dead end.
+                                session.reengagement_nudge_sent = True
                         except Exception as e:
                             logger.error(f"Error processing reengagement candidate session {session.session_id}: {e}", exc_info=True)
                             REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="error").inc()

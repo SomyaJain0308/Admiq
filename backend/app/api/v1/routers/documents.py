@@ -9,6 +9,7 @@ from backend.app.services.auth_services import verify_college_access
 from backend.app.services.async_storage_service import upload_file_bytes, delete_file_bytes, create_signed_url
 from backend.app.services.document_service import async_create_document_row
 from backend.app.background_tasks.celery_tasks import process_document_task
+from backend.app.schemas.documents import BulkDeleteRequest
 from backend.app.monitoring.logging_utils import get_logger
 
 logger = get_logger()
@@ -62,6 +63,61 @@ async def get_document_view_url(college_id: int, document_id: int, db: Session =
         raise HTTPException(status_code=404, detail="This file isn't available in storage.")
     url = await create_signed_url(doc.storage_path)
     return {"url": url}
+
+
+@router.post("/router/colleges/{college_id}/documents/{document_id}/retry")
+async def retry_document(college_id: int, document_id: int, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id == document_id))
+    doc = result.scalars().first()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    if doc.document_status != "failed":
+        raise HTTPException(status_code=400, detail="Only failed documents can be retried.")
+    if not doc.storage_path:
+        # Nothing in storage to re-process (e.g. crashed before the upload
+        # finished writing storage_path) - re-uploading is the only option.
+        raise HTTPException(status_code=400, detail="The original file isn't available - please re-upload it.")
+    # Reset directly rather than via update_document_status: that helper only
+    # overwrites fields it's given, and we specifically need error to go back
+    # to NULL (a stale error message sitting next to a fresh "processing"
+    # status would look like a bug) so the row goes back to a clean pending
+    # state.
+    doc.document_status = "processing"
+    doc.error = None
+    await db.commit()
+    await db.refresh(doc)
+    process_document_task.delay(document_id=doc.document_id, college_id=college_id)
+    return {"document_id": doc.document_id, "status": doc.document_status}
+
+
+@router.post("/router/colleges/{college_id}/documents/bulk-delete")
+async def bulk_delete_documents(college_id: int, payload: BulkDeleteRequest, db: Session = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+    result = await db.execute(select(Document).where(Document.college_id == college_id, Document.document_id.in_(payload.document_ids)))
+    docs = result.scalars().all()
+    found_ids = {d.document_id for d in docs}
+    not_found_ids = [i for i in payload.document_ids if i not in found_ids]
+    storage_paths = [d.storage_path for d in docs if d.storage_path]
+
+    # Same reasoning as the single-document delete below: the DB delete (and
+    # its cascading chunk delete) is the part that actually stops the
+    # assistant from citing these documents, so it happens as one
+    # transaction first. Storage cleanup is best-effort afterwards - a
+    # partial storage failure should never leave any of these rows
+    # half-deleted or still feeding wrong answers.
+    for doc in docs:
+        await db.delete(doc)
+    await db.commit()
+
+    for storage_path in storage_paths:
+        try:
+            await delete_file_bytes(storage_path)
+        except Exception as e:
+            logger.error(f"Failed to delete storage object '{storage_path}' during bulk delete for college_id={college_id}: {e}")
+
+    return {
+        "deleted_ids": sorted(found_ids),
+        "not_found_ids": not_found_ids,
+    }
 
 
 @router.delete("/router/colleges/{college_id}/documents/{document_id}", status_code=204)

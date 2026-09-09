@@ -189,15 +189,27 @@ async def update_staff(staff_id: int, college_id: int, staff: StaffUpdate, db: A
 
 @router.delete("/router/staff/{college_id}/{staff_id}", status_code=204)
 async def delete_staff(staff_id: int, college_id: int, db: AsyncSession = Depends(get_db), current_staff: CollegeStaff = Depends(verify_college_access)):
+    if staff_id == current_staff.staff_id:
+        # The frontend already hides this action for yourself, but that's
+        # just a UI convenience - without this check, hitting the endpoint
+        # directly would let someone remove their own access (and, until
+        # the fix below, their whole account) mid-session.
+        raise HTTPException(status_code=400, detail="You can't remove your own staff access.")
     college_exists = await db.execute(select(College.college_id).where(College.college_id == college_id).limit(1))
     if not college_exists.scalar():
         raise HTTPException(status_code=404, detail="College not found")
-    existing_staff_result = await db.execute(select(StaffCollege).where(StaffCollege.college_id == college_id, StaffCollege.staff_id == staff_id).options(selectinload(StaffCollege.staff_member)).limit(1))
+    existing_staff_result = await db.execute(select(StaffCollege).where(StaffCollege.college_id == college_id, StaffCollege.staff_id == staff_id).limit(1))
     existing_staff = existing_staff_result.scalars().first()
     if not existing_staff:
         raise HTTPException(status_code=404, detail="Staff not Found")
 
-    await db.delete(existing_staff.staff_member)
+    # Delete only this college's membership row, not the CollegeStaff
+    # account - a staff member can belong to multiple colleges (see
+    # create_staff), and this endpoint is scoped to "remove them from THIS
+    # college" (that's exactly what the frontend confirm dialog says). The
+    # account itself, and any of the person's other college memberships,
+    # must be untouched.
+    await db.delete(existing_staff)
     await db.commit()
 
 

@@ -55,6 +55,16 @@ export function useViewDocument(collegeId) {
   })
 }
 
+export function useRetryDocument(collegeId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (documentId) => api.post(`/router/colleges/${collegeId}/documents/${documentId}/retry`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
+    },
+  })
+}
+
 export function useDeleteDocument(collegeId) {
   const queryClient = useQueryClient()
   return useMutation({
@@ -68,6 +78,46 @@ export function useDeleteDocument(collegeId) {
     },
     onError: (_err, _vars, context) => {
       if (context?.previous) queryClient.setQueryData(["documents", collegeId], context.previous)
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
+    },
+  })
+}
+
+// Bulk delete: one request to the batch endpoint rather than N parallel
+// single-deletes. Optimistically clears every selected row up front, then
+// rolls back only the ones the server reports it didn't actually delete
+// (not_found_ids - e.g. already removed by someone else) so a partial
+// outcome doesn't make successfully-deleted rows reappear.
+export function useBulkDeleteDocuments(collegeId) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (documentIds) => {
+      const result = await api.post(`/router/colleges/${collegeId}/documents/bulk-delete`, { document_ids: documentIds })
+      return { failedIds: result.not_found_ids, succeededCount: result.deleted_ids.length }
+    },
+    onMutate: async (documentIds) => {
+      const queryKey = ["documents", collegeId]
+      await queryClient.cancelQueries({ queryKey })
+      const previous = queryClient.getQueryData(queryKey)
+      const idSet = new Set(documentIds)
+      queryClient.setQueryData(queryKey, (old) => (old ? old.filter((d) => !idSet.has(d.document_id)) : old))
+      return { previous }
+    },
+    onError: (_err, _vars, context) => {
+      // The whole request failed (network error, 4xx/5xx) - nothing was
+      // deleted server-side, so restore everything that was optimistically
+      // removed.
+      if (context?.previous) queryClient.setQueryData(["documents", collegeId], context.previous)
+    },
+    onSuccess: (result, _vars, context) => {
+      if (result.failedIds.length > 0 && context?.previous) {
+        // Put back only the rows the server says it didn't delete.
+        const failedSet = new Set(result.failedIds)
+        const stillFailed = context.previous.filter((d) => failedSet.has(d.document_id))
+        queryClient.setQueryData(["documents", collegeId], (old) => [...(old || []), ...stillFailed])
+      }
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })

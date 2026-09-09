@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
+import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { leadScoreBand } from "@/lib/leadScore"
 import {
   Table,
@@ -72,6 +73,7 @@ export default function StudentsList() {
   if (hasNoCollege) {
     return (
       <EmptyState
+        icon={GraduationCap}
         title="No college access yet"
         description="Your account isn't linked to a college yet. Contact an admin to get set up."
       />
@@ -127,32 +129,32 @@ export default function StudentsList() {
       )}
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && !assignedTo && (
-        <EmptyState title="No students yet" description="Students will show up here once they message your WhatsApp number." />
+        <EmptyState
+          icon={GraduationCap}
+          title="No students yet"
+          description="Students will show up here once they message your WhatsApp number."
+        />
       )}
 
       {!isLoading && total === 0 && (debouncedSearch || assignedTo) && (
-        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-          {debouncedSearch && assignedTo
-            ? `No students match "${debouncedSearch}" for this filter.`
-            : debouncedSearch
-              ? `No students match "${debouncedSearch}".`
-              : assignedTo === "unassigned"
-                ? "No unassigned students."
-                : assignedTo === String(user?.staff_id)
-                  ? "No students are assigned to you yet."
-                  : "No students match this filter."}
-          <Button
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-sm"
-            onClick={() => {
-              setSearch("")
-              setAssignedTo("")
-            }}
-          >
-            Clear filters
-          </Button>
-        </p>
+        <FilteredEmptyState
+          message={
+            debouncedSearch && assignedTo
+              ? `No students match "${debouncedSearch}" for this filter.`
+              : debouncedSearch
+                ? `No students match "${debouncedSearch}".`
+                : assignedTo === "unassigned"
+                  ? "No unassigned students."
+                  : assignedTo === String(user?.staff_id)
+                    ? "No students are assigned to you yet."
+                    : "No students match this filter."
+          }
+          clearLabel="Clear filters"
+          onClear={() => {
+            setSearch("")
+            setAssignedTo("")
+          }}
+        />
       )}
 
       {(isLoading || students.length > 0) && (
@@ -217,16 +219,6 @@ export default function StudentsList() {
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
-    </div>
-  )
-}
-
-function EmptyState({ title, description }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-16 text-center">
-      <GraduationCap className="size-8 text-muted-foreground" />
-      <p className="font-medium">{title}</p>
-      <p className="max-w-sm text-sm text-muted-foreground">{description}</p>
     </div>
   )
 }
