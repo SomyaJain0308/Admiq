@@ -53,7 +53,7 @@ export default function DashboardHome() {
   if (hasNoCollege) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Welcome{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Welcome{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
         <p className="text-muted-foreground">Your account isn't linked to a college yet. Contact an admin to get set up.</p>
       </div>
     )
@@ -61,7 +61,7 @@ export default function DashboardHome() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="relative overflow-hidden rounded-xl border bg-muted/20 p-6 sm:p-8">
+      <div className="bg-glow-primary shadow-elevated relative overflow-hidden rounded-xl border bg-muted/20 p-6 sm:p-8">
         <div
           className="bg-dot-grid pointer-events-none absolute inset-x-[-10%] top-[-60%] h-[320px]"
           style={{
@@ -70,8 +70,10 @@ export default function DashboardHome() {
           }}
         />
         <div className="relative">
-          <h1 className="text-2xl font-semibold">Welcome back{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
-          <p className="mt-1 text-muted-foreground">Here's what's happening at {college.college_name}.</p>
+          <h1 className="font-display text-3xl font-semibold tracking-tight">
+            Welcome back{user?.staff_name ? `, ${user.staff_name}` : ""}
+          </h1>
+          <p className="mt-1.5 text-muted-foreground">Here's what's happening at {college.college_name}.</p>
         </div>
       </div>
 
@@ -79,8 +81,10 @@ export default function DashboardHome() {
           divider between columns does the same job the marketing site's
           problem/features grids do (frontend/home/index.html), so the
           dashboard's own "hero" moment reads as a continuation of that
-          language rather than a switch to generic SaaS card chrome. */}
-      <div className="grid overflow-hidden rounded-xl border sm:grid-cols-3 sm:divide-x">
+          language rather than a switch to generic SaaS card chrome. A single
+          shadow-elevated on the outer grid (not per-cell) keeps that one
+          shared surface instead of three competing floating boxes. */}
+      <div className="shadow-elevated grid overflow-hidden rounded-xl border sm:grid-cols-3 sm:divide-x">
         <StatCard
           to="/queue"
           icon={Inbox}
@@ -139,16 +143,16 @@ function StatCard({ to, icon: Icon, label, count, isLoading, isError, descriptio
   return (
     <Link
       to={to}
-      className="group flex flex-col gap-3 border-t p-5 transition-colors first:border-t-0 hover:bg-accent/40 sm:border-t-0 sm:p-6"
+      className="group relative flex flex-col gap-3 border-t p-5 transition-colors first:border-t-0 hover:bg-accent/40 sm:border-t-0 sm:p-6"
     >
       <div className="flex items-center justify-between">
-        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
           <Icon className="size-4.5" />
         </span>
-        <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+        <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-primary" />
       </div>
       <div>
-        <div className="font-display text-3xl font-semibold">
+        <div className="font-display text-4xl font-semibold tracking-tight">
           {isLoading ? (
             <Loader2 className="size-6 animate-spin text-muted-foreground" />
           ) : isError ? (
@@ -160,7 +164,7 @@ function StatCard({ to, icon: Icon, label, count, isLoading, isError, descriptio
             (count ?? 0)
           )}
         </div>
-        <p className="mt-1 text-sm font-medium">{label}</p>
+        <p className="mt-1.5 text-sm font-medium">{label}</p>
         <p className="text-xs text-muted-foreground">{description}</p>
       </div>
     </Link>
@@ -247,7 +251,7 @@ function HotLeadsCard({ collegeId }) {
     <Card>
       <CardHeader>
         <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-md bg-hot/10 text-hot">
+          <span className="icon-badge-hot flex size-7 items-center justify-center rounded-full">
             <Flame className="size-4" />
           </span>
           <div>

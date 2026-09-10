@@ -64,7 +64,7 @@ export default function CollegeSettings() {
   if (hasNoCollege) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">College settings</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">College settings</h1>
         <p className="text-muted-foreground">Your account isn't linked to a college yet. Contact an admin to get set up.</p>
       </div>
     )
@@ -82,7 +82,7 @@ export default function CollegeSettings() {
   return (
     <div className="flex max-w-2xl flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">College settings</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">College settings</h1>
         <p className="text-muted-foreground">Basic info and admissions assistant configuration.</p>
       </div>
 
@@ -309,6 +309,9 @@ function CollegeSettingsForm({ college, updateMutation }) {
                 return (
                   <div key={row.id} className="flex flex-col gap-1">
                     <div className="flex items-center gap-1">
+                      <span className="font-display flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+                        {index + 1}
+                      </span>
                       <div className="flex flex-col">
                         <Button
                           type="button"
@@ -361,7 +364,7 @@ function CollegeSettingsForm({ college, updateMutation }) {
                       </Button>
                     </div>
                     {(isDuplicate || isOverLength || isNearLimit) && (
-                      <div className="flex justify-between pl-14 text-xs">
+                      <div className="flex justify-between pl-[5.25rem] text-xs">
                         <span className={cn(isDuplicate || isOverLength ? "text-destructive" : "invisible")}>
                           {isDuplicate ? "This strength is listed more than once." : isOverLength ? "Too long - try to trim this down." : ""}
                         </span>

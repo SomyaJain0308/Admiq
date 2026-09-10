@@ -181,7 +181,12 @@ export function DashboardLayout() {
         // interactive regardless of `mobileNavOpen`.
         inert={!isDesktopViewport && !mobileNavOpen ? true : undefined}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-muted/20 transition-transform lg:static lg:z-auto lg:w-64 lg:translate-x-0",
+          // A visibly distinct surface from the main content area (not the
+          // near-identical bg-muted/20 both used before) - a faint tint plus
+          // a slightly darker inner edge is enough for the eye to parse
+          // "navigation rail" vs. "page" at a glance, without going as far
+          // as a full dark sidebar that would fight the light content area.
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-muted/40 shadow-[inset_-1px_0_0_var(--border)] transition-transform lg:static lg:z-auto lg:w-64 lg:translate-x-0",
           mobileNavOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
@@ -266,7 +271,7 @@ export function DashboardLayout() {
                   // starts competing for the same attention.
                   "relative flex items-center gap-2.5 rounded-md py-2 pr-2 pl-3 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-primary/10 text-primary before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
+                    ? "bg-primary/10 text-primary before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-[3px] before:rounded-full before:bg-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )
               }
@@ -287,7 +292,7 @@ export function DashboardLayout() {
 
         <div className="border-t p-3">
           <div className="flex items-center gap-2.5 rounded-md px-1 py-1.5">
-            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            <span className="bg-gradient-brand-soft flex size-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-primary ring-1 ring-primary/15">
               {(user?.staff_name || user?.staff_email || "?").charAt(0).toUpperCase()}
             </span>
             <div className="min-w-0 flex-1">

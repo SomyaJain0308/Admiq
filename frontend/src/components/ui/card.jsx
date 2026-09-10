@@ -7,12 +7,13 @@ function Card({ className, ...props }) {
     <div
       data-slot="card"
       className={cn(
-        // Flat, bordered - no drop shadow. The marketing site (home/index.html)
-        // establishes AdmiQ's visual language with hairline-border boxes, not
-        // floating shadow cards; matching that here means the dashboard reads
-        // as the same product a staff member just logged into, not a
-        // different, genericly-"SaaS" surface bolted on afterwards.
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border py-6",
+        // Hairline border (matches the marketing site's box language) plus
+        // a soft layered shadow, rather than either the marketing page's
+        // fully flat boxes or a generic single drop-shadow SaaS card - the
+        // border keeps the family resemblance to home/index.html, the
+        // shadow is what makes the authenticated app feel like a lifted,
+        // physical surface instead of a print-out.
+        "bg-card text-card-foreground shadow-elevated flex flex-col gap-6 rounded-xl border py-6",
         className
       )}
       {...props}

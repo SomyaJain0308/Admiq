@@ -10,6 +10,7 @@ import { AssignStaffSelect } from "@/components/AssignStaffSelect"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { leadScoreBand } from "@/lib/leadScore"
+import { cn } from "@/lib/utils"
 
 export default function StudentDetail() {
   const { studentId } = useParams()
@@ -53,12 +54,19 @@ export default function StudentDetail() {
           Back to students
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-semibold">{student.student_name || "Unnamed student"}</h1>
-          <Badge variant="outline" className={band.className}>
-            {student.lead_score ?? 0} · {band.label}
-          </Badge>
+          <span className="bg-gradient-brand-soft ring-primary/10 flex size-11 shrink-0 items-center justify-center rounded-full text-base font-semibold text-primary ring-1">
+            {(student.student_name || "?").charAt(0).toUpperCase()}
+          </span>
+          <div>
+            <div className="flex items-center gap-2.5">
+              <h1 className="font-display text-2xl font-semibold tracking-tight">{student.student_name || "Unnamed student"}</h1>
+              <Badge variant="outline" className={cn("font-display", band.className)}>
+                {student.lead_score ?? 0} · {band.label}
+              </Badge>
+            </div>
+            <p className="text-muted-foreground">{student.student_phone}</p>
+          </div>
         </div>
-        <p className="text-muted-foreground">{student.student_phone}</p>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -144,12 +152,14 @@ function ListField({ label, items }) {
   if (!items || items.length === 0) return null
   return (
     <div>
-      <p className="font-medium">{label}</p>
-      <ul className="list-inside list-disc text-muted-foreground">
+      <p className="mb-1.5 font-medium">{label}</p>
+      <div className="flex flex-wrap gap-1.5">
         {items.map((item, i) => (
-          <li key={i}>{item}</li>
+          <span key={i} className="rounded-full border bg-muted/40 px-2.5 py-1 text-xs text-muted-foreground">
+            {item}
+          </span>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }

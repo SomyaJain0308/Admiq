@@ -63,12 +63,13 @@ export function LeadScoreChart({ leadScores }) {
             </div>
           )}
           <div
-            className="w-full rounded-t-sm transition-[height,opacity] duration-150"
+            className="w-full rounded-t-md transition-[height,opacity,box-shadow] duration-150"
             style={{
               height: `${(bucket.count / maxCount) * 100}%`,
               minHeight: bucket.count > 0 ? "3px" : 0,
-              backgroundColor: bucket.color,
+              backgroundImage: `linear-gradient(to top, ${bucket.color}, color-mix(in oklab, ${bucket.color} 70%, white))`,
               opacity: hoveredIndex === null || hoveredIndex === i ? 1 : 0.5,
+              boxShadow: hoveredIndex === i && bucket.count > 0 ? `0 0 0 4px color-mix(in oklab, ${bucket.color} 18%, transparent)` : "none",
             }}
           />
           <span className="text-[10px] text-muted-foreground">{bucket.label}</span>

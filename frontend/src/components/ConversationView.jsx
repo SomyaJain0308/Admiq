@@ -26,12 +26,20 @@ export function ConversationView({ messages }) {
           >
             <div
               className={cn(
-                "max-w-md rounded-lg px-3 py-2 text-sm whitespace-pre-wrap",
+                // Bubble shape matches the WhatsApp-mock hero on the
+                // marketing landing page (home/index.html: .bubble) - one
+                // corner near the sender's own side stays sharp instead of
+                // every corner sharing the same radius, which is what
+                // actually reads as a chat bubble rather than a rounded
+                // rectangle. The real, authenticated view of a real
+                // conversation should feel at least as close to WhatsApp
+                // as the marketing page's mockup of it.
+                "max-w-md rounded-xl px-3.5 py-2 text-sm whitespace-pre-wrap shadow-sm",
                 isStudent
-                  ? "bg-muted text-foreground"
+                  ? "rounded-bl-sm bg-muted text-foreground"
                   : message.messager_role === "staff"
-                    ? "bg-accent text-accent-foreground"
-                    : "bg-primary text-primary-foreground"
+                    ? "rounded-br-sm bg-accent text-accent-foreground"
+                    : "rounded-br-sm bg-primary text-primary-foreground"
               )}
             >
               {message.content}

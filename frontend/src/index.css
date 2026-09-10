@@ -107,6 +107,71 @@
     );
   }
 
+  /* Layered elevation for surfaces that should feel lifted off the page
+     (dashboard cards, the stat grid) rather than merely outlined. Three
+     stacked shadows - a tight contact shadow, a mid-distance blur, and a
+     wide ambient falloff - read as a physically-lit card instead of the
+     single flat `0 1px 3px rgba(0,0,0,.1)` every templated SaaS card kit
+     uses. Kept deliberately subtle: this is about depth, not drama. */
+  .shadow-elevated {
+    box-shadow:
+      0 1px 2px color-mix(in oklab, var(--foreground) 4%, transparent),
+      0 4px 12px color-mix(in oklab, var(--foreground) 5%, transparent),
+      0 16px 32px color-mix(in oklab, var(--foreground) 4%, transparent);
+  }
+
+  /* Same idea, a touch stronger, for the one hover state per page that's
+     meant to feel interactive/liftable - paired with a translate in the
+     component itself so the card visibly rises rather than just gaining
+     a shadow in place. */
+  .shadow-elevated-hover {
+    box-shadow:
+      0 2px 4px color-mix(in oklab, var(--foreground) 5%, transparent),
+      0 8px 20px color-mix(in oklab, var(--foreground) 7%, transparent),
+      0 24px 48px color-mix(in oklab, var(--foreground) 6%, transparent);
+  }
+
+  /* Soft radial brand glow - the one place per view where the accent color
+     is allowed to spread beyond a small icon chip. Used behind the
+     dashboard's hero banner and stat numbers instead of the dot-grid
+     carrying the whole "this is branded" job on its own. */
+  .bg-glow-primary {
+    background-image: radial-gradient(
+      ellipse 70% 80% at 20% 0%,
+      color-mix(in oklab, var(--primary) 16%, transparent) 0%,
+      transparent 65%
+    );
+  }
+
+  /* The one "loud" icon treatment on the dashboard, reserved for Hottest
+     leads - the single most urgency-driven card on the page. Every other
+     icon on Overview stays a quiet tinted square (bg-*/10) on purpose; this
+     is the one place that gets a solid fill and a soft glow ring, so it
+     reads as the thing worth noticing rather than one more identical chip
+     in a row of identical chips. */
+  .icon-badge-hot {
+    background: var(--hot);
+    color: var(--primary-foreground);
+    box-shadow: 0 0 0 6px color-mix(in oklab, var(--hot) 14%, transparent);
+  }
+
+  /* Tinted shadow for the primary/destructive buttons - a colored glow
+     instead of a generic gray drop-shadow, so the button reads as "made of"
+     its own color rather than having a shadow bolted on. Two steps (soft at
+     rest, a touch stronger on hover) rather than a shadow that only
+     appears on hover, since a CTA with zero shadow at rest read as flat
+     next to the now-elevated cards around it. */
+  .shadow-tinted {
+    box-shadow:
+      0 1px 2px color-mix(in oklab, var(--tint-color, var(--primary)) 35%, transparent),
+      0 4px 10px color-mix(in oklab, var(--tint-color, var(--primary)) 25%, transparent);
+  }
+  .shadow-tinted-hover:hover {
+    box-shadow:
+      0 2px 4px color-mix(in oklab, var(--tint-color, var(--primary)) 40%, transparent),
+      0 8px 18px color-mix(in oklab, var(--tint-color, var(--primary)) 30%, transparent);
+  }
+
   /* Numerals get their own face + tabular spacing wherever the dashboard
      shows a count that updates (stat cards, lead scores) - keeps digits
      from jumping around as they change width, and ties big numbers back

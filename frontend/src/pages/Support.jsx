@@ -13,7 +13,7 @@ export default function Support() {
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Support</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Support</h1>
         <p className="mt-1 text-muted-foreground">
           Stuck on anything — a bug, a question, something that just looks wrong — skip the
           ticket queue and reach the founder directly.

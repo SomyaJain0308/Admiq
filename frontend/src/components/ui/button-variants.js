@@ -5,10 +5,15 @@ export const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // No shadows - matches the flat, bordered surfaces used everywhere
-        // else in the dashboard (see card.jsx) and the marketing site.
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20",
+        // The primary and destructive actions are the two buttons a person
+        // is actually deciding to commit to, so they get a soft tinted
+        // shadow that strengthens slightly on hover, plus a 1px lift - now
+        // that cards carry real elevation (see card.jsx), a flat CTA button
+        // read as the least-finished thing on the page by comparison.
+        // Everything quieter (outline/secondary/ghost/link) stays flat on
+        // purpose, so the shadow still means something.
+        default: "bg-primary text-primary-foreground shadow-tinted shadow-tinted-hover hover:bg-primary/90 hover:-translate-y-px active:translate-y-0",
+        destructive: "bg-destructive text-white shadow-tinted shadow-tinted-hover hover:bg-destructive/90 focus-visible:ring-destructive/20 [--tint-color:var(--destructive)]",
         outline: "border bg-background hover:bg-accent hover:text-accent-foreground",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",

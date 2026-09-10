@@ -99,7 +99,7 @@ export default function StaffManagement() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Staff</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Staff</h1>
           <p className="text-muted-foreground">Manage who has access to {college.college_name}.</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -141,6 +141,7 @@ export default function StaffManagement() {
       )}
 
       {(isLoading || staff.length > 0) && (
+        <div className="shadow-elevated overflow-hidden rounded-xl border">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -203,6 +204,7 @@ export default function StaffManagement() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

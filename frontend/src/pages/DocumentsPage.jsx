@@ -210,7 +210,7 @@ export default function DocumentsPage() {
   if (hasNoCollege) {
     return (
       <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Documents</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Documents</h1>
         <p className="text-muted-foreground">Your account isn't linked to a college yet. Contact an admin to get set up.</p>
       </div>
     )
@@ -219,7 +219,7 @@ export default function DocumentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold">Documents</h1>
+        <h1 className="font-display text-2xl font-semibold tracking-tight">Documents</h1>
         <p className="text-muted-foreground">
           Upload PDFs for {college.college_name} - the assistant answers student questions from these.
         </p>
@@ -382,6 +382,7 @@ export default function DocumentsPage() {
               }}
             />
           ) : (
+            <div className="shadow-elevated overflow-hidden rounded-xl border">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -416,11 +417,13 @@ export default function DocumentsPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
           )}
         </div>
       )}
 
       {isLoading && (
+        <div className="shadow-elevated overflow-hidden rounded-xl border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -436,6 +439,7 @@ export default function DocumentsPage() {
             <TableSkeletonRows columns={6} />
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && documents?.length > 0 && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

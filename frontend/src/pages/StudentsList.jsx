@@ -78,7 +78,7 @@ export default function StudentsList() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Students</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Students</h1>
           <p className="text-muted-foreground">Every student who's messaged {college.college_name}, sorted by lead score.</p>
         </div>
         {(total > 0 || debouncedSearch || assignedTo) && (
@@ -163,6 +163,7 @@ export default function StudentsList() {
       )}
 
       {(isLoading || students.length > 0) && (
+        <div className="shadow-elevated overflow-hidden rounded-xl border">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -221,6 +222,7 @@ export default function StudentsList() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}

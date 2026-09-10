@@ -54,7 +54,7 @@ export default function LowConfidenceQueue() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Low-confidence queue</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight">Low-confidence queue</h1>
           <p className="text-muted-foreground">
             Questions the assistant wasn't confident enough to answer on its own, for {college.college_name}.
           </p>
@@ -107,6 +107,7 @@ export default function LowConfidenceQueue() {
       )}
 
       {(isLoading || queries.length > 0) && (
+        <div className="shadow-elevated overflow-hidden rounded-xl border">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
@@ -149,6 +150,7 @@ export default function LowConfidenceQueue() {
             )}
           </TableBody>
         </Table>
+        </div>
       )}
 
       {!isLoading && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
