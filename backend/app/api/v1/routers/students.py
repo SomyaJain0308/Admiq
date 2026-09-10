@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import selectinload
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from backend.app.database import get_db
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff, StaffCollege
@@ -9,6 +12,8 @@ from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
 from backend.app.models.Message import Message
 from backend.app.models.WhatsappNumber import WhatsAppNumber
+from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
+from backend.app.models.Chunk import Chunk
 from backend.app.services.auth_services import verify_college_access
 from backend.app.services.csv_export import rows_to_csv_response
 from backend.app.services.tenant_service import save_staff_message
@@ -16,8 +21,18 @@ from backend.app.services.whatsapp_service import send_staff_initiated_message
 from backend.app.schemas.students import StudentMessageCreate, StudentMessageResponse, StudentNotesUpdate, StudentAssignUpdate
 from backend.app.config import get_settings
 from backend.app.monitoring.logging_utils import get_logger
+from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_RESOLVED
+from backend.app.rag.staff_reply_context import reconstruct_staff_answer
 
 logger = get_logger()
+
+# Bounds how much conversation gets fed to the reconstruction LLM call for a
+# save-as-answer request. Unlike the queue's reply endpoint (which anchors
+# to one flagged question and grabs the 4 messages around it), there's no
+# single question here - the whole thread is fair game per how this was
+# scoped - so this just keeps a very long-running student thread from
+# turning into an unbounded prompt.
+SAVE_AS_ANSWER_CONTEXT_LIMIT = 40
 
 router = APIRouter(tags=["Students"], prefix="/router/students")
 
@@ -179,6 +194,89 @@ async def message_student(
     # via `delivered` rather than silently dropping the record.
     staff_message = await save_staff_message(db, college_id=college_id, student_id=student_id, staff_id=staff_id, content=payload.content)
 
+    saved_as_answer = False
+    reconstructed_question = None
+    save_error = None
+
+    if payload.save_as_answer:
+        try:
+            # LowConfidenceQuery.question_message_id is NOT NULL with a real
+            # FK to messages, and it's not just descriptive - the queue's
+            # reply flow uses it to anchor "the 4 messages around this
+            # question". There's no flagged question here, so instead we
+            # anchor to the most recent message the student themselves sent
+            # in this conversation, whatever its position (staff messages
+            # sent after it don't disqualify it).
+            anchor_result = await db.execute(
+                select(Message)
+                .where(Message.college_id == college_id, Message.student_id == student_id, Message.messager_role == "student")
+                .order_by(Message.created_at.desc())
+                .limit(1)
+            )
+            anchor_message = anchor_result.scalars().first()
+            if anchor_message is None:
+                # Cold proactive nudge with no student message to anchor
+                # to at all - nothing to generalize from, and nothing to
+                # satisfy the FK with. The UI should disable the checkbox
+                # in this case; this is the server-side backstop.
+                raise ValueError("No student message in this conversation to anchor a reusable answer to.")
+
+            # Whole-conversation context for the reconstruction call, not
+            # just messages around a single question - same DESC-then-
+            # reverse trick as the queue endpoint (DESC to get the most
+            # RECENT rows, reversed after so the LLM reads it oldest-first).
+            context_result = await db.execute(
+                select(Message)
+                .where(Message.college_id == college_id, Message.student_id == student_id)
+                .order_by(Message.created_at.desc())
+                .limit(SAVE_AS_ANSWER_CONTEXT_LIMIT)
+            )
+            recent_messages = list(reversed(context_result.scalars().all()))
+            recent_conversation = "\n".join(f"{m.messager_role}: {m.content}" for m in recent_messages)
+
+            reconstructed = reconstruct_staff_answer(recent_conversation, payload.content)
+
+            resolved_at = datetime.utcnow()
+            new_query = LowConfidenceQuery(
+                college_id=college_id,
+                student_id=student_id,
+                question_message_id=anchor_message.message_id,
+                answer_message_id=staff_message.message_id,
+                similarity_score=None,
+                resolved=True,
+                resolved_by=staff_id,
+                resolved_at=resolved_at,
+            )
+            db.add(new_query)
+            await db.flush()  # need query.query_id for the chunk below, without committing yet
+
+            embedder = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, api_key=settings.gemini_api_key, output_dimensionality=settings.vector_size)
+            chunk_text = f"Question: {reconstructed.question}\nAnswer: {reconstructed.answer}"
+            vector = embedder.embed_query(chunk_text)
+            db.add(Chunk(college_id=college_id, chunk_content=chunk_text, embedding=vector, chunk_index=0, source_type="staff_answer", source_query_id=new_query.query_id, expires_at=payload.expires_at))
+
+            # Counted in the same resolved-queries counter as a normal queue
+            # reply, per how this was scoped - no separate origin tracking
+            # for now. Resolution-time histogram is deliberately skipped:
+            # flagged_at and resolved_at are the same instant here since
+            # this was never actually flagged, so observing it would just
+            # inject a stream of ~0-second entries into a histogram meant
+            # to measure how long staff take to respond to real queue items.
+            LOW_CONFIDENCE_QUERIES_RESOLVED.inc()
+            await db.commit()
+
+            saved_as_answer = True
+            reconstructed_question = reconstructed.question
+        except Exception:
+            # The WhatsApp message already sent and saved successfully by
+            # this point - a failure here (LLM error, embedding error,
+            # whatever) shouldn't turn into a 500 for an already-successful
+            # send. Roll back only the save-as-answer half, log it, and
+            # tell the caller via the response instead of raising.
+            await db.rollback()
+            logger.error(f"save_as_answer failed for student_id={student_id}, message_id={staff_message.message_id}", exc_info=True)
+            save_error = "Message sent, but saving it as a reusable answer failed. You can try again from the message box."
+
     return StudentMessageResponse(
         message_id=staff_message.message_id,
         student_id=staff_message.student_id,
@@ -186,6 +284,9 @@ async def message_student(
         created_at=staff_message.created_at,
         delivered=send_result["ok"],
         channel=send_result.get("channel", "text"),
+        saved_as_answer=saved_as_answer,
+        reconstructed_question=reconstructed_question,
+        save_error=save_error,
     )
 
 

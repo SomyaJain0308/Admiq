@@ -53,13 +53,31 @@ export function useConversation(collegeId, studentId) {
 export function useMessageStudent(collegeId, studentId) {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (content) => api.post(`/router/students/${collegeId}/${studentId}/message`, { content }),
+    // content is either a plain string (existing callers, save_as_answer
+    // stays off) or { content, saveAsAnswer, expiresAt } for callers that
+    // want the opt-in - kept as one hook rather than a second one, since
+    // it's the same endpoint either way.
+    mutationFn: (input) => {
+      const { content, saveAsAnswer = false, expiresAt = null } =
+        typeof input === "string" ? { content: input } : input
+      return api.post(`/router/students/${collegeId}/${studentId}/message`, {
+        content,
+        save_as_answer: saveAsAnswer,
+        expires_at: expiresAt,
+      })
+    },
     // The conversation view reads from the "conversation" query cache, so
     // once the message is saved, refetch it - otherwise the staff member's
     // own message wouldn't show up in the thread until some unrelated
     // refetch happened to fire.
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["conversation", collegeId, studentId] })
+      // A save-as-answer message resolves into the same table the queue's
+      // "Resolved" tab reads from, so that list is stale until this
+      // refetches too.
+      if (result?.saved_as_answer) {
+        queryClient.invalidateQueries({ queryKey: ["low-confidence-queries", collegeId] })
+      }
     },
   })
 }
