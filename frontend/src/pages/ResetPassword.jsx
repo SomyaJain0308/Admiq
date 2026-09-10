@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { AuthShell } from "@/components/AuthShell"
+import { BrandMark } from "@/components/BrandMark"
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams()
@@ -51,9 +53,10 @@ export default function ResetPassword() {
   // to request one.
   if (!token) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <AuthShell>
         <Card className="w-full max-w-sm">
           <CardHeader>
+            <BrandMark className="mb-2" />
             <CardTitle className="text-xl">Invalid reset link</CardTitle>
             <CardDescription>This link is missing or malformed. Request a new one to continue.</CardDescription>
           </CardHeader>
@@ -63,16 +66,17 @@ export default function ResetPassword() {
             </Button>
           </CardFooter>
         </Card>
-      </div>
+      </AuthShell>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <AuthShell>
       <Card className="w-full max-w-sm">
         {success ? (
           <>
             <CardHeader>
+              <BrandMark className="mb-2" />
               <CheckCircle2 className="mb-2 size-6 text-muted-foreground" />
               <CardTitle className="text-xl">Password reset</CardTitle>
               <CardDescription>Your password has been updated. You can now sign in with it.</CardDescription>
@@ -86,6 +90,7 @@ export default function ResetPassword() {
         ) : (
           <>
             <CardHeader>
+              <BrandMark className="mb-2" />
               <CardTitle className="text-xl">Set a new password</CardTitle>
               <CardDescription>Choose a new password for your account.</CardDescription>
             </CardHeader>
@@ -132,6 +137,6 @@ export default function ResetPassword() {
           </>
         )}
       </Card>
-    </div>
+    </AuthShell>
   )
 }

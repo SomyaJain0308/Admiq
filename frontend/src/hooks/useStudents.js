@@ -18,6 +18,14 @@ export function useStudentList(collegeId, { page = 1, pageSize = 20, search = ""
   })
 }
 
+export function useStudentLeadScores(collegeId) {
+  return useQuery({
+    queryKey: ["students", collegeId, "lead-scores"],
+    queryFn: () => api.get(`/router/students/${collegeId}/lead-scores`),
+    enabled: !!collegeId,
+  })
+}
+
 export function useStudentDetail(collegeId, studentId) {
   return useQuery({
     queryKey: ["student", collegeId, studentId],

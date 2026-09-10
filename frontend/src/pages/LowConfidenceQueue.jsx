@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { Inbox, ChevronDown, ChevronUp } from "lucide-react"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
+import { useResetPageOnChange } from "@/hooks/useResetPageOnChange"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 import { StudentSnapshot } from "@/components/StudentSnapshot"
 import { PaginationControls } from "@/components/PaginationControls"
@@ -24,16 +25,11 @@ const PAGE_SIZE = 15
 export default function LowConfidenceQueue() {
   const { college, hasNoCollege } = useCurrentCollege()
   const [view, setView] = useState("open") // "open" | "resolved"
-  const [page, setPage] = useState(1)
   const [activeQuery, setActiveQuery] = useState(null)
 
   // Switching between Open/Resolved is effectively a different list -
   // whatever page you were on in one view isn't meaningful in the other.
-  const [prevView, setPrevView] = useState(view)
-  if (view !== prevView) {
-    setPrevView(view)
-    setPage(1)
-  }
+  const [page, setPage] = useResetPageOnChange(view)
 
   const { data, isLoading, isFetching, isError, error } = useLowConfidenceQueries(college?.college_id, view === "resolved", {
     page,
@@ -86,6 +82,17 @@ export default function LowConfidenceQueue() {
           {error?.message || "Failed to load the queue. Please try again."}
         </p>
       )}
+
+      {/* Visually hidden - the table itself already shows this via the dim/
+          opacity transition, but that's a purely visual cue. This gives
+          screen-reader users the same "list just updated" signal. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {isFetching && !isLoading
+          ? "Updating queue..."
+          : !isLoading && !isError
+            ? `${total} ${view === "open" ? "open" : "resolved"} ${total === 1 ? "query" : "queries"}`
+            : null}
+      </p>
 
       {!isLoading && !isError && total === 0 && (
         <EmptyState

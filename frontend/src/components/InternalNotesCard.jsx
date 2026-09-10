@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useUpdateStudentNotes } from "@/hooks/useStudents"
+import { cn } from "@/lib/utils"
 
 const MAX_NOTES_LENGTH = 5000
 
@@ -39,9 +40,7 @@ export function InternalNotesCard({ collegeId, studentId, initialNotes }) {
         />
         {isNearLimit && (
           <span
-            className={`self-end text-xs ${
-              notes.length >= MAX_NOTES_LENGTH ? "text-destructive" : "text-muted-foreground"
-            }`}
+            className={cn("self-end text-xs", notes.length >= MAX_NOTES_LENGTH ? "text-destructive" : "text-muted-foreground")}
           >
             {notes.length}/{MAX_NOTES_LENGTH}
           </span>

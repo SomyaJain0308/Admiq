@@ -1,4 +1,4 @@
-import { getAccessToken, setAccessToken, getRefreshToken, setRefreshToken, clearTokens } from "@/lib/tokenStore"
+import { getAccessToken, setAccessToken, clearTokens } from "@/lib/tokenStore"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -16,14 +16,12 @@ export class ApiError extends Error {
 let refreshPromise = null
 
 async function doRefresh() {
-  const refreshToken = getRefreshToken()
-  if (!refreshToken) {
-    throw new ApiError("No refresh token available", 401, null)
-  }
+  // No body to send - the refresh token travels as an httpOnly cookie the
+  // browser attaches automatically. credentials: "include" is what makes it
+  // send (and accept the rotated Set-Cookie back) on this cross-site request.
   const response = await fetch(`${API_BASE_URL}/refresh`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ refresh_token: refreshToken }),
+    credentials: "include",
   })
   if (!response.ok) {
     clearTokens()
@@ -31,7 +29,6 @@ async function doRefresh() {
   }
   const data = await response.json()
   setAccessToken(data.access_token)
-  setRefreshToken(data.refresh_token)
   return data.access_token
 }
 
@@ -55,7 +52,11 @@ async function request(path, options = {}, { skipAuth = false, isRetry = false }
     }
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
+  // credentials: "include" on every request (not just /token, /refresh,
+  // /logout) - harmless for endpoints that don't care about the refresh
+  // cookie, and it's what lets the browser store the Set-Cookie from /token
+  // and send it back on /refresh and /logout.
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, credentials: "include" })
 
   if (response.status === 401 && !skipAuth && !isRetry) {
     try {
@@ -112,7 +113,7 @@ export const api = {
     return request("/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, { skipAuth: true })
   },
   refresh: doRefresh,
-  logout: (refreshToken) => request("/logout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }) }, { skipAuth: true }),
+  logout: () => request("/logout", { method: "POST" }, { skipAuth: true }),
 
   // Both intentionally skipAuth - the person isn't logged in yet when they
   // need these.
@@ -127,7 +128,7 @@ export const api = {
   downloadFile: async (path) => {
     const doFetch = () => {
       const token = getAccessToken()
-      return fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      return fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: "include" })
     }
     let response = await doFetch()
     if (response.status === 401) {
@@ -153,6 +154,10 @@ export const api = {
     document.body.appendChild(link)
     link.click()
     link.remove()
-    URL.revokeObjectURL(url)
+    // Revoking synchronously right after click() can race the browser
+    // actually starting the download in Safari and some Firefox versions,
+    // clipping the file. Deferring to the next tick lets the download kick
+    // off first while still cleaning up the object URL right after.
+    setTimeout(() => URL.revokeObjectURL(url), 0)
   },
 }

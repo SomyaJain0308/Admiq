@@ -1,25 +1,19 @@
 import { useState } from "react"
 import { Plus, Pencil, Trash2, Users, Search, Download, Loader2 } from "lucide-react"
 import { toast } from "sonner"
-import { useAuth } from "@/context/AuthContext"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useAuth } from "@/context/useAuth"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useStaffList, useDeleteStaff, exportStaff } from "@/hooks/useStaff"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { useResetPageOnChange } from "@/hooks/useResetPageOnChange"
 import { StaffFormDialog } from "@/components/StaffFormDialog"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
 import {
   Table,
   TableHeader,
@@ -39,15 +33,9 @@ export default function StaffManagement() {
   const [editingStaff, setEditingStaff] = useState(null)
   const [confirmDeleteStaff, setConfirmDeleteStaff] = useState(null)
   const [search, setSearch] = useState("")
-  const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
   const debouncedSearch = useDebouncedValue(search, 350)
-
-  const [prevSearch, setPrevSearch] = useState(debouncedSearch)
-  if (debouncedSearch !== prevSearch) {
-    setPrevSearch(debouncedSearch)
-    setPage(1)
-  }
+  const [page, setPage] = useResetPageOnChange(debouncedSearch)
 
   const { data, isLoading, isFetching, isError, error } = useStaffList(college?.college_id, {
     page,
@@ -226,24 +214,15 @@ export default function StaffManagement() {
         editingStaff={editingStaff}
       />
 
-      <Dialog open={!!confirmDeleteStaff} onOpenChange={(open) => !open && setConfirmDeleteStaff(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Remove {confirmDeleteStaff?.staff_name}?</DialogTitle>
-            <DialogDescription>
-              They'll lose access to {college.college_name} right away - this can't be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmDeleteStaff(null)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirmDelete}>
-              Remove
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={!!confirmDeleteStaff}
+        onOpenChange={(open) => !open && setConfirmDeleteStaff(null)}
+        title={`Remove ${confirmDeleteStaff?.staff_name}?`}
+        description={`They'll lose access to ${college.college_name} right away - this can't be undone.`}
+        confirmLabel="Remove"
+        onConfirm={confirmDelete}
+        isConfirming={deleteMutation.isPending}
+      />
     </div>
   )
 }

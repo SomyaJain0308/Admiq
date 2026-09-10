@@ -2,11 +2,12 @@ import { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import { Download, GraduationCap, Loader2, Search, TriangleAlert } from "lucide-react"
 import { toast } from "sonner"
-import { useCurrentCollege } from "@/context/CollegeContext"
-import { useAuth } from "@/context/AuthContext"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
+import { useAuth } from "@/context/useAuth"
 import { useStudentList, exportStudents } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { useResetPageOnChange } from "@/hooks/useResetPageOnChange"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -14,6 +15,7 @@ import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { leadScoreBand } from "@/lib/leadScore"
+import { nativeSelectClassName } from "@/lib/utils"
 import {
   Table,
   TableHeader,
@@ -31,22 +33,14 @@ export default function StudentsList() {
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
   const [assignedTo, setAssignedTo] = useState("")
-  const [page, setPage] = useState(1)
   const debouncedSearch = useDebouncedValue(search, 350)
   const [isExporting, setIsExporting] = useState(false)
   const { data: staffData } = useStaffList(college?.college_id, { pageSize: 100 })
 
   // A new search term or assignment filter invalidates whatever page you
   // were on - always land back on page 1 rather than a now-meaningless
-  // "page 4 of a 1-page result". Adjusting state directly during render
-  // (React's own recommended pattern for this) rather than a useEffect - no
-  // extra render/flicker, and avoids the setState-in-effect lint warning.
-  const [prevFilterKey, setPrevFilterKey] = useState(`${debouncedSearch}|${assignedTo}`)
-  const filterKey = `${debouncedSearch}|${assignedTo}`
-  if (filterKey !== prevFilterKey) {
-    setPrevFilterKey(filterKey)
-    setPage(1)
-  }
+  // "page 4 of a 1-page result".
+  const [page, setPage] = useResetPageOnChange(`${debouncedSearch}|${assignedTo}`)
 
   const { data, isLoading, isFetching, isError, error } = useStudentList(college?.college_id, {
     page,
@@ -102,7 +96,7 @@ export default function StudentsList() {
               aria-label="Filter by assigned staff"
               value={assignedTo}
               onChange={(e) => setAssignedTo(e.target.value)}
-              className="border-input flex h-9 rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+              className={nativeSelectClassName}
             >
               <option value="">All students</option>
               {user?.staff_id != null && <option value={String(user.staff_id)}>Assigned to me</option>}
@@ -127,6 +121,17 @@ export default function StudentsList() {
           {error?.message || "Failed to load students. Please try again."}
         </p>
       )}
+
+      {/* Visually hidden - the table already dims via isFetching, but that's
+          a purely visual cue. Gives screen-reader users the same "list just
+          updated" signal after a search/filter change. */}
+      <p role="status" aria-live="polite" className="sr-only">
+        {isFetching && !isLoading
+          ? "Updating students..."
+          : !isLoading && !isError
+            ? `${total} ${total === 1 ? "student" : "students"}`
+            : null}
+      </p>
 
       {!isLoading && !isError && total === 0 && !debouncedSearch && !assignedTo && (
         <EmptyState

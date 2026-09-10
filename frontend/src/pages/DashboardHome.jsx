@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom"
 import { Inbox, GraduationCap, Users, ArrowRight, Loader2, TriangleAlert } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useAuth } from "@/context/useAuth"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
-import { useStudentList } from "@/hooks/useStudents"
+import { useStudentList, useStudentLeadScores } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { LeadScoreChart } from "@/components/LeadScoreChart"
@@ -13,12 +13,16 @@ export default function DashboardHome() {
   const { college, hasNoCollege } = useCurrentCollege()
 
   const queueQuery = useLowConfidenceQueries(college?.college_id, false)
-  // Stat cards just need a total count (the backend returns that regardless
-  // of page size), but the lead-score chart below needs the full student
-  // pool to build an accurate distribution - a big page size gets both from
-  // one call rather than needing a separate "give me everyone" endpoint.
-  const studentsQuery = useStudentList(college?.college_id, { pageSize: 1000 })
-  const staffQuery = useStaffList(college?.college_id, { pageSize: 1000 })
+  // Stat cards only need a total count, and the backend returns that
+  // regardless of page size - pageSize: 1 gets it without pulling a page
+  // of full records just to read one number.
+  const studentsQuery = useStudentList(college?.college_id, { pageSize: 1 })
+  const staffQuery = useStaffList(college?.college_id, { pageSize: 1 })
+  // The lead-score chart needs every student's score, not full records, and
+  // shouldn't silently truncate for colleges over 1000 students - so it
+  // reads from its own lightweight endpoint instead of a big page of the
+  // list above.
+  const leadScoresQuery = useStudentLeadScores(college?.college_id)
 
   if (hasNoCollege) {
     return (
@@ -66,14 +70,14 @@ export default function DashboardHome() {
         />
       </div>
 
-      {studentsQuery.data?.items?.length > 0 && (
+      {leadScoresQuery.data?.lead_scores?.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Lead score distribution</CardTitle>
             <CardDescription>Where your student pool currently sits, from cold to hot.</CardDescription>
           </CardHeader>
           <CardContent>
-            <LeadScoreChart students={studentsQuery.data.items} />
+            <LeadScoreChart leadScores={leadScoresQuery.data.lead_scores} />
           </CardContent>
         </Card>
       )}

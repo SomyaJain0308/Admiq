@@ -17,16 +17,8 @@ import { useResolveLowConfidenceQuery } from "@/hooks/useLowConfidenceQueue"
 import { useConversation } from "@/hooks/useStudents"
 import { StudentSnapshotCard } from "@/components/StudentSnapshot"
 import { ConversationView } from "@/components/ConversationView"
-
-function defaultExpiryDate() {
-  const d = new Date()
-  d.setDate(d.getDate() + 30)
-  return d.toISOString().slice(0, 10) // yyyy-mm-dd, for <input type="date">
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { defaultExpiryDate, today } from "@/lib/dates"
+import { cn } from "@/lib/utils"
 
 // WhatsApp's own hard limit on a single text message - matches the cap
 // already enforced on the direct-message box (MessageStudentBox), so a
@@ -133,9 +125,10 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
                 placeholder="Type the answer to send to the student..."
               />
               <span
-                className={`self-end text-xs ${
+                className={cn(
+                  "self-end text-xs",
                   replyMessage.length >= MAX_REPLY_LENGTH ? "text-destructive" : "text-muted-foreground"
-                }`}
+                )}
               >
                 {replyMessage.length}/{MAX_REPLY_LENGTH}
               </span>

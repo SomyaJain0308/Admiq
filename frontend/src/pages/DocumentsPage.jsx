@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react"
 import { FileText, Loader2, CheckCircle2, XCircle, Upload, Trash2, Eye, RotateCw, ChevronDown, ChevronUp, Search, X } from "lucide-react"
 import { toast } from "sonner"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import {
   useDocuments,
   useUploadDocument,
@@ -15,18 +15,12 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
+import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { timeSince } from "@/lib/formatTime"
 import {
   Table,
@@ -238,9 +232,10 @@ export default function DocumentsPage() {
         }}
         onDragLeave={() => setIsDragging(false)}
         onDrop={onDrop}
-        className={`flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed py-10 text-center transition-colors ${
+        className={cn(
+          "flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed py-10 text-center transition-colors",
           isDragging ? "border-primary bg-primary/5" : "border-muted-foreground/25"
-        }`}
+        )}
       >
         <Upload className="size-8 text-muted-foreground" />
         <div>
@@ -280,7 +275,11 @@ export default function DocumentsPage() {
         <div className="flex flex-col gap-1.5 rounded-lg border bg-muted/30 p-3">
           <p className="text-xs font-medium text-muted-foreground">
             {activeUploads.length > 0
-              ? `Uploading ${uploads.length - activeUploads.length + 1} of ${uploads.length}...`
+              ? // Files upload in parallel, not one at a time - "X of Y done"
+                // reads accurately no matter how many are still in flight at
+                // once, unlike a "Uploading X of Y..." framing that implies
+                // a sequential queue.
+                `${uploads.length - activeUploads.length} of ${uploads.length} uploaded...`
               : "Upload finished"}
           </p>
           {uploads.map((u) => (
@@ -441,43 +440,23 @@ export default function DocumentsPage() {
 
       {!isLoading && documents?.length > 0 && <PaginationControls page={page} totalPages={totalPages} onPageChange={setPage} />}
 
-      <Dialog open={!!confirmDeleteDoc} onOpenChange={(open) => !open && setConfirmDeleteDoc(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete "{confirmDeleteDoc?.file_name}"?</DialogTitle>
-            <DialogDescription>
-              The assistant will stop using it to answer questions - this can't be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmDeleteDoc(null)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirmSingleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={!!confirmDeleteDoc}
+        onOpenChange={(open) => !open && setConfirmDeleteDoc(null)}
+        title={`Delete "${confirmDeleteDoc?.file_name}"?`}
+        description="The assistant will stop using it to answer questions - this can't be undone."
+        onConfirm={confirmSingleDelete}
+        isConfirming={deleteMutation.isPending}
+      />
 
-      <Dialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete {selectedIds.size} document{selectedIds.size === 1 ? "" : "s"}?</DialogTitle>
-            <DialogDescription>
-              The assistant will stop using {selectedIds.size === 1 ? "it" : "them"} to answer questions - this can't be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setConfirmBulkDelete(false)}>
-              Cancel
-            </Button>
-            <Button type="button" variant="destructive" onClick={confirmBulkDeleteAction}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        onOpenChange={setConfirmBulkDelete}
+        title={`Delete ${selectedIds.size} document${selectedIds.size === 1 ? "" : "s"}?`}
+        description={`The assistant will stop using ${selectedIds.size === 1 ? "it" : "them"} to answer questions - this can't be undone.`}
+        onConfirm={confirmBulkDeleteAction}
+        isConfirming={bulkDeleteMutation.isPending}
+      />
     </div>
   )
 }

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex" />
+<title>Page not found — AdmiQ</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<style>
+  /* Same token set as the marketing page (index.html) - kept minimal and
+     self-contained since a 404 shouldn't depend on any other page loading
+     successfully first. */
+  :root {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --muted-foreground: oklch(0.472 0 0);
+    --border-strong: oklch(0.83 0 0);
+    --accent: #2354c9;
+    --accent-foreground: #f5f8ff;
+    --radius: 0.625rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: oklch(0.145 0 0);
+      --foreground: oklch(0.985 0 0);
+      --muted-foreground: oklch(0.708 0 0);
+      --border-strong: oklch(1 0 0 / 22%);
+      --accent: #5b8def;
+      --accent-foreground: #071227;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    text-align: center;
+    padding: 24px;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .mark { width: 40px; height: 40px; border-radius: 10px; }
+  h1 { font-size: 1.4rem; margin: 0; }
+  p { margin: 0; color: var(--muted-foreground); max-width: 40ch; }
+  a.btn {
+    display: inline-flex;
+    margin-top: 8px;
+    padding: 12px 22px;
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--accent);
+    color: var(--accent-foreground);
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid transparent;
+  }
+</style>
+</head>
+<body>
+  <svg class="mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <rect width="32" height="32" rx="7" fill="#18181b"/>
+    <path d="M16 7 L24 24 H20.2 L18.3 19.5 H13.7 L11.8 24 H8 Z M16 12.2 L14.2 16.4 H17.8 Z" fill="#fafafa"/>
+  </svg>
+  <h1>Page not found</h1>
+  <p>The page you're looking for doesn't exist or may have moved.</p>
+  <a href="/" class="btn">Back to AdmiQ</a>
+</body>
+</html>

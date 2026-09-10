@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { Loader2, Plus, Trash2, ArrowUp, ArrowDown, Sparkles, Undo2 } from "lucide-react"
 import { toast } from "sonner"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useCollegeDetail, useUpdateCollege } from "@/hooks/useCollege"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -105,14 +105,20 @@ function CollegeSettingsForm({ college, updateMutation }) {
   const [rows, setRows] = useState(() => toRows(college.college_strengths))
   const [pendingFocusId, setPendingFocusId] = useState(null)
   const inputRefs = useRef({})
+  // Guards against re-focusing the same row on a re-render that doesn't
+  // originate from a fresh addRowAfter() call - see the effect below.
+  const focusedIdRef = useRef(null)
 
-  // Stable snapshot of what's actually saved server-side, so we can tell
-  // whether there are unsaved changes and offer a "discard" that reverts
-  // to it - never changes except right after a successful save.
-  const savedSnapshot = useRef({
+  // Snapshot of what's actually saved server-side, so we can tell whether
+  // there are unsaved changes and offer a "discard" that reverts to it.
+  // This is state (not a ref) because it's read during render to compute
+  // isDirty below and does change, right after a successful save or a
+  // discard - reading a ref's .current during render can't be relied on
+  // to trigger a re-render when it changes.
+  const [savedSnapshot, setSavedSnapshot] = useState(() => ({
     ...form,
     strengths: college.college_strengths || [],
-  })
+  }))
 
   const currentStrengths = normalizeStrengths(rows)
   const duplicateIds = findDuplicateIds(rows)
@@ -121,10 +127,10 @@ function CollegeSettingsForm({ college, updateMutation }) {
   const atMaxStrengths = rows.length >= MAX_STRENGTHS
 
   const isDirty =
-    form.college_name !== savedSnapshot.current.college_name ||
-    form.college_phone !== savedSnapshot.current.college_phone ||
-    form.college_email !== savedSnapshot.current.college_email ||
-    JSON.stringify(currentStrengths) !== JSON.stringify(savedSnapshot.current.strengths)
+    form.college_name !== savedSnapshot.college_name ||
+    form.college_phone !== savedSnapshot.college_phone ||
+    form.college_email !== savedSnapshot.college_email ||
+    JSON.stringify(currentStrengths) !== JSON.stringify(savedSnapshot.strengths)
 
   // Warn before an accidental tab-close/navigation with unsaved edits -
   // otherwise there's no signal at all that work is about to be lost.
@@ -139,9 +145,9 @@ function CollegeSettingsForm({ college, updateMutation }) {
   }, [isDirty])
 
   useEffect(() => {
-    if (!pendingFocusId) return
+    if (!pendingFocusId || focusedIdRef.current === pendingFocusId) return
     inputRefs.current[pendingFocusId]?.focus()
-    setPendingFocusId(null)
+    focusedIdRef.current = pendingFocusId
   }, [pendingFocusId])
 
   function updateRowValue(id, value) {
@@ -188,11 +194,11 @@ function CollegeSettingsForm({ college, updateMutation }) {
 
   function handleDiscard() {
     setForm({
-      college_name: savedSnapshot.current.college_name,
-      college_phone: savedSnapshot.current.college_phone,
-      college_email: savedSnapshot.current.college_email,
+      college_name: savedSnapshot.college_name,
+      college_phone: savedSnapshot.college_phone,
+      college_email: savedSnapshot.college_email,
     })
-    setRows(toRows(savedSnapshot.current.strengths))
+    setRows(toRows(savedSnapshot.strengths))
     toast.info("Changes discarded.")
   }
 
@@ -213,7 +219,7 @@ function CollegeSettingsForm({ college, updateMutation }) {
       // Drop any blank rows left over from editing and reset ids so the
       // list matches exactly what got saved.
       setRows(toRows(currentStrengths))
-      savedSnapshot.current = { ...form, strengths: currentStrengths }
+      setSavedSnapshot({ ...form, strengths: currentStrengths })
       toast.success("College settings saved.")
     } catch (err) {
       toast.error(err?.message || "Failed to save changes. Please try again.")

@@ -22,7 +22,7 @@ export function AuthShell({ children }) {
       />
       <div
         className="pointer-events-none absolute bottom-[-200px] left-[-160px] size-[560px] rounded-full opacity-80"
-        style={{ background: "radial-gradient(circle, color-mix(in oklab, var(--brand-2) 18%, transparent) 0%, transparent 68%)" }}
+        style={{ background: "radial-gradient(circle, color-mix(in oklab, var(--primary) 18%, transparent) 0%, transparent 68%)" }}
       />
       <div className="relative w-full max-w-sm">{children}</div>
     </div>

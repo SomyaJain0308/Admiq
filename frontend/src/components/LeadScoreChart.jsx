@@ -28,19 +28,23 @@ const BAND_COLORS = {
 // the app, and recharts costs ~350kB (gzip ~100kB) for something 10 flexbox
 // columns render just as well, with a smaller, simpler, dependency-free
 // component and no extra chunk to fetch.
-export function LeadScoreChart({ students }) {
+export function LeadScoreChart({ leadScores }) {
   const { theme } = useTheme()
   const colors = BAND_COLORS[theme]
   const [hoveredIndex, setHoveredIndex] = useState(null)
 
   const data = BUCKETS.map((bucket) => ({
     ...bucket,
-    count: students.filter((s) => (s.lead_score ?? 0) >= bucket.min && (s.lead_score ?? 0) <= bucket.max).length,
+    count: leadScores.filter((score) => (score ?? 0) >= bucket.min && (score ?? 0) <= bucket.max).length,
     color: colors[bucket.band],
   }))
   const maxCount = Math.max(1, ...data.map((d) => d.count))
 
   return (
+    // This wraps interactive per-bar buttons (hover tooltips below), so it
+    // can't be a native <img>, which can't have children. role="img" here
+    // summarizes the composite chart as one unit for screen readers.
+    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
     <div className="flex h-[220px] items-end gap-1.5" role="img" aria-label="Bar chart of student lead scores, from cold to hot">
       {data.map((bucket, i) => (
         <button

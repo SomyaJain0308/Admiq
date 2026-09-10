@@ -1,11 +1,13 @@
 import { useState } from "react"
 import { Link, useNavigate, useLocation } from "react-router-dom"
-import { useAuth } from "@/context/AuthContext"
+import { useAuth } from "@/context/useAuth"
 import { ApiError } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { AuthShell } from "@/components/AuthShell"
+import { BrandMark } from "@/components/BrandMark"
 
 export default function Login() {
   const { login } = useAuth()
@@ -39,9 +41,10 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+    <AuthShell>
       <Card className="w-full max-w-sm">
         <CardHeader>
+          <BrandMark className="mb-2" />
           <CardTitle className="text-xl">AdmiQ staff login</CardTitle>
           <CardDescription>Sign in with your staff email and password.</CardDescription>
         </CardHeader>
@@ -83,6 +86,6 @@ export default function Login() {
           </CardFooter>
         </form>
       </Card>
-    </div>
+    </AuthShell>
   )
 }

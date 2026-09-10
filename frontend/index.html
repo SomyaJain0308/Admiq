@@ -5,24 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>AdmiQ — AI admissions assistant for colleges</title>
 <meta name="description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%2318181b'/%3E%3Cpath d='M16 7 L24 24 H20.2 L18.3 19.5 H13.7 L11.8 24 H8 Z M16 12.2 L14.2 16.4 H17.8 Z' fill='%23fafafa'/%3E%3C/svg%3E" />
+
+<!-- SITE_URL: single place to update once there's a permanent custom
+     domain. Used below for canonical/og/twitter/JSON-LD and referenced by
+     /robots.txt + /sitemap.xml (those two are separate static files, so
+     they have to be updated by hand if this ever changes). Set to the live
+     Vercel deployment for now - swap for the real domain when there is one. -->
+<link rel="canonical" href="https://admiq-eight.vercel.app/" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest" />
+<meta name="theme-color" content="#ffffff" id="theme-color-meta" />
 
 <!-- Open Graph / Twitter card - controls the preview shown when this link is
-     shared in Slack, WhatsApp, iMessage, Twitter, etc. og:url and the image's
-     absolute path below assume the site is served from its own domain root;
-     swap TODO_DOMAIN for the real one once it's live. -->
+     shared in Slack, WhatsApp, iMessage, Twitter, etc. -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="AdmiQ" />
 <meta property="og:title" content="AdmiQ — AI admissions assistant for colleges" />
 <meta property="og:description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
-<meta property="og:image" content="https://TODO_DOMAIN/og-image.png" />
+<meta property="og:image" content="https://admiq-eight.vercel.app/og-image.jpg" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
-<meta property="og:url" content="https://TODO_DOMAIN/" />
+<meta property="og:url" content="https://admiq-eight.vercel.app/" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="AdmiQ — AI admissions assistant for colleges" />
 <meta name="twitter:description" content="AdmiQ answers student admissions questions on WhatsApp using your college's own documents, and brings staff in the moment something needs a real person." />
-<meta name="twitter:image" content="https://TODO_DOMAIN/og-image.png" />
+<meta name="twitter:image" content="https://admiq-eight.vercel.app/og-image.jpg" />
+
+<!-- Structured data: lets search engines show AdmiQ as a recognized
+     software product (and, once a real logo/sameAs URL exists, an
+     Organization) rather than an unstructured page of text. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "AdmiQ",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web",
+  "description": "AdmiQ answers student admissions questions on WhatsApp using a college's own documents, and brings staff in the moment something needs a real person.",
+  "url": "https://admiq-eight.vercel.app/"
+}
+</script>
+
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
@@ -34,6 +58,8 @@
     var saved = localStorage.getItem("admiq-theme");
     var isDark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
     document.documentElement.classList.add(isDark ? "dark" : "light");
+    var meta = document.getElementById("theme-color-meta");
+    if (meta) meta.content = isDark ? "#0a0a0a" : "#ffffff";
   })();
 </script>
 <style>
@@ -171,6 +197,28 @@
   .theme-toggle .icon-moon { display: block; }
   html.dark .theme-toggle .icon-sun { display: block; }
   html.dark .theme-toggle .icon-moon { display: none; }
+
+  /* ---- skip link ----
+     Off-screen until it receives focus (first Tab stop on the page) - lets
+     keyboard/screen-reader users jump past the nav straight to the hero
+     instead of tabbing through 4 links + a button + 2 toggles every time. */
+  .skip-link {
+    position: absolute;
+    top: -40px;
+    left: 8px;
+    z-index: 100;
+    background: var(--accent);
+    color: var(--accent-foreground);
+    padding: 10px 16px;
+    border-radius: calc(var(--radius) - 2px);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.15s ease;
+  }
+  .skip-link:focus {
+    top: 8px;
+  }
 
   /* ---- nav ---- */
   .nav {
@@ -597,9 +645,11 @@
 </head>
 <body>
 
+<a href="#main-content" class="skip-link">Skip to content</a>
+
 <nav class="nav" id="site-nav">
   <div class="wrap nav-inner">
-    <a href="#" class="brand">
+    <a href="/" class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="7" fill="#18181b"/>
         <path d="M16 7 L24 24 H20.2 L18.3 19.5 H13.7 L11.8 24 H8 Z M16 12.2 L14.2 16.4 H17.8 Z" fill="#fafafa"/>
@@ -611,7 +661,7 @@
       <a href="#features">Features</a>
       <a href="#product">Product</a>
       <a href="/home/login">Staff Login</a>
-      <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary">Book a Demo</a>
+      <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary" data-demo-link aria-label="Book a Demo (opens in a new tab)">Book a Demo</a>
       <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" type="button">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>
@@ -630,14 +680,14 @@
   </div>
 </nav>
 
-<header class="hero wrap">
+<header class="hero wrap" id="main-content">
   <div class="hero-grid">
     <div>
       <span class="eyebrow"><span class="eyebrow-dot"></span> For admissions &amp; student support teams</span>
       <h1>Answers your students want. Time your staff get back.</h1>
       <p class="hero-sub">AdmiQ answers admissions questions on WhatsApp using your college's own documents — fees, eligibility, hostels, placements — and brings your staff in the moment something needs a real person.</p>
       <div class="hero-ctas">
-        <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary btn-lg">Book a Demo</a>
+        <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary btn-lg" data-demo-link aria-label="Book a Demo (opens in a new tab)">Book a Demo</a>
         <a href="#how-it-works" class="btn btn-ghost btn-lg">See how it works</a>
       </div>
     </div>
@@ -883,14 +933,14 @@
     <h2>See AdmiQ answer your college's actual questions</h2>
     <p>Book a 20-minute demo — we'll walk through it using real admissions questions, not a script.</p>
     <div class="hero-ctas">
-      <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary btn-lg">Book a Demo</a>
+      <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary btn-lg" data-demo-link aria-label="Book a Demo (opens in a new tab)">Book a Demo</a>
     </div>
   </div>
 </section>
 
 <footer class="border-t">
   <div class="wrap footer-inner">
-    <a href="#" class="brand">
+    <a href="/" class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
         <rect width="32" height="32" rx="7" fill="#18181b"/>
         <path d="M16 7 L24 24 H20.2 L18.3 19.5 H13.7 L11.8 24 H8 Z M16 12.2 L14.2 16.4 H17.8 Z" fill="#fafafa"/>
@@ -902,12 +952,24 @@
 </footer>
 
 <script>
+  // Single place to update the demo-booking link - every [data-demo-link]
+  // element already has the same URL hardcoded in its href (so the CTA
+  // still works with JS disabled / before this runs), this just keeps all
+  // three in sync going forward so a future link change is a one-line edit
+  // instead of three find-and-replaces.
+  var DEMO_LINK_URL = "https://calendly.com/somyaj515/new-meeting";
+  document.querySelectorAll("[data-demo-link]").forEach(function (a) {
+    a.href = DEMO_LINK_URL;
+  });
+
   document.getElementById("theme-toggle").addEventListener("click", function () {
     var root = document.documentElement;
     var goingDark = !root.classList.contains("dark");
     root.classList.toggle("dark", goingDark);
     root.classList.toggle("light", !goingDark);
     localStorage.setItem("admiq-theme", goingDark ? "dark" : "light");
+    var meta = document.getElementById("theme-color-meta");
+    if (meta) meta.content = goingDark ? "#0a0a0a" : "#ffffff";
   });
 
   (function () {

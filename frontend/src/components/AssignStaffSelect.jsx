@@ -2,6 +2,7 @@ import { toast } from "sonner"
 import { Label } from "@/components/ui/label"
 import { useStaffList } from "@/hooks/useStaff"
 import { useAssignStudent } from "@/hooks/useStudents"
+import { cn, nativeSelectClassName } from "@/lib/utils"
 
 export function AssignStaffSelect({ collegeId, studentId, assignedTo }) {
   // page_size caps at 100 server-side - fine for a single-college staff
@@ -28,7 +29,7 @@ export function AssignStaffSelect({ collegeId, studentId, assignedTo }) {
         value={assignedTo ?? ""}
         onChange={handleChange}
         disabled={staffLoading || assignMutation.isPending}
-        className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50"
+        className={cn(nativeSelectClassName, "w-full disabled:cursor-not-allowed disabled:opacity-50")}
       >
         <option value="">Unassigned</option>
         {staffData?.items?.map((staff) => (

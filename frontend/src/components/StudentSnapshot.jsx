@@ -4,6 +4,7 @@ import { useStudentDetail } from "@/hooks/useStudents"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { leadScoreBand } from "@/lib/leadScore"
+import { cn } from "@/lib/utils"
 
 // Compact identity used inline in tables - name + phone + lead score, linking
 // through to the full profile. Fetches via the same cached
@@ -33,7 +34,7 @@ export function StudentSnapshot({ collegeId, studentId }) {
       <span className="font-medium group-hover:underline">{student.student_name || "Unnamed student"}</span>
       <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
         {student.student_phone}
-        <Badge variant="outline" className={`h-4 px-1 text-[10px] leading-none ${band.className}`}>
+        <Badge variant="outline" className={cn("h-4 px-1 text-[10px] leading-none", band.className)}>
           {student.lead_score ?? 0} · {band.label}
         </Badge>
       </span>

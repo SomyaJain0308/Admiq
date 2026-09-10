@@ -6,16 +6,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { useMessageStudent, useConversation } from "@/hooks/useStudents"
-
-function defaultExpiryDate() {
-  const d = new Date()
-  d.setDate(d.getDate() + 30)
-  return d.toISOString().slice(0, 10) // yyyy-mm-dd, for <input type="date">
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { defaultExpiryDate, today } from "@/lib/dates"
 
 export function MessageStudentBox({ collegeId, studentId }) {
   const [content, setContent] = useState("")

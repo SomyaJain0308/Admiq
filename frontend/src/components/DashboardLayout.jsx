@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react"
-import { NavLink, Outlet } from "react-router-dom"
+import { NavLink, Outlet, matchPath } from "react-router-dom"
 import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
-import { useAuth } from "@/context/AuthContext"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useAuth } from "@/context/useAuth"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useTheme } from "@/hooks/useTheme"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
+import { useIsDesktopViewport } from "@/hooks/useMediaQuery"
+import { useRouteAnnouncer } from "@/hooks/useRouteAnnouncer"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { BrandMark } from "@/components/BrandMark"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -18,15 +21,35 @@ const navItems = [
   { to: "/settings", label: "College settings", icon: Settings },
 ]
 
+// Keeps `document.title` meaningful on every client-side navigation (see
+// useRouteAnnouncer) without needing every page component to set it
+// individually. Falls back to matching against `navItems` for the routes
+// that already have a nav label; /students/:studentId is handled separately
+// since it isn't in that list and doesn't have a static label.
+function getRouteTitle(location) {
+  if (matchPath("/students/:studentId", location.pathname)) {
+    return "Student details — AdmiQ"
+  }
+  const match = navItems.find(({ to, end }) =>
+    matchPath({ path: to, end: end ?? false }, location.pathname)
+  )
+  return match ? `${match.label} — AdmiQ` : "AdmiQ"
+}
+
 export function DashboardLayout() {
   const { user, logout } = useAuth()
   const { college, colleges, selectCollege } = useCurrentCollege()
   const { theme, toggleTheme } = useTheme()
+  const isDesktopViewport = useIsDesktopViewport()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [collegeMenuOpen, setCollegeMenuOpen] = useState(false)
   const collegeMenuRef = useRef(null)
   const collegeButtonRef = useRef(null)
   const hamburgerButtonRef = useRef(null)
+  const collegeOptionRefs = useRef([])
+  const mainRef = useRef(null)
+
+  useRouteAnnouncer(mainRef, getRouteTitle)
 
   // Small, cheap poll (page_size=1, we only read `total`) just to drive the
   // sidebar badge - lets staff see something's waiting without having the
@@ -69,11 +92,59 @@ export function DashboardLayout() {
     return () => document.removeEventListener("keydown", handleKeyDown)
   }, [collegeMenuOpen, mobileNavOpen])
 
+  // Moves focus into the listbox as soon as it opens (onto the currently
+  // selected college, or the first one) - the ARIA listbox pattern this
+  // menu intentionally uses expects the listbox itself to hold focus while
+  // open, with arrow keys moving between options, rather than leaving focus
+  // sitting on the trigger button.
+  useEffect(() => {
+    if (!collegeMenuOpen) return
+    const selectedIndex = colleges.findIndex((c) => c.college_id === college?.college_id)
+    collegeOptionRefs.current[selectedIndex >= 0 ? selectedIndex : 0]?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collegeMenuOpen])
+
+  function focusCollegeOption(index) {
+    const count = collegeOptionRefs.current.length
+    if (count === 0) return
+    collegeOptionRefs.current[(index + count) % count]?.focus()
+  }
+
+  function handleCollegeListboxKeyDown(e) {
+    const currentIndex = collegeOptionRefs.current.indexOf(document.activeElement)
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      focusCollegeOption(currentIndex + 1)
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      focusCollegeOption(currentIndex - 1)
+    } else if (e.key === "Home") {
+      e.preventDefault()
+      focusCollegeOption(0)
+    } else if (e.key === "End") {
+      e.preventDefault()
+      focusCollegeOption(collegeOptionRefs.current.length - 1)
+    }
+  }
+
   return (
     <div className="flex min-h-screen">
+      {/* Off-screen until focused (first Tab stop on every dashboard page) -
+          without it, a keyboard user has to tab through the full nav list
+          every time before reaching the actual page content. */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[60] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
+
       {/* Mobile top bar - only shown below lg, where the sidebar is hidden by default */}
       <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b bg-background px-4 lg:hidden">
-        <span className="text-lg font-semibold">AdmiQ</span>
+        <span className="flex items-center gap-2 text-lg font-semibold">
+          <BrandMark size={24} />
+          AdmiQ
+        </span>
         <Button
           ref={hamburgerButtonRef}
           variant="ghost"
@@ -85,22 +156,39 @@ export function DashboardLayout() {
         </Button>
       </div>
 
-      {/* Backdrop, mobile only, closes the nav when tapped outside it */}
+      {/* Backdrop, mobile only, closes the nav when tapped outside it. A real
+          button (not a div+onClick) so it's keyboard-reachable and doesn't
+          need a role worked around - the visual reset classes cancel out
+          the browser's default button chrome. */}
       {mobileNavOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+        <button
+          type="button"
+          aria-label="Close navigation menu"
+          className="fixed inset-0 z-40 cursor-default appearance-none border-0 bg-black/50 p-0 lg:hidden"
           onClick={() => setMobileNavOpen(false)}
         />
       )}
 
       <aside
+        // Below `lg` the drawer stays mounted and is just translated
+        // off-screen when closed, so `inert` is what actually keeps it out
+        // of the tab order and hidden from screen readers while closed -
+        // without it, its links are still focusable and still announced
+        // even though they're invisible. It's driven off the same viewport
+        // check as the CSS breakpoint (rather than applied unconditionally)
+        // because on desktop the sidebar is always visible and must stay
+        // interactive regardless of `mobileNavOpen`.
+        inert={!isDesktopViewport && !mobileNavOpen ? true : undefined}
         className={cn(
           "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-muted/20 p-4 transition-transform lg:static lg:z-auto lg:w-60 lg:translate-x-0",
           mobileNavOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
         <div className="mb-4 flex items-center justify-between px-2">
-          <span className="text-lg font-semibold">AdmiQ</span>
+          <span className="flex items-center gap-2 text-lg font-semibold">
+            <BrandMark size={24} />
+            AdmiQ
+          </span>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation menu">
             <X className="size-5" />
           </Button>
@@ -120,18 +208,36 @@ export function DashboardLayout() {
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
             </button>
             {collegeMenuOpen && (
-              <div role="listbox" className="absolute top-full right-2 left-2 z-10 mt-1 rounded-md border bg-popover p-1 shadow-md">
-                {colleges.map((c) => (
+              // Custom combobox: options render a checkmark icon that
+              // <option> can't support, so this intentionally uses the ARIA
+              // listbox pattern instead of a native <select>.
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
+              <div
+                role="listbox"
+                onKeyDown={handleCollegeListboxKeyDown}
+                className="absolute top-full right-2 left-2 z-10 mt-1 rounded-md border bg-popover p-1 shadow-md"
+              >
+                {colleges.map((c, i) => (
                   <button
                     key={c.college_id}
+                    ref={(el) => {
+                      collegeOptionRefs.current[i] = el
+                    }}
                     type="button"
+                    // See listbox comment above; this is a real <button>, so
+                    // it's already keyboard-operable without extra handlers.
+                    // Arrow/Home/End navigation between options is handled
+                    // by the listbox's onKeyDown above, per the ARIA
+                    // listbox pattern.
+                    // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role
                     role="option"
                     aria-selected={c.college_id === college?.college_id}
                     onClick={() => {
                       selectCollege(c.college_id)
                       setCollegeMenuOpen(false)
+                      collegeButtonRef.current?.focus()
                     }}
-                    className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent"
+                    className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                   >
                     <span className="truncate">{c.college_name}</span>
                     {c.college_id === college?.college_id && <Check className="size-3.5" />}
@@ -192,7 +298,17 @@ export function DashboardLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-4 pt-20 sm:p-8 lg:pt-8">
+      {/* tabIndex={-1} makes this focusable via mainRef.current.focus() in
+          useRouteAnnouncer without adding it as a regular Tab stop. Keeps a
+          visible focus-visible ring (same treatment as other focusable
+          elements in this layout) so a keyboard user can actually see where
+          focus landed after a navigation, not just have it happen silently. */}
+      <main
+        id="main-content"
+        ref={mainRef}
+        tabIndex={-1}
+        className="flex-1 overflow-y-auto p-4 pt-20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:p-8 lg:pt-8"
+      >
         <Outlet />
       </main>
     </div>

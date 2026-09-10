@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import { useParams, Link } from "react-router-dom"
 import { ArrowLeft, Loader2 } from "lucide-react"
-import { useCurrentCollege } from "@/context/CollegeContext"
+import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useStudentDetail, useConversation } from "@/hooks/useStudents"
 import { ConversationView } from "@/components/ConversationView"
 import { MessageStudentBox } from "@/components/MessageStudentBox"

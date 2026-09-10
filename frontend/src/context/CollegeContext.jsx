@@ -1,7 +1,7 @@
-import { createContext, useContext, useEffect, useState } from "react"
-import { useAuth } from "@/context/AuthContext"
+import { useEffect, useState } from "react"
+import { useAuth } from "@/context/useAuth"
+import { CollegeContext } from "@/context/college-context"
 
-const CollegeContext = createContext(null)
 const SELECTED_COLLEGE_KEY = "admiq_selected_college_id"
 
 export function CollegeProvider({ children }) {
@@ -41,12 +41,4 @@ export function CollegeProvider({ children }) {
   }
 
   return <CollegeContext.Provider value={value}>{children}</CollegeContext.Provider>
-}
-
-export function useCurrentCollege() {
-  const ctx = useContext(CollegeContext)
-  if (!ctx) {
-    throw new Error("useCurrentCollege must be used within a CollegeProvider")
-  }
-  return ctx
 }

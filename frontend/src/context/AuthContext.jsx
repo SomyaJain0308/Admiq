@@ -1,8 +1,7 @@
-import { createContext, useContext, useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
-import { setAccessToken, getRefreshToken, setRefreshToken, clearTokens } from "@/lib/tokenStore"
-
-const AuthContext = createContext(null)
+import { setAccessToken, clearTokens } from "@/lib/tokenStore"
+import { AuthContext } from "@/context/auth-context"
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -21,11 +20,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     async function bootstrap() {
-      const refreshToken = getRefreshToken()
-      if (!refreshToken) {
-        setIsBootstrapping(false)
-        return
-      }
+      // No way to check for a refresh token from JS anymore - it's an
+      // httpOnly cookie. So we just always attempt a refresh; if there's no
+      // cookie (or it's expired/invalid), this fails the same way it would
+      // have with a missing localStorage token, and we fall through to
+      // "logged out" below.
       try {
         const data = await api.refresh()
         setAccessToken(data.access_token)
@@ -43,16 +42,12 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const data = await api.login(email, password)
     setAccessToken(data.access_token)
-    setRefreshToken(data.refresh_token)
     await fetchCurrentUser()
   }, [fetchCurrentUser])
 
   const logout = useCallback(async () => {
-    const refreshToken = getRefreshToken()
     try {
-      if (refreshToken) {
-        await api.logout(refreshToken)
-      }
+      await api.logout()
     } catch {
       // Even if the server call fails (e.g. token already expired), we still
       // want to clear local state below - logging out should never get a
@@ -71,12 +66,4 @@ export function AuthProvider({ children }) {
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return ctx
 }

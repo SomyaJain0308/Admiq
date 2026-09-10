@@ -1,22 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Mock the token store so we control exactly what tokens are "stored"
-// without touching real localStorage.
+// Mock the token store so we control exactly what the access token is
+// without touching real module state. The refresh token itself is no longer
+// readable from JS (httpOnly cookie), so there's nothing to mock for it.
 vi.mock("@/lib/tokenStore", () => {
   let access = "expired-access-token"
-  let refresh = "valid-refresh-token"
   return {
     getAccessToken: () => access,
     setAccessToken: (t) => {
       access = t
     },
-    getRefreshToken: () => refresh,
-    setRefreshToken: (t) => {
-      refresh = t
-    },
     clearTokens: () => {
       access = null
-      refresh = null
     },
   }
 })
@@ -38,7 +33,7 @@ describe("api - concurrent 401 refresh deduplication", () => {
         return {
           ok: true,
           status: 200,
-          json: async () => ({ access_token: "new-access-token", refresh_token: "new-refresh-token" }),
+          json: async () => ({ access_token: "new-access-token", token_type: "Bearer" }),
         }
       }
       // Any other endpoint: fail with 401 the first time it's called with the

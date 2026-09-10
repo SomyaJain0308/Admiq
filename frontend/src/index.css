@@ -94,6 +94,20 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+@layer utilities {
+  /* Soft brand-tinted gradient for empty-state icon badges (see
+     EmptyState.jsx). Was referenced as a plain Tailwind class name but
+     never actually defined anywhere, so every empty-state icon rendered
+     with no background at all. */
+  .bg-gradient-brand-soft {
+    background-image: linear-gradient(
+      135deg,
+      color-mix(in oklab, var(--primary) 16%, transparent),
+      color-mix(in oklab, var(--primary) 4%, transparent)
+    );
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
