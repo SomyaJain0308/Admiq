@@ -247,6 +247,10 @@
   .nav-links a:not(.btn):hover { color: var(--foreground); }
   @media (max-width: 720px) {
     .nav-links a:not(.btn) { display: none; }
+    /* Reachable via the hamburger's mobile-menu instead - keeping it here
+       too would add a second button competing with Book a Demo for the
+       same squeezed mobile-width space described below. */
+    .nav-links .nav-dashboard-link { display: none; }
     /* The 28px desktop gap was sized for 4 text links + button + toggle
        all having breathing room. On mobile only the demo button, theme
        toggle, and (new) hamburger remain, but 28px between three items -
@@ -681,6 +685,40 @@
     html { scroll-behavior: auto; }
     .btn { transition: none; }
   }
+
+  /* ---- floating call button ----
+     Always-on escape hatch for a visitor stuck anywhere on the page -
+     deliberately NOT inside .nav (which scrolls out of reach on long
+     pages) so it stays reachable no matter how far down someone scrolls. */
+  .call-fab {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    z-index: 70;
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    padding: 13px 18px 13px 15px;
+    border-radius: 999px;
+    background: var(--accent);
+    color: var(--accent-foreground);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 600;
+    box-shadow: 0 4px 14px oklch(0 0 0 / 18%), 0 1px 3px oklch(0 0 0 / 14%);
+    transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .call-fab:hover { background: color-mix(in oklab, var(--accent) 88%, black); transform: translateY(-1px); }
+  .call-fab:active { transform: translateY(0); }
+  .call-fab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .call-fab svg { width: 18px; height: 18px; flex-shrink: 0; }
+  /* Number itself is redundant weight next to "Call us directly" on small
+     screens - keep the label short there and let the tel: link do the work. */
+  .call-fab .call-fab-number { opacity: 0.9; }
+  @media (max-width: 480px) {
+    .call-fab .call-fab-number { display: none; }
+    .call-fab { padding: 13px; }
+  }
 </style>
 </head>
 <body>
@@ -701,7 +739,7 @@
       <a href="#features">Features</a>
       <a href="#product">Product</a>
       <a href="#objections">FAQ</a>
-      <a href="/home/login">Staff Login</a>
+      <a href="/home" class="btn btn-ghost nav-dashboard-link">Dashboard</a>
       <a href="https://calendly.com/somyaj515/new-meeting" target="_blank" rel="noopener" class="btn btn-primary" data-demo-link aria-label="Book a Demo (opens in a new tab)">Book a Demo</a>
       <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark mode" type="button">
         <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
@@ -718,7 +756,7 @@
     <a href="#features">Features</a>
     <a href="#product">Product</a>
     <a href="#objections">FAQ</a>
-    <a href="/home/login">Staff Login</a>
+    <a href="/home">Dashboard</a>
   </div>
 </nav>
 
@@ -1045,6 +1083,11 @@
     <span class="fine">© 2026 AdmiQ. All rights reserved.</span>
   </div>
 </footer>
+
+<a href="tel:+917417898321" class="call-fab" aria-label="Call the AdmiQ founder directly at +91 74178 98321">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+  <span>Call us directly<span class="call-fab-number"> — +91 74178 98321</span></span>
+</a>
 
 <script>
   // Single place to update the demo-booking link - every [data-demo-link]

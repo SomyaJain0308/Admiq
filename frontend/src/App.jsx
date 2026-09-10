@@ -23,6 +23,7 @@ const StudentsList = lazy(() => import("@/pages/StudentsList"))
 const StudentDetail = lazy(() => import("@/pages/StudentDetail"))
 const CollegeSettings = lazy(() => import("@/pages/CollegeSettings"))
 const DocumentsPage = lazy(() => import("@/pages/DocumentsPage"))
+const Support = lazy(() => import("@/pages/Support"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
 
 const queryClient = new QueryClient({
@@ -77,6 +78,7 @@ export default function App() {
                       <Route path="/students/:studentId" element={<StudentDetailRoute />} />
                       <Route path="/documents" element={<ErrorBoundary fullScreen={false}><DocumentsPage /></ErrorBoundary>} />
                       <Route path="/settings" element={<ErrorBoundary fullScreen={false}><CollegeSettings /></ErrorBoundary>} />
+                      <Route path="/support" element={<ErrorBoundary fullScreen={false}><Support /></ErrorBoundary>} />
                     </Route>
                   </Route>
                   <Route path="*" element={<NotFound />} />

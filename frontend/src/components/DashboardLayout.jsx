@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { NavLink, Outlet, matchPath } from "react-router-dom"
-import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
+import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LifeBuoy, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
 import { useAuth } from "@/context/useAuth"
 import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useTheme } from "@/hooks/useTheme"
@@ -19,6 +19,7 @@ const navItems = [
   { to: "/students", label: "Students", icon: GraduationCap },
   { to: "/documents", label: "Documents", icon: FileText },
   { to: "/settings", label: "College settings", icon: Settings },
+  { to: "/support", label: "Support", icon: LifeBuoy },
 ]
 
 // Keeps `document.title` meaningful on every client-side navigation (see
