@@ -145,7 +145,7 @@
 
   /* The one "loud" icon treatment on the dashboard, reserved for Hottest
      leads - the single most urgency-driven card on the page. Every other
-     icon on Overview stays a quiet tinted square (bg-*/10) on purpose; this
+     icon on Overview stays a quiet tinted square (bg-color/10) on purpose; this
      is the one place that gets a solid fill and a soft glow ring, so it
      reads as the thing worth noticing rather than one more identical chip
      in a row of identical chips. */
