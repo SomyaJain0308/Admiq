@@ -4,7 +4,9 @@ import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LogOu
 import { useAuth } from "@/context/AuthContext"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useTheme } from "@/hooks/useTheme"
+import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
 const navItems = [
@@ -25,6 +27,13 @@ export function DashboardLayout() {
   const collegeMenuRef = useRef(null)
   const collegeButtonRef = useRef(null)
   const hamburgerButtonRef = useRef(null)
+
+  // Small, cheap poll (page_size=1, we only read `total`) just to drive the
+  // sidebar badge - lets staff see something's waiting without having the
+  // queue page itself open. The queue page's own query polls independently
+  // at the same interval, so the two stay roughly in sync.
+  const { data: queueData } = useLowConfidenceQueries(college?.college_id, false, { page: 1, pageSize: 1 })
+  const openQueueCount = queueData?.total ?? 0
 
   // The college switcher is a plain div, not a native <select> or a Radix
   // popover, so nothing closes it automatically - without this it stays
@@ -150,7 +159,15 @@ export function DashboardLayout() {
               }
             >
               <Icon className="size-4" />
-              {label}
+              <span className="flex-1">{label}</span>
+              {to === "/queue" && openQueueCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="h-5 min-w-5 justify-center rounded-full px-1 text-[11px] leading-none"
+                >
+                  {openQueueCount > 99 ? "99+" : openQueueCount}
+                </Badge>
+              )}
             </NavLink>
           ))}
         </nav>

@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useResolveLowConfidenceQuery } from "@/hooks/useLowConfidenceQueue"
 import { useConversation } from "@/hooks/useStudents"
@@ -23,8 +24,24 @@ function defaultExpiryDate() {
   return d.toISOString().slice(0, 10) // yyyy-mm-dd, for <input type="date">
 }
 
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+// WhatsApp's own hard limit on a single text message - matches the cap
+// already enforced on the direct-message box (MessageStudentBox), so a
+// staff reply here can't fail on send for a reason that was invisible while
+// typing it.
+const MAX_REPLY_LENGTH = 4096
+
 export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
   const [replyMessage, setReplyMessage] = useState("")
+  // Most staff answers are just as true next month as they are today, so
+  // "never expires" (expires_at = null, which the backend already treats as
+  // always-retrievable) is the sane default - an expiry date is something
+  // you opt into for answers you know are time-bound (a deadline, an event,
+  // a temporary policy), not something you have to remember to clear.
+  const [hasExpiry, setHasExpiry] = useState(false)
   const [expiresAt, setExpiresAt] = useState(defaultExpiryDate())
   const resolveMutation = useResolveLowConfidenceQuery(collegeId)
 
@@ -44,6 +61,7 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
   function handleOpenChange(next) {
     if (!next) {
       setReplyMessage("")
+      setHasExpiry(false)
       setExpiresAt(defaultExpiryDate())
       resolveMutation.reset()
     }
@@ -56,7 +74,7 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
       await resolveMutation.mutateAsync({
         queryId: query.query_id,
         replyMessage,
-        expiresAt: new Date(expiresAt).toISOString(),
+        expiresAt: hasExpiry ? new Date(expiresAt).toISOString() : null,
       })
       toast.success("Reply sent to student.")
       handleOpenChange(false)
@@ -109,21 +127,45 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
                 id="reply"
                 required
                 rows={4}
+                maxLength={MAX_REPLY_LENGTH}
                 value={replyMessage}
                 onChange={(e) => setReplyMessage(e.target.value)}
                 placeholder="Type the answer to send to the student..."
               />
+              <span
+                className={`self-end text-xs ${
+                  replyMessage.length >= MAX_REPLY_LENGTH ? "text-destructive" : "text-muted-foreground"
+                }`}
+              >
+                {replyMessage.length}/{MAX_REPLY_LENGTH}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="expires">Keep this answer available for future students until</Label>
-              <input
-                id="expires"
-                type="date"
-                required
-                value={expiresAt}
-                onChange={(e) => setExpiresAt(e.target.value)}
-                className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
-              />
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="has-expiry"
+                  checked={hasExpiry}
+                  onCheckedChange={(checked) => setHasExpiry(checked === true)}
+                />
+                <Label htmlFor="has-expiry" className="font-normal">
+                  Stop using this answer for future students after a date
+                </Label>
+              </div>
+              {hasExpiry ? (
+                <input
+                  id="expires"
+                  type="date"
+                  required
+                  min={today()}
+                  value={expiresAt}
+                  onChange={(e) => setExpiresAt(e.target.value)}
+                  className="border-input flex h-9 w-full rounded-md border bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+                />
+              ) : (
+                <p className="pl-6 text-xs text-muted-foreground">
+                  By default, this answer stays available to the assistant indefinitely.
+                </p>
+              )}
             </div>
 
             {resolveMutation.isError && (

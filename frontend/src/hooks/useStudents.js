@@ -40,6 +40,13 @@ export function useConversation(collegeId, studentId) {
       }
     },
     enabled: !!collegeId && !!studentId,
+    // Keep the thread live while someone's actually looking at it - a
+    // student can message again on WhatsApp at any moment, and staff
+    // shouldn't have to close and reopen the page/dialog to see it land.
+    // Only runs while this query is actually mounted (student detail page
+    // or the reply dialog), and React Query already pauses polling when
+    // the tab isn't visible.
+    refetchInterval: 8_000,
   })
 }
 

@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { useUpdateStudentNotes } from "@/hooks/useStudents"
 
+const MAX_NOTES_LENGTH = 5000
+
 export function InternalNotesCard({ collegeId, studentId, initialNotes }) {
   const [notes, setNotes] = useState(initialNotes || "")
   const notesMutation = useUpdateStudentNotes(collegeId, studentId)
   const isDirty = notes !== (initialNotes || "")
+  const isNearLimit = notes.length >= MAX_NOTES_LENGTH - 200
 
   async function handleSave() {
     try {
@@ -31,9 +34,18 @@ export function InternalNotesCard({ collegeId, studentId, initialNotes }) {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Notes only your team can see — call outcomes, follow-up plans, concerns raised..."
-          maxLength={5000}
+          maxLength={MAX_NOTES_LENGTH}
           disabled={notesMutation.isPending}
         />
+        {isNearLimit && (
+          <span
+            className={`self-end text-xs ${
+              notes.length >= MAX_NOTES_LENGTH ? "text-destructive" : "text-muted-foreground"
+            }`}
+          >
+            {notes.length}/{MAX_NOTES_LENGTH}
+          </span>
+        )}
         {notesMutation.isError && (
           <p role="alert" className="text-sm text-destructive">
             {notesMutation.error?.message || "Failed to save note. Please try again."}

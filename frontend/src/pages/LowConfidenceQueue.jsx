@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Inbox } from "lucide-react"
+import { Inbox, ChevronDown, ChevronUp } from "lucide-react"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
@@ -119,9 +119,11 @@ export default function LowConfidenceQueue() {
                   <TableCell>
                     <StudentSnapshot collegeId={college?.college_id} studentId={query.student_id} />
                   </TableCell>
-                  <TableCell className="max-w-xs font-medium whitespace-normal">{query.question_content}</TableCell>
+                  <TableCell className="max-w-xs font-medium whitespace-normal">
+                    <ExpandableText text={query.question_content} />
+                  </TableCell>
                   <TableCell className="max-w-xs whitespace-normal text-muted-foreground">
-                    {query.answer_content}
+                    <ExpandableText text={query.answer_content} />
                   </TableCell>
                   <TableCell className="text-muted-foreground">
                     {timeSince(view === "open" ? query.flagged_at : query.resolved_at)}
@@ -150,6 +152,39 @@ export default function LowConfidenceQueue() {
         open={!!activeQuery}
         onOpenChange={(open) => !open && setActiveQuery(null)}
       />
+    </div>
+  )
+}
+
+// Long questions/answers used to just push the row as tall as the text
+// needed - fine for a sentence, but a long assistant answer could make a
+// single row take up half the screen. Clamp to 3 lines with a toggle,
+// same "Show more" pattern already used for document errors elsewhere.
+function ExpandableText({ text }) {
+  const [expanded, setExpanded] = useState(false)
+
+  if (!text) return null
+
+  return (
+    <div>
+      <p className={expanded ? undefined : "line-clamp-3"}>{text}</p>
+      {text.length > 160 && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="mt-0.5 inline-flex items-center gap-0.5 text-xs font-medium text-foreground underline underline-offset-2"
+        >
+          {expanded ? (
+            <>
+              Show less <ChevronUp className="size-3" />
+            </>
+          ) : (
+            <>
+              Show more <ChevronDown className="size-3" />
+            </>
+          )}
+        </button>
+      )}
     </div>
   )
 }

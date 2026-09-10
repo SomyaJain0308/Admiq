@@ -3,6 +3,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from datetime import datetime
+from typing import Optional
 
 
 from backend.app.services.auth_services import verify_college_access
@@ -82,7 +83,7 @@ async def get_low_confidence_query(college_id: int, query_id: int, db: AsyncSess
 
 
 @router.post("/router/low_confidence/{college_id}/query/{query_id}/reply")
-async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_message: str, expires_at: datetime, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
+async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_message: str, expires_at: Optional[datetime] = None, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     staff_id = membership.staff_id
     settings = get_settings()
     query_result = await db.execute(select(LowConfidenceQuery).where(LowConfidenceQuery.college_id == college_id, LowConfidenceQuery.query_id == query_id, LowConfidenceQuery.resolved == False).limit(1))

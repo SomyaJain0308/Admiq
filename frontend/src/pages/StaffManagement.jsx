@@ -13,6 +13,14 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import {
   Table,
   TableHeader,
   TableBody,
@@ -29,6 +37,7 @@ export default function StaffManagement() {
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingStaff, setEditingStaff] = useState(null)
+  const [confirmDeleteStaff, setConfirmDeleteStaff] = useState(null)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
   const [isExporting, setIsExporting] = useState(false)
@@ -61,9 +70,14 @@ export default function StaffManagement() {
     setDialogOpen(true)
   }
 
-  async function handleDelete(staffMember) {
-    const confirmed = window.confirm(`Remove ${staffMember.staff_name} from this college? This can't be undone.`)
-    if (!confirmed) return
+  function requestDelete(staffMember) {
+    setConfirmDeleteStaff(staffMember)
+  }
+
+  async function confirmDelete() {
+    const staffMember = confirmDeleteStaff
+    if (!staffMember) return
+    setConfirmDeleteStaff(null)
     try {
       await deleteMutation.mutateAsync(staffMember.staff_id)
       toast.success(`${staffMember.staff_name} removed.`)
@@ -182,10 +196,15 @@ export default function StaffManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleDelete(member)}
+                            onClick={() => requestDelete(member)}
+                            disabled={deleteMutation.isPending && deleteMutation.variables === member.staff_id}
                             aria-label={`Remove ${member.staff_name}`}
                           >
-                            <Trash2 className="size-4 text-destructive" />
+                            {deleteMutation.isPending && deleteMutation.variables === member.staff_id ? (
+                              <Loader2 className="size-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="size-4 text-destructive" />
+                            )}
                           </Button>
                         )}
                       </div>
@@ -206,6 +225,25 @@ export default function StaffManagement() {
         onOpenChange={setDialogOpen}
         editingStaff={editingStaff}
       />
+
+      <Dialog open={!!confirmDeleteStaff} onOpenChange={(open) => !open && setConfirmDeleteStaff(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove {confirmDeleteStaff?.staff_name}?</DialogTitle>
+            <DialogDescription>
+              They'll lose access to {college.college_name} right away - this can't be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmDeleteStaff(null)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirmDelete}>
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
