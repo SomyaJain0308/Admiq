@@ -8,17 +8,12 @@ import {
   Loader2,
   TriangleAlert,
   Flame,
-  FileText,
-  CheckCircle2,
-  XCircle,
-  UserX,
 } from "lucide-react"
 import { useAuth } from "@/context/useAuth"
 import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { useStudentList, useStudentLeadScores } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
-import { useDocuments } from "@/hooks/useDocuments"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -130,11 +125,6 @@ export default function DashboardHome() {
           </CardContent>
         </Card>
       )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <KnowledgeBaseHealthCard collegeId={college?.college_id} />
-        <TeamSnapshotCard collegeId={college?.college_id} />
-      </div>
     </div>
   )
 }
@@ -297,156 +287,6 @@ function HotLeadsCard({ collegeId }) {
           </Link>
         </div>
       )}
-    </Card>
-  )
-}
-
-// Documents drive every answer the assistant gives, so a document stuck in
-// "failed" is a silent quality problem - nothing on the assistant side looks
-// broken, it's just working off less than it should be. Surfacing that here
-// means it doesn't take a staff member visiting Documents specifically to
-// notice.
-function KnowledgeBaseHealthCard({ collegeId }) {
-  const { data, isLoading, isError } = useDocuments(collegeId)
-  const docs = data || []
-  const failed = docs.filter((d) => d.status === "failed")
-  const processing = docs.filter((d) => d.status === "processing")
-  const success = docs.filter((d) => d.status === "success")
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-md bg-primary/10 text-primary">
-            <FileText className="size-4" />
-          </span>
-          <div>
-            <CardTitle className="text-base">Knowledge base health</CardTitle>
-            <CardDescription>What the assistant is actually answering from.</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {isLoading && (
-          <div className="flex items-center justify-center py-6 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-          </div>
-        )}
-        {isError && <p className="text-sm text-muted-foreground">Couldn't load documents.</p>}
-        {!isLoading && !isError && docs.length === 0 && (
-          <div className="flex flex-col items-start gap-2 py-2">
-            <p className="text-sm text-muted-foreground">No documents uploaded yet - the assistant has nothing to answer from.</p>
-            <Button asChild size="sm">
-              <Link to="/documents">Upload documents</Link>
-            </Button>
-          </div>
-        )}
-        {!isLoading && !isError && docs.length > 0 && (
-          <>
-            <div className="grid grid-cols-3 divide-x rounded-lg border">
-              <div className="flex flex-col items-center gap-0.5 py-3">
-                <span className="font-display text-xl font-semibold">{success.length}</span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <CheckCircle2 className="size-3" /> Ready
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-0.5 py-3">
-                <span className="font-display text-xl font-semibold">{processing.length}</span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="size-3" /> Processing
-                </span>
-              </div>
-              <div className="flex flex-col items-center gap-0.5 py-3">
-                <span className={cn("font-display text-xl font-semibold", failed.length > 0 && "text-destructive")}>
-                  {failed.length}
-                </span>
-                <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <XCircle className="size-3" /> Failed
-                </span>
-              </div>
-            </div>
-            {failed.length > 0 ? (
-              <div className="flex flex-col gap-1.5">
-                {failed.slice(0, 3).map((doc) => (
-                  <div key={doc.document_id} className="flex items-center justify-between gap-2 text-sm">
-                    <span className="truncate text-muted-foreground">{doc.file_name}</span>
-                    <Badge variant="destructive" className="shrink-0">
-                      Failed
-                    </Badge>
-                  </div>
-                ))}
-                <Link to="/documents" className="mt-1 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                  Fix in Documents
-                  <ArrowRight className="size-3.5" />
-                </Link>
-              </div>
-            ) : (
-              <Link to="/documents" className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-                View all documents
-                <ArrowRight className="size-3.5" />
-              </Link>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// Assignment is how a lead score becomes a phone call - a student sitting
-// unassigned is a hot lead nobody actually owns yet, which the stat grid's
-// plain "Staff" count doesn't surface at all.
-function TeamSnapshotCard({ collegeId }) {
-  const staffQuery = useStaffList(collegeId, { pageSize: 1 })
-  const unassignedQuery = useStudentList(collegeId, { pageSize: 1, assignedTo: "unassigned" })
-  const isLoading = staffQuery.isLoading || unassignedQuery.isLoading
-  const isError = staffQuery.isError || unassignedQuery.isError
-  const unassignedCount = unassignedQuery.data?.total ?? 0
-
-  return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-md bg-cold/10 text-cold">
-            <Users className="size-4" />
-          </span>
-          <div>
-            <CardTitle className="text-base">Team</CardTitle>
-            <CardDescription>Who's on staff, and who still needs an owner.</CardDescription>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {isLoading && (
-          <div className="flex items-center justify-center py-6 text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" />
-          </div>
-        )}
-        {isError && <p className="text-sm text-muted-foreground">Couldn't load team data.</p>}
-        {!isLoading && !isError && (
-          <div className="flex items-center justify-between gap-4">
-            <Link to="/staff" className="group flex-1">
-              <p className="font-display text-2xl font-semibold group-hover:underline">{staffQuery.data?.total ?? 0}</p>
-              <p className="text-sm text-muted-foreground">Staff with access</p>
-            </Link>
-            <div className="h-10 w-px bg-border" />
-            <Link to="/students" className="group flex-1">
-              <p
-                className={cn(
-                  "font-display text-2xl font-semibold group-hover:underline",
-                  unassignedCount > 0 && "text-warm"
-                )}
-              >
-                {unassignedCount}
-              </p>
-              <p className="flex items-center gap-1 text-sm text-muted-foreground">
-                <UserX className="size-3.5" />
-                Unassigned students
-              </p>
-            </Link>
-          </div>
-        )}
-      </CardContent>
     </Card>
   )
 }

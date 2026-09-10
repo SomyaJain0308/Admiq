@@ -20,9 +20,9 @@ export default function Support() {
         </p>
       </div>
 
-      <Card>
+      <Card className="shadow-elevated">
         <CardHeader>
-          <CardTitle>Talk to the founder</CardTitle>
+          <CardTitle className="font-display text-base">Talk to the founder</CardTitle>
           <CardDescription>{FOUNDER_PHONE_DISPLAY} · usually reachable during the day, IST</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row">

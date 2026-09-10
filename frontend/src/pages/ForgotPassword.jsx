@@ -38,13 +38,13 @@ export default function ForgotPassword() {
 
   return (
     <AuthShell>
-      <Card className="w-full max-w-sm">
+      <Card className="shadow-elevated w-full max-w-sm">
         {submitted ? (
           <>
             <CardHeader>
               <BrandMark className="mb-2" />
               <MailCheck className="mb-2 size-6 text-muted-foreground" />
-              <CardTitle className="text-xl">Check your email</CardTitle>
+              <CardTitle className="font-display text-xl">Check your email</CardTitle>
               <CardDescription>
                 If an account exists for {email}, we've sent a link to reset the password. It expires in 15
                 minutes.
@@ -63,7 +63,7 @@ export default function ForgotPassword() {
           <>
             <CardHeader>
               <BrandMark className="mb-2" />
-              <CardTitle className="text-xl">Forgot password?</CardTitle>
+              <CardTitle className="font-display text-xl">Forgot password?</CardTitle>
               <CardDescription>
                 Enter your staff email and we'll send you a link to reset your password.
               </CardDescription>

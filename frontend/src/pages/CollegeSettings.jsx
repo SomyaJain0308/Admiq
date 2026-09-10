@@ -72,7 +72,7 @@ export default function CollegeSettings() {
 
   if (isLoading || !college) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="shadow-elevated flex max-w-2xl items-center justify-center gap-2 rounded-xl border p-10 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
         Loading college settings...
       </div>
@@ -228,9 +228,9 @@ function CollegeSettingsForm({ college, updateMutation }) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <Card>
+      <Card className="shadow-elevated">
         <CardHeader>
-          <CardTitle className="text-base">Contact info</CardTitle>
+          <CardTitle className="font-display text-base">Contact info</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -268,9 +268,9 @@ function CollegeSettingsForm({ college, updateMutation }) {
         </CardContent>
       </Card>
 
-      <Card className="mt-4">
+      <Card className="shadow-elevated mt-4">
         <CardHeader>
-          <CardTitle className="text-base">Key strengths</CardTitle>
+          <CardTitle className="font-display text-base">Key strengths</CardTitle>
           <CardDescription>
             Up to {MAX_STRENGTHS}, listed in priority order - the assistant leans on these first when writing
             personalized check-in messages to students who've gone quiet. Keep each one short and specific (under{" "}

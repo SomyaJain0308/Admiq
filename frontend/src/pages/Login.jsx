@@ -42,10 +42,10 @@ export default function Login() {
 
   return (
     <AuthShell>
-      <Card className="w-full max-w-sm">
+      <Card className="shadow-elevated w-full max-w-sm">
         <CardHeader>
           <BrandMark className="mb-2" />
-          <CardTitle className="text-xl">AdmiQ staff login</CardTitle>
+          <CardTitle className="font-display text-xl">AdmiQ staff login</CardTitle>
           <CardDescription>Sign in with your staff email and password.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>

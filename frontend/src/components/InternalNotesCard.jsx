@@ -25,9 +25,9 @@ export function InternalNotesCard({ collegeId, studentId, initialNotes }) {
   }
 
   return (
-    <Card>
+    <Card className="shadow-elevated">
       <CardHeader>
-        <CardTitle className="text-base">Internal notes</CardTitle>
+        <CardTitle className="font-display text-base">Internal notes</CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-2">
         <Textarea

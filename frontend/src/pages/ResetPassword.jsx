@@ -54,10 +54,10 @@ export default function ResetPassword() {
   if (!token) {
     return (
       <AuthShell>
-        <Card className="w-full max-w-sm">
+        <Card className="shadow-elevated w-full max-w-sm">
           <CardHeader>
             <BrandMark className="mb-2" />
-            <CardTitle className="text-xl">Invalid reset link</CardTitle>
+            <CardTitle className="font-display text-xl">Invalid reset link</CardTitle>
             <CardDescription>This link is missing or malformed. Request a new one to continue.</CardDescription>
           </CardHeader>
           <CardFooter>
@@ -72,13 +72,13 @@ export default function ResetPassword() {
 
   return (
     <AuthShell>
-      <Card className="w-full max-w-sm">
+      <Card className="shadow-elevated w-full max-w-sm">
         {success ? (
           <>
             <CardHeader>
               <BrandMark className="mb-2" />
               <CheckCircle2 className="mb-2 size-6 text-muted-foreground" />
-              <CardTitle className="text-xl">Password reset</CardTitle>
+              <CardTitle className="font-display text-xl">Password reset</CardTitle>
               <CardDescription>Your password has been updated. You can now sign in with it.</CardDescription>
             </CardHeader>
             <CardFooter>
@@ -91,7 +91,7 @@ export default function ResetPassword() {
           <>
             <CardHeader>
               <BrandMark className="mb-2" />
-              <CardTitle className="text-xl">Set a new password</CardTitle>
+              <CardTitle className="font-display text-xl">Set a new password</CardTitle>
               <CardDescription>Choose a new password for your account.</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit}>

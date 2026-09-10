@@ -31,7 +31,7 @@ export default function StudentDetail() {
 
   if (studentLoading) {
     return (
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="shadow-elevated flex items-center justify-center gap-2 rounded-xl border p-10 text-sm text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
         Loading student...
       </div>
@@ -39,7 +39,11 @@ export default function StudentDetail() {
   }
 
   if (studentError || !student) {
-    return <p role="alert" className="text-sm text-destructive">Student not found.</p>
+    return (
+      <div role="alert" className="shadow-elevated rounded-xl border p-10 text-center text-sm text-destructive">
+        Student not found.
+      </div>
+    )
   }
 
   const band = leadScoreBand(student.lead_score ?? 0)
@@ -70,9 +74,9 @@ export default function StudentDetail() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <Card>
+        <Card className="shadow-elevated">
           <CardHeader>
-            <CardTitle>Conversation</CardTitle>
+            <CardTitle className="font-display text-base">Conversation</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {convoLoading ? (
@@ -90,9 +94,9 @@ export default function StudentDetail() {
         </Card>
 
         <div className="flex flex-col gap-4">
-          <Card>
+          <Card className="shadow-elevated">
             <CardHeader>
-              <CardTitle className="text-base">Profile</CardTitle>
+              <CardTitle className="font-display text-base">Profile</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               <AssignStaffSelect collegeId={college?.college_id} studentId={studentId} assignedTo={student.assigned_to} />
@@ -116,9 +120,9 @@ export default function StudentDetail() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="shadow-elevated">
             <CardHeader>
-              <CardTitle className="text-base">Signals for staff</CardTitle>
+              <CardTitle className="font-display text-base">Signals for staff</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 text-sm">
               <ListField label="Open concerns" items={signals.concerns} />
