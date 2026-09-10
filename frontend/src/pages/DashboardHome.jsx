@@ -34,13 +34,27 @@ export default function DashboardHome() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Welcome back{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
-        <p className="text-muted-foreground">Here's what's happening at {college.college_name}.</p>
+    <div className="flex flex-col gap-8">
+      <div className="relative overflow-hidden rounded-xl border bg-muted/20 p-6 sm:p-8">
+        <div
+          className="bg-dot-grid pointer-events-none absolute inset-x-[-10%] top-[-60%] h-[320px]"
+          style={{
+            maskImage: "radial-gradient(ellipse 55% 60% at 30% 100%, black 0%, transparent 75%)",
+            WebkitMaskImage: "radial-gradient(ellipse 55% 60% at 30% 100%, black 0%, transparent 75%)",
+          }}
+        />
+        <div className="relative">
+          <h1 className="text-2xl font-semibold">Welcome back{user?.staff_name ? `, ${user.staff_name}` : ""}</h1>
+          <p className="mt-1 text-muted-foreground">Here's what's happening at {college.college_name}.</p>
+        </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* One hairline-bordered grid, not three separate shadow cards - the
+          divider between columns does the same job the marketing site's
+          problem/features grids do (frontend/home/index.html), so the
+          dashboard's own "hero" moment reads as a continuation of that
+          language rather than a switch to generic SaaS card chrome. */}
+      <div className="grid overflow-hidden rounded-xl border sm:grid-cols-3 sm:divide-x">
         <StatCard
           to="/queue"
           icon={Inbox}
@@ -87,32 +101,32 @@ export default function DashboardHome() {
 
 function StatCard({ to, icon: Icon, label, count, isLoading, isError, description }) {
   return (
-    <Link to={to}>
-      <Card className="transition-colors hover:bg-accent/50">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <Icon className="size-5 text-muted-foreground" />
-            <ArrowRight className="size-4 text-muted-foreground" />
-          </div>
-          <CardTitle className="pt-2 text-3xl font-semibold">
-            {isLoading ? (
-              <Loader2 className="size-6 animate-spin text-muted-foreground" />
-            ) : isError ? (
-              <span
-                className="flex items-center gap-1.5 text-lg text-muted-foreground"
-                title="Failed to load"
-              >
-                <TriangleAlert className="size-5 text-warm" />
-                {"\u2014"}
-              </span>
-            ) : (
-              (count ?? 0)
-            )}
-          </CardTitle>
-          <CardDescription>{label}</CardDescription>
-        </CardHeader>
-        <CardContent className="text-xs text-muted-foreground">{description}</CardContent>
-      </Card>
+    <Link
+      to={to}
+      className="group flex flex-col gap-3 border-t p-5 transition-colors first:border-t-0 hover:bg-accent/40 sm:border-t-0 sm:p-6"
+    >
+      <div className="flex items-center justify-between">
+        <span className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-4.5" />
+        </span>
+        <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </div>
+      <div>
+        <div className="font-display text-3xl font-semibold">
+          {isLoading ? (
+            <Loader2 className="size-6 animate-spin text-muted-foreground" />
+          ) : isError ? (
+            <span className="flex items-center gap-1.5 text-lg text-muted-foreground" title="Failed to load">
+              <TriangleAlert className="size-5 text-warm" />
+              {"\u2014"}
+            </span>
+          ) : (
+            (count ?? 0)
+          )}
+        </div>
+        <p className="mt-1 text-sm font-medium">{label}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
     </Link>
   )
 }

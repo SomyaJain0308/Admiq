@@ -15,7 +15,13 @@ function Table({ className, ...props }) {
 }
 
 function TableHeader({ className, ...props }) {
-  return <thead data-slot="table-header" className={cn("[&_tr]:border-b", className)} {...props} />
+  return (
+    <thead
+      data-slot="table-header"
+      className={cn("[&_tr]:border-b-2 [&_tr]:border-b-foreground/10 [&_th]:text-muted-foreground [&_th]:font-medium", className)}
+      {...props}
+    />
+  )
 }
 
 function TableBody({ className, ...props }) {

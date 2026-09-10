@@ -106,6 +106,26 @@
       color-mix(in oklab, var(--primary) 4%, transparent)
     );
   }
+
+  /* Numerals get their own face + tabular spacing wherever the dashboard
+     shows a count that updates (stat cards, lead scores) - keeps digits
+     from jumping around as they change width, and ties big numbers back
+     to the same display type as headings instead of the body sans. */
+  .font-display {
+    font-family: "Space Grotesk", system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Same dot-grid + soft accent glow used on the marketing landing page's
+     hero and the auth screens (AuthShell.jsx) - reused here so the
+     authenticated dashboard's own hero moment (DashboardHome) reads as
+     the same product rather than switching to unrelated SaaS chrome the
+     moment someone logs in. */
+  .bg-dot-grid {
+    background-image: radial-gradient(color-mix(in oklab, var(--foreground) 13%, transparent) 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
 }
 
 @layer base {

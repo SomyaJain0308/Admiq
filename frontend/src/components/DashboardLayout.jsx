@@ -141,9 +141,9 @@ export function DashboardLayout() {
       </a>
 
       {/* Mobile top bar - only shown below lg, where the sidebar is hidden by default */}
-      <div className="fixed inset-x-0 top-0 z-30 flex h-14 items-center justify-between border-b bg-background px-4 lg:hidden">
-        <span className="flex items-center gap-2 text-lg font-semibold">
-          <BrandMark size={24} />
+      <div className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b bg-background px-4 lg:hidden">
+        <span className="flex items-center gap-2.5 text-base font-semibold">
+          <BrandMark size={26} />
           AdmiQ
         </span>
         <Button
@@ -181,13 +181,13 @@ export function DashboardLayout() {
         // interactive regardless of `mobileNavOpen`.
         inert={!isDesktopViewport && !mobileNavOpen ? true : undefined}
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-muted/20 p-4 transition-transform lg:static lg:z-auto lg:w-60 lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r bg-muted/20 transition-transform lg:static lg:z-auto lg:w-64 lg:translate-x-0",
           mobileNavOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="mb-4 flex items-center justify-between px-2">
-          <span className="flex items-center gap-2 text-lg font-semibold">
-            <BrandMark size={24} />
+        <div className="flex h-16 items-center justify-between border-b px-4">
+          <span className="flex items-center gap-2.5 text-base font-semibold">
+            <BrandMark size={26} />
             AdmiQ
           </span>
           <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation menu">
@@ -196,14 +196,14 @@ export function DashboardLayout() {
         </div>
 
         {colleges.length > 1 && (
-          <div className="relative mb-4 px-2" ref={collegeMenuRef}>
+          <div className="relative border-b p-3" ref={collegeMenuRef}>
             <button
               ref={collegeButtonRef}
               type="button"
               onClick={() => setCollegeMenuOpen((o) => !o)}
               aria-haspopup="listbox"
               aria-expanded={collegeMenuOpen}
-              className="flex w-full items-center justify-between rounded-md border bg-background px-2 py-1.5 text-left text-sm font-medium focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
+              className="flex w-full items-center justify-between rounded-md border bg-background px-2.5 py-1.5 text-left text-sm font-medium focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none"
             >
               <span className="truncate">{college?.college_name}</span>
               <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
@@ -216,7 +216,7 @@ export function DashboardLayout() {
               <div
                 role="listbox"
                 onKeyDown={handleCollegeListboxKeyDown}
-                className="absolute top-full right-2 left-2 z-10 mt-1 rounded-md border bg-popover p-1 shadow-md"
+                className="absolute top-full right-3 left-3 z-10 mt-1 rounded-md border bg-popover p-1 shadow-md"
               >
                 {colleges.map((c, i) => (
                   <button
@@ -249,7 +249,7 @@ export function DashboardLayout() {
           </div>
         )}
 
-        <nav className="flex flex-1 flex-col gap-1">
+        <nav className="flex flex-1 flex-col gap-0.5 p-3">
           {navItems.map(({ to, label, icon: Icon, end }) => (
             <NavLink
               key={to}
@@ -258,9 +258,15 @@ export function DashboardLayout() {
               onClick={() => setMobileNavOpen(false)}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium transition-colors",
+                  // A left accent bar + tinted background reads as "current
+                  // section" without the whole row turning into a solid
+                  // primary-colored button - that treatment works for one
+                  // active item, but pair it with the "Waiting on you"
+                  // destructive badge a couple of items down and everything
+                  // starts competing for the same attention.
+                  "relative flex items-center gap-2.5 rounded-md py-2 pr-2 pl-3 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-primary text-primary-foreground"
+                    ? "bg-primary/10 text-primary before:absolute before:top-1.5 before:bottom-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary"
                     : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )
               }
@@ -279,16 +285,19 @@ export function DashboardLayout() {
           ))}
         </nav>
 
-        <div className="border-t pt-4">
-          <p className="truncate px-2 text-xs text-muted-foreground">{user?.staff_email}</p>
-          <div className="mt-1 flex items-center gap-1">
-            <Button variant="ghost" size="sm" className="flex-1 justify-start gap-2" onClick={logout}>
-              <LogOut className="size-4" />
-              Log out
-            </Button>
+        <div className="border-t p-3">
+          <div className="flex items-center gap-2.5 rounded-md px-1 py-1.5">
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+              {(user?.staff_name || user?.staff_email || "?").charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{user?.staff_name || "Staff"}</p>
+              <p className="truncate text-xs text-muted-foreground">{user?.staff_email}</p>
+            </div>
             <Button
               variant="ghost"
               size="icon"
+              className="size-8 shrink-0"
               onClick={toggleTheme}
               title="Toggle theme"
               aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
@@ -296,6 +305,10 @@ export function DashboardLayout() {
               {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
             </Button>
           </div>
+          <Button variant="ghost" size="sm" className="mt-1 w-full justify-start gap-2 text-muted-foreground" onClick={logout}>
+            <LogOut className="size-4" />
+            Log out
+          </Button>
         </div>
       </aside>
 
@@ -310,7 +323,9 @@ export function DashboardLayout() {
         tabIndex={-1}
         className="flex-1 overflow-y-auto p-4 pt-20 focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none sm:p-8 lg:pt-8"
       >
-        <Outlet />
+        <div className="mx-auto max-w-6xl">
+          <Outlet />
+        </div>
       </main>
     </div>
   )
