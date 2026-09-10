@@ -1,4 +1,4 @@
-import { getAccessToken, setAccessToken, clearTokens } from "@/lib/tokenStore"
+import { getAccessToken, getRefreshToken, setTokens, clearTokens } from "@/lib/tokenStore"
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
 
@@ -16,19 +16,29 @@ export class ApiError extends Error {
 let refreshPromise = null
 
 async function doRefresh() {
-  // No body to send - the refresh token travels as an httpOnly cookie the
-  // browser attaches automatically. credentials: "include" is what makes it
-  // send (and accept the rotated Set-Cookie back) on this cross-site request.
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) {
+    clearTokens()
+    throw new ApiError("Session expired, please log in again", 401, null)
+  }
+  // The refresh token travels as a JSON body field (RefreshTokenRequest on
+  // the backend), not a cookie - see the tokenStore.js note on why it's
+  // persisted in localStorage instead.
   const response = await fetch(`${API_BASE_URL}/refresh`, {
     method: "POST",
-    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
   })
   if (!response.ok) {
     clearTokens()
     throw new ApiError("Session expired, please log in again", 401, null)
   }
   const data = await response.json()
-  setAccessToken(data.access_token)
+  // The backend rotates refresh tokens on every use (the old one is
+  // revoked the moment a new one is issued) - storing both from the
+  // response, not just the access token, is what keeps the *next* refresh
+  // from being rejected as a replay of an already-spent token.
+  setTokens(data)
   return data.access_token
 }
 
@@ -52,11 +62,7 @@ async function request(path, options = {}, { skipAuth = false, isRetry = false }
     }
   }
 
-  // credentials: "include" on every request (not just /token, /refresh,
-  // /logout) - harmless for endpoints that don't care about the refresh
-  // cookie, and it's what lets the browser store the Set-Cookie from /token
-  // and send it back on /refresh and /logout.
-  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, credentials: "include" })
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers })
 
   if (response.status === 401 && !skipAuth && !isRetry) {
     try {
@@ -106,6 +112,8 @@ export const api = {
 
   // Auth endpoints need special handling: /token takes form-encoded data
   // (FastAPI's OAuth2PasswordRequestForm), not JSON like everything else.
+  // Both return { access_token, refresh_token, token_type } - callers are
+  // responsible for passing that straight to tokenStore's setTokens().
   login: async (email, password) => {
     const body = new URLSearchParams()
     body.set("username", email)
@@ -113,7 +121,19 @@ export const api = {
     return request("/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }, { skipAuth: true })
   },
   refresh: doRefresh,
-  logout: () => request("/logout", { method: "POST" }, { skipAuth: true }),
+  logout: () => {
+    const refreshToken = getRefreshToken()
+    // Nothing to revoke server-side if we never had a refresh token (e.g.
+    // logout called twice, or after the refresh token already expired) -
+    // /logout requires one in the body (RefreshTokenRequest), so skip the
+    // call entirely rather than send a request guaranteed to 422.
+    if (!refreshToken) return Promise.resolve(null)
+    return request(
+      "/logout",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: refreshToken }) },
+      { skipAuth: true }
+    )
+  },
 
   // Both intentionally skipAuth - the person isn't logged in yet when they
   // need these.
@@ -128,7 +148,7 @@ export const api = {
   downloadFile: async (path) => {
     const doFetch = () => {
       const token = getAccessToken()
-      return fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, credentials: "include" })
+      return fetch(`${API_BASE_URL}${path}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
     }
     let response = await doFetch()
     if (response.status === 401) {

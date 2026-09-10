@@ -1,17 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 
-// Mock the token store so we control exactly what the access token is
-// without touching real module state. The refresh token itself is no longer
-// readable from JS (httpOnly cookie), so there's nothing to mock for it.
+// Mock the token store so we control exactly what the access and refresh
+// tokens are without touching real module state (real tokenStore.js now
+// persists the refresh token to localStorage, which isn't available/
+// relevant in this unit test).
 vi.mock("@/lib/tokenStore", () => {
   let access = "expired-access-token"
+  let refresh = "some-refresh-token"
   return {
     getAccessToken: () => access,
-    setAccessToken: (t) => {
-      access = t
+    getRefreshToken: () => refresh,
+    setTokens: ({ access_token, refresh_token }) => {
+      access = access_token ?? access
+      refresh = refresh_token ?? refresh
     },
     clearTokens: () => {
       access = null
+      refresh = null
     },
   }
 })

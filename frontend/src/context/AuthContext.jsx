@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react"
 import { api } from "@/lib/api"
-import { setAccessToken, clearTokens } from "@/lib/tokenStore"
+import { setTokens, getRefreshToken, clearTokens } from "@/lib/tokenStore"
 import { AuthContext } from "@/context/auth-context"
 
 export function AuthProvider({ children }) {
@@ -20,14 +20,18 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     async function bootstrap() {
-      // No way to check for a refresh token from JS anymore - it's an
-      // httpOnly cookie. So we just always attempt a refresh; if there's no
-      // cookie (or it's expired/invalid), this fails the same way it would
-      // have with a missing localStorage token, and we fall through to
-      // "logged out" below.
+      // Nothing to restore if there's no refresh token in localStorage
+      // (first visit, or a previous logout/expiry already cleared it) -
+      // skip straight to "logged out" instead of firing a /refresh request
+      // that's guaranteed to fail.
+      if (!getRefreshToken()) {
+        setIsBootstrapping(false)
+        return
+      }
       try {
-        const data = await api.refresh()
-        setAccessToken(data.access_token)
+        // api.refresh() (doRefresh) already stores both the new access and
+        // refresh tokens itself before returning - nothing more to set here.
+        await api.refresh()
         await fetchCurrentUser()
       } catch {
         clearTokens()
@@ -41,7 +45,7 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const data = await api.login(email, password)
-    setAccessToken(data.access_token)
+    setTokens(data)
     await fetchCurrentUser()
   }, [fetchCurrentUser])
 
