@@ -11,7 +11,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useResolveLowConfidenceQuery } from "@/hooks/useLowConfidenceQueue"
+import { useConversation } from "@/hooks/useStudents"
+import { StudentSnapshotCard } from "@/components/StudentSnapshot"
+import { ConversationView } from "@/components/ConversationView"
 
 function defaultExpiryDate() {
   const d = new Date()
@@ -23,6 +27,19 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
   const [replyMessage, setReplyMessage] = useState("")
   const [expiresAt, setExpiresAt] = useState(defaultExpiryDate())
   const resolveMutation = useResolveLowConfidenceQuery(collegeId)
+
+  // Only enabled while a query is actually loaded (useConversation already
+  // guards on studentId), so this doesn't fetch anything while the dialog
+  // is closed.
+  const { data: messages, isLoading: convoLoading } = useConversation(collegeId, query?.student_id)
+
+  // What led up to this flagged question - not the question itself, which
+  // gets its own highlighted box below. Without this, staff replying only
+  // ever see the single question in isolation, with no sense of what the
+  // student already said earlier in the thread that gives it context.
+  const priorMessages = query?.question_message_id
+    ? (messages || []).filter((m) => m.message_id < query.question_message_id).slice(-5)
+    : []
 
   function handleOpenChange(next) {
     if (!next) {
@@ -50,7 +67,7 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="flex max-h-[85vh] flex-col overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Reply to student</DialogTitle>
           <DialogDescription>
@@ -59,6 +76,27 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
+          {query?.student_id != null && (
+            <StudentSnapshotCard collegeId={collegeId} studentId={query.student_id} />
+          )}
+
+          {convoLoading ? (
+            <div className="flex flex-col gap-2 rounded-md border p-3">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-3/4" />
+            </div>
+          ) : (
+            priorMessages.length > 0 && (
+              <div className="flex flex-col gap-2 rounded-md border p-3">
+                <p className="text-xs font-medium text-muted-foreground">Earlier in this conversation</p>
+                <div className="max-h-48 overflow-y-auto pr-1">
+                  <ConversationView messages={priorMessages} />
+                </div>
+              </div>
+            )
+          )}
+
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <p className="font-medium">Student asked:</p>
             <p className="text-muted-foreground">{query?.question_content}</p>

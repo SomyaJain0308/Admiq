@@ -3,6 +3,7 @@ import { Inbox } from "lucide-react"
 import { useCurrentCollege } from "@/context/CollegeContext"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
+import { StudentSnapshot } from "@/components/StudentSnapshot"
 import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { EmptyState } from "@/components/EmptyState"
@@ -102,6 +103,7 @@ export default function LowConfidenceQueue() {
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-48">Student</TableHead>
               <TableHead>Question</TableHead>
               <TableHead>Assistant's answer</TableHead>
               <TableHead className="w-24">{view === "open" ? "Waiting" : "Resolved"}</TableHead>
@@ -110,10 +112,13 @@ export default function LowConfidenceQueue() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableSkeletonRows columns={4} />
+              <TableSkeletonRows columns={5} />
             ) : (
               queries.map((query) => (
                 <TableRow key={query.query_id}>
+                  <TableCell>
+                    <StudentSnapshot collegeId={college?.college_id} studentId={query.student_id} />
+                  </TableCell>
                   <TableCell className="max-w-xs font-medium whitespace-normal">{query.question_content}</TableCell>
                   <TableCell className="max-w-xs whitespace-normal text-muted-foreground">
                     {query.answer_content}
