@@ -25,6 +25,13 @@ const CollegeSettings = lazy(() => import("@/pages/CollegeSettings"))
 const DocumentsPage = lazy(() => import("@/pages/DocumentsPage"))
 const Support = lazy(() => import("@/pages/Support"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
+// Admiq-staff-only internal cost/margin dashboard. Deliberately route-split
+// like everything else here, but ALSO deliberately outside <ProtectedRoute>
+// / <DashboardLayout> below and never linked from the nav - it authenticates
+// itself against a separate X-Cost-Reporting-Token, not the college-staff
+// JWT, and it must stay unreachable from a college-staff session. See
+// InternalCostDashboard.jsx and backend/app/api/v1/routers/costs.py.
+const InternalCostDashboard = lazy(() => import("@/pages/InternalCostDashboard"))
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -64,6 +71,9 @@ export default function App() {
                   <Route path="/login" element={<ErrorBoundary fullScreen={false}><Login /></ErrorBoundary>} />
                   <Route path="/forgot-password" element={<ErrorBoundary fullScreen={false}><ForgotPassword /></ErrorBoundary>} />
                   <Route path="/reset-password" element={<ErrorBoundary fullScreen={false}><ResetPassword /></ErrorBoundary>} />
+                  {/* Internal-only, token-gated, not a child of ProtectedRoute/
+                      DashboardLayout on purpose - see the lazy import above. */}
+                  <Route path="/internal/costs" element={<ErrorBoundary fullScreen={false}><InternalCostDashboard /></ErrorBoundary>} />
                   <Route element={<ProtectedRoute />}>
                     <Route element={<DashboardLayout />}>
                       {/* Each page gets its own boundary here (rather than one
