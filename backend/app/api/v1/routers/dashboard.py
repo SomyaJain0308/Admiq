@@ -123,12 +123,19 @@ async def get_dashboard_stats(
     # single grouped query gets the whole trailing series at once instead of
     # one query per day.
     series_start = today_start - timedelta(days=TRAILING_WINDOW_DAYS - 1)
+    # Build the date_trunc expression once and reuse the same object in
+    # select/group_by/order_by. If each clause calls func.date_trunc("day", ...)
+    # separately, SQLAlchemy binds "day" as three distinct parameters, and
+    # Postgres can't recognize the SELECT and GROUP BY expressions as
+    # identical - it then rejects the query with a GroupingError even though
+    # the SQL text looks correct.
+    day_trunc = func.date_trunc("day", Message.created_at)
     daily_message_rows = (
         await db.execute(
-            select(func.date_trunc("day", Message.created_at), func.count())
+            select(day_trunc, func.count())
             .where(Message.college_id == college_id, Message.created_at >= series_start)
-            .group_by(func.date_trunc("day", Message.created_at))
-            .order_by(func.date_trunc("day", Message.created_at))
+            .group_by(day_trunc)
+            .order_by(day_trunc)
         )
     ).all()
     counts_by_day = {day.date(): count for day, count in daily_message_rows}
