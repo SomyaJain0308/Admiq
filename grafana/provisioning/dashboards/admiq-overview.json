@@ -1,0 +1,172 @@
+{
+  "title": "Admiq Overview",
+  "uid": "admiq-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "title": "Chat Requests by Outcome", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (outcome) (rate(api_requests_total[5m]))",
+          "legendFormat": "{{outcome}}" }
+      ]
+    },
+    {
+      "id": 2, "title": "Chat Latency p95 (ms)", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, model_used) (rate(api_request_latency_ms_bucket[5m])))",
+          "legendFormat": "{{model_used}}" }
+      ]
+    },
+    {
+      "id": 3, "title": "Agent Invocation Outcomes", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (outcome) (rate(agent_requests_total[5m]))",
+          "legendFormat": "{{outcome}}" }
+      ]
+    },
+    {
+      "id": 4, "title": "Agent Invoke Latency p95 (s)", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(agent_invoke_latency_seconds_bucket[5m])))",
+          "legendFormat": "p95" }
+      ]
+    },
+    {
+      "id": 5, "title": "LLM Token Usage by Model (cost proxy)", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (model_used) (rate(agent_llm_input_tokens[5m]))",
+          "legendFormat": "{{model_used}} input" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (model_used) (rate(agent_llm_output_tokens[5m]))",
+          "legendFormat": "{{model_used}} output" }
+      ]
+    },
+    {
+      "id": 6, "title": "Errors: Agent / DB / Redis", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(agent_error_total[5m]))", "legendFormat": "agent" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(db_query_errors_total[5m]))", "legendFormat": "db" },
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(redis_errors_total[5m]))", "legendFormat": "redis" }
+      ]
+    },
+    {
+      "id": 7, "title": "HTTP Requests by Status Code", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (status_code) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{status_code}}" }
+      ]
+    },
+    {
+      "id": 8, "title": "HTTP Latency p95 by Route", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "histogram_quantile(0.95, sum by (le, route) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{route}}" }
+      ]
+    },
+    {
+      "id": 9, "title": "Background Task Outcomes", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (task_name, outcome) (rate(background_task_item_outcomes_total[5m]))",
+          "legendFormat": "{{task_name}} - {{outcome}}" }
+      ]
+    },
+    {
+      "id": 10, "title": "Celery Task Retries", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (task_name) (rate(celery_task_retries_total[5m]))",
+          "legendFormat": "{{task_name}}" }
+      ]
+    },
+    {
+      "id": 11, "title": "Low-Confidence Queries Open", "type": "stat",
+      "gridPos": { "x": 0, "y": 40, "w": 6, "h": 6 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "low_confidence_queries_open", "legendFormat": "open" }
+      ]
+    },
+    {
+      "id": 12, "title": "WhatsApp Send Outcomes", "type": "timeseries",
+      "gridPos": { "x": 6, "y": 40, "w": 18, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (outcome) (rate(whatsapp_send_outcomes_total[5m]))",
+          "legendFormat": "{{outcome}}" }
+      ]
+    },
+    {
+      "id": 13, "title": "Active Students (7d) by College", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 48, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "students_active_7d",
+          "legendFormat": "college {{college_id}}" }
+      ]
+    },
+    {
+      "id": 14, "title": "Documents Indexed by College", "type": "timeseries",
+      "gridPos": { "x": 12, "y": 48, "w": 12, "h": 8 },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "documents_indexed_total",
+          "legendFormat": "college {{college_id}}" }
+      ]
+    },
+    {
+      "id": 15, "title": "Cost (USD, all time) by College", "type": "stat",
+      "gridPos": { "x": 0, "y": 56, "w": 8, "h": 6 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "cost_usd_all_time",
+          "legendFormat": "college {{college_id}}" }
+      ]
+    },
+    {
+      "id": 16, "title": "Cost (USD, trailing 7d) by College", "type": "timeseries",
+      "gridPos": { "x": 8, "y": 56, "w": 16, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "cost_usd_last_7d",
+          "legendFormat": "college {{college_id}}" }
+      ]
+    },
+    {
+      "id": 17, "title": "Cost (USD, trailing 7d) by Type", "type": "timeseries",
+      "gridPos": { "x": 0, "y": 64, "w": 24, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "currencyUSD" }, "overrides": [] },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum by (cost_type) (cost_usd_by_type_last_7d)",
+          "legendFormat": "{{cost_type}}" }
+      ]
+    }
+  ]
+}
