@@ -118,6 +118,29 @@ async def export_students(
     return rows_to_csv_response(rows, columns, filename=f"students_college_{college_id}.csv")
 
 
+@router.get("/{college_id}/lead-scores")
+async def get_student_lead_scores(
+    college_id: int,
+    db: AsyncSession = Depends(get_db),
+    membership: CollegeStaff = Depends(verify_college_access),
+):
+    # Backs the Overview page's lead-score distribution chart, which needs
+    # every student's score (not full records) to bucket into a histogram -
+    # a single narrow column, not a paginated page of the list endpoint
+    # above, which would silently truncate the chart for any college over
+    # one page of students.
+    #
+    # Must stay ABOVE /{college_id}/{student_id} below: that route has no
+    # `:int` type constraint in the path itself (only on the function
+    # parameter), so Starlette's router matches "lead-scores" as a literal
+    # student_id string before FastAPI's own int validation ever runs -
+    # and a failed validation there is a 422, not a "try the next route"
+    # fallthrough. Same reasoning as /{college_id}/export just above.
+    result = await db.execute(select(Student.lead_score).where(Student.college_id == college_id))
+    lead_scores = [row[0] for row in result.all()]
+    return {"lead_scores": lead_scores}
+
+
 @router.get("/{college_id}/{student_id}")
 async def get_student(college_id: int, student_id: int, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     student_result = await db.execute(select(Student).where(Student.college_id == college_id, Student.student_id == student_id).limit(1))

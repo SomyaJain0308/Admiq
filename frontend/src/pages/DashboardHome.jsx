@@ -14,12 +14,14 @@ import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { useStudentList, useStudentLeadScores } from "@/hooks/useStudents"
 import { useStaffList } from "@/hooks/useStaff"
+import { useDashboardStats } from "@/hooks/useDashboardStats"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { LeadScoreChart } from "@/components/LeadScoreChart"
 import { StudentSnapshot } from "@/components/StudentSnapshot"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
+import { PerformanceStatsRow, MessageActivityCard, LeadFunnelCard, StaffLeaderboardCard, KnowledgeBaseHealthCard } from "@/components/DashboardMetrics"
 import { leadScoreBand } from "@/lib/leadScore"
 import { timeSince } from "@/lib/formatTime"
 import { cn } from "@/lib/utils"
@@ -44,6 +46,7 @@ export default function DashboardHome() {
   // reads from its own lightweight endpoint instead of a big page of the
   // list above.
   const leadScoresQuery = useStudentLeadScores(college?.college_id)
+  const dashboardStatsQuery = useDashboardStats(college?.college_id)
 
   if (hasNoCollege) {
     return (
@@ -109,9 +112,21 @@ export default function DashboardHome() {
         />
       </div>
 
+      <PerformanceStatsRow stats={dashboardStatsQuery.data} isLoading={dashboardStatsQuery.isLoading} isError={dashboardStatsQuery.isError} />
+
       <div className="grid gap-6 lg:grid-cols-2">
         <NeedsAttentionCard collegeId={college?.college_id} />
         <HotLeadsCard collegeId={college?.college_id} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <MessageActivityCard stats={dashboardStatsQuery.data} isLoading={dashboardStatsQuery.isLoading} isError={dashboardStatsQuery.isError} />
+        <LeadFunnelCard stats={dashboardStatsQuery.data} isLoading={dashboardStatsQuery.isLoading} isError={dashboardStatsQuery.isError} />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <StaffLeaderboardCard stats={dashboardStatsQuery.data} isLoading={dashboardStatsQuery.isLoading} isError={dashboardStatsQuery.isError} />
+        <KnowledgeBaseHealthCard stats={dashboardStatsQuery.data} isLoading={dashboardStatsQuery.isLoading} isError={dashboardStatsQuery.isError} />
       </div>
 
       {leadScoresQuery.data?.lead_scores?.length > 0 && (
