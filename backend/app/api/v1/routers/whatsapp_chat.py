@@ -11,7 +11,7 @@ from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import ContextLoggerAdapter
 from backend.app.monitoring.timing import RequestTimer
-from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS, INPUT_SECURITY_BLOCKS, WEBHOOK_SIGNATURE_INVALID
+from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
@@ -40,7 +40,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     signature_header = request.headers.get("x-hub-signature-256")
 
     if not verify_meta_signature(raw_body=raw_body, signature_header=signature_header, app_secret=get_settings().meta_app_secret): # Defined in services/whatsapp_service.py
-        WEBHOOK_SIGNATURE_INVALID.inc()
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
     payload = await request.json()
@@ -80,7 +79,6 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             new_session_summary = None
 
             if not is_allowed:
-                INPUT_SECURITY_BLOCKS.labels(channel="whatsapp", reason=(notes[0] if notes else "unknown")).inc()
                 logger.warning("Incoming WhatsApp message blocked by security", extra={"extra_data": {"reason": notes, "college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id,}})
                 response_text = "Sorry, I can't help with that message. It is blocked by our security filter. Maybe try and rephrase it?"
                 model_used = "security_block"

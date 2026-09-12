@@ -9,7 +9,6 @@ import os
 
 
 from backend.app.config import get_settings
-from backend.app.monitoring.http_metrics_middleware import HTTPMetricsMiddleware
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.rag.agent import Agent
@@ -67,13 +66,6 @@ app.add_middleware(
     # origins by default even though the response includes it.
     expose_headers=["Content-Disposition"],
 )
-
-# App-wide HTTP visibility (see monitoring/http_metrics_middleware.py) - the
-# chat endpoint already has its own REQUESTS_TOTAL/REQUEST_LATENCY_MS, but
-# every other router (colleges, staff, students, documents, dashboard,
-# costs, health) had no request counts, latency, or status-code breakdown
-# at all.
-app.add_middleware(HTTPMetricsMiddleware)
 
 
 app.include_router(documents_router)

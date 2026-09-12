@@ -1,0 +1,35 @@
+apiVersion: 1
+
+datasources:
+  - name: AdmiQ Prometheus
+    uid: admiq-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
+    editable: true
+
+  # Direct read access to your Supabase Postgres for cost_events and other
+  # business tables (median/percentile SQL, joins across students/sessions/
+  # low_confidence_queries) - things Prometheus counters can't answer.
+  # Get GRAFANA_PG_HOST/PORT/DATABASE/USER/PASSWORD from Supabase's
+  # dashboard: Project Settings > Database > Connection info (use the
+  # "Session" pooler or direct connection, not the pgbouncer transaction
+  # pooler - Grafana keeps long-lived connections). Put them in your .env -
+  # see .env.example. Consider creating a dedicated read-only Postgres role
+  # for this rather than using the service role, since Grafana only ever
+  # needs SELECT.
+  - name: AdmiQ Postgres
+    uid: admiq-postgres
+    type: postgres
+    url: $GRAFANA_PG_HOST:$GRAFANA_PG_PORT
+    database: $GRAFANA_PG_DATABASE
+    user: $GRAFANA_PG_USER
+    secureJsonData:
+      password: $GRAFANA_PG_PASSWORD
+    jsonData:
+      sslmode: require
+      postgresVersion: 1500
+      timescaledb: false
+    isDefault: true
+    editable: true

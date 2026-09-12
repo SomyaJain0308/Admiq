@@ -28,28 +28,6 @@ def get_redis_client() -> redis.Redis:
         _redis_client = redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
     return _redis_client
 
-
-async def _redis_set_revoked(jti: str, ttl_seconds: int) -> None:
-    # Thin wrapper so a Redis hiccup here (revoking a refresh/reset token)
-    # shows up as REDIS_ERRORS instead of a bare, unlabeled exception -
-    # this is on the login/logout/reset path, so a Redis outage here
-    # otherwise just looks like mysterious 500s to whoever's watching.
-    try:
-        redis_client = get_redis_client()
-        await redis_client.set(f"revoked_jti:{jti}", "1", ex=ttl_seconds)
-    except redis.RedisError as e:
-        REDIS_ERRORS.labels(operation="set_revoked").inc()
-        raise
-
-
-async def _redis_is_revoked(jti: str) -> bool:
-    try:
-        redis_client = get_redis_client()
-        return bool(await redis_client.exists(f"revoked_jti:{jti}"))
-    except redis.RedisError as e:
-        REDIS_ERRORS.labels(operation="check_revoked").inc()
-        raise
-
 def hash_password(password: str) -> str:
     return password_hasher.hash(password) # PlainPassword -> HashedPassword
 

@@ -1,0 +1,593 @@
+{
+  "id": null,
+  "uid": "admiq-cost-economics",
+  "title": "AdmiQ - Cost & Unit Economics",
+  "description": "Internal margin data - per-student/per-session cost. Not linked from, or fed by, the staff-facing app.",
+  "tags": [
+    "admiq",
+    "internal",
+    "cost"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 37,
+  "version": 1,
+  "refresh": "5m",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "row",
+      "title": "Overview",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Total cost (all time)",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 1
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(cost_usd),0) AS \"Total\" FROM cost_events WHERE college_id = $college_id::int",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Cost, last 7 days",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 1
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(cost_usd),0) AS \"7d\" FROM cost_events WHERE college_id = $college_id::int AND created_at >= now() - interval '7 days'",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Cost, previous 7 days",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 1
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT COALESCE(SUM(cost_usd),0) AS \"Prev 7d\" FROM cost_events WHERE college_id = $college_id::int AND created_at >= now() - interval '14 days' AND created_at < now() - interval '7 days'",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 2
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Total students",
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 1
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS \"Students\" FROM students WHERE college_id = $college_id::int",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Daily cost by type",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('day', created_at) AS time, cost_type AS metric, SUM(cost_usd) AS value FROM cost_events WHERE college_id = $college_id::int AND $__timeFilter(created_at) GROUP BY 1, 2 ORDER BY 1",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "stacking": {
+              "mode": "normal"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "type": "row",
+      "title": "Per-student unit economics (all-time)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Cost per student - avg / median / p95",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "WITH per_student AS (  SELECT s.student_id, COALESCE(SUM(ce.cost_usd),0) AS total_cost  FROM students s  LEFT JOIN cost_events ce ON ce.college_id = s.college_id AND ce.student_id = s.student_id  WHERE s.college_id = $college_id::int  GROUP BY s.student_id) SELECT  AVG(total_cost) AS \"Avg\",  percentile_cont(0.5) WITHIN GROUP (ORDER BY total_cost) AS \"Median\",  percentile_cont(0.95) WITHIN GROUP (ORDER BY total_cost) AS \"P95\" FROM per_student",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 9,
+      "type": "stat",
+      "title": "Cost per session - avg / median",
+      "gridPos": {
+        "h": 5,
+        "w": 12,
+        "x": 12,
+        "y": 14
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "WITH per_session AS (  SELECT ss.session_id, COALESCE(SUM(ce.cost_usd),0) AS total_cost  FROM student_sessions ss  LEFT JOIN cost_events ce ON ce.college_id = ss.college_id AND ce.session_id = ss.session_id  WHERE ss.college_id = $college_id::int  GROUP BY ss.session_id) SELECT  AVG(total_cost) AS \"Avg\",  percentile_cont(0.5) WITHIN GROUP (ORDER BY total_cost) AS \"Median\" FROM per_session",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "id": 10,
+      "type": "table",
+      "title": "Top 10 costliest students (all-time)",
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT s.student_id AS \"Student ID\", s.student_name AS \"Name\", COALESCE(SUM(ce.cost_usd),0) AS \"Total cost ($)\" FROM students s LEFT JOIN cost_events ce ON ce.college_id = s.college_id AND ce.student_id = s.student_id WHERE s.college_id = $college_id::int GROUP BY s.student_id, s.student_name ORDER BY 3 DESC LIMIT 10",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 11,
+      "type": "row",
+      "title": "Cost breakdown (all-time)",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "bargauge",
+      "title": "Cost by type (llm / embedding / whatsapp)",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT cost_type AS metric, SUM(cost_usd) AS value FROM cost_events WHERE college_id = $college_id::int GROUP BY cost_type ORDER BY value DESC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 13,
+      "type": "bargauge",
+      "title": "Cost by stage (top 10) - where retries/fallback burn money",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "SELECT stage AS metric, SUM(cost_usd) AS value FROM cost_events WHERE college_id = $college_id::int AND stage IS NOT NULL GROUP BY stage ORDER BY value DESC LIMIT 10",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 14,
+      "type": "row",
+      "title": "Efficiency: escalated vs self-served sessions",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 36
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Avg session cost - escalated to low-confidence queue vs self-served",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "admiq-postgres"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "admiq-postgres"
+          },
+          "format": "table",
+          "rawSql": "WITH escalated AS (  SELECT DISTINCT m.session_id  FROM low_confidence_queries lcq  JOIN messages m ON m.college_id = lcq.college_id AND m.message_id = lcq.question_message_id  WHERE lcq.college_id = $college_id::int AND m.session_id IS NOT NULL), per_session AS (  SELECT ss.session_id, COALESCE(SUM(ce.cost_usd),0) AS total_cost  FROM student_sessions ss  LEFT JOIN cost_events ce ON ce.college_id = ss.college_id AND ce.session_id = ss.session_id  WHERE ss.college_id = $college_id::int  GROUP BY ss.session_id) SELECT  AVG(total_cost) FILTER (WHERE session_id IN (SELECT session_id FROM escalated)) AS \"Escalated\",  AVG(total_cost) FILTER (WHERE session_id NOT IN (SELECT session_id FROM escalated)) AS \"Self-served\" FROM per_session",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD",
+          "custom": {},
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "orientation": "horizontal",
+        "textMode": "value_and_name",
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto"
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "college_id",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "admiq-postgres"
+        },
+        "query": "SELECT college_name AS __text, college_id AS __value FROM colleges ORDER BY college_name",
+        "refresh": 1,
+        "sort": 1,
+        "current": {},
+        "includeAll": false,
+        "multi": false
+      }
+    ]
+  }
+}

@@ -32,8 +32,10 @@ services:
   grafana:
     image: grafana/grafana:9.0.0
     container_name: admiq-grafana
+    env_file:
+      - .env
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana

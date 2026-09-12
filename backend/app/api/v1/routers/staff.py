@@ -16,7 +16,6 @@ from backend.app.services.auth_services import create_access_token, revoke_refre
 from backend.app.services.email_service import send_password_reset_email, send_staff_invite_email
 from backend.app.services.csv_export import rows_to_csv_response
 from backend.app.config import get_settings
-from backend.app.monitoring.api_metrics import STAFF_LOGIN_OUTCOMES
 
 
 
@@ -229,15 +228,12 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     staff_result = await db.execute(select(CollegeStaff).where(func.lower(CollegeStaff.staff_email) == form_data.username.lower()).limit(1))
     staff = staff_result.scalars().first()
     if not staff or not verify_password(form_data.password, staff.hashed_password):
-        STAFF_LOGIN_OUTCOMES.labels(outcome="invalid_credentials").inc()
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"}) # password or email is incorrect is the norm, otherwise it would be very easy for hackers to attack
     if not staff.is_active:
         # Deliberately the same 401 + generic-sounding shape as a wrong
         # password, rather than 403 "account deactivated" - that would let
         # someone probe which emails belong to deactivated accounts.
-        STAFF_LOGIN_OUTCOMES.labels(outcome="deactivated").inc()
         raise HTTPException(status_code=401, detail="Incorrect email or password", headers={"WWW-Authenticate": "Bearer"})
-    STAFF_LOGIN_OUTCOMES.labels(outcome="success").inc()
     access_token = create_access_token(data={"sub": str(staff.staff_id)})
     refresh_token = create_refresh_token(data={"sub": str(staff.staff_id)})
     return Token(access_token=access_token, refresh_token=refresh_token, token_type="Bearer")
