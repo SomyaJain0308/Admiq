@@ -7,10 +7,14 @@ DELIBERATELY separate from every college-staff-facing router:
 - gated by X-Cost-Reporting-Token (settings.cost_reporting_token), NOT
   verify_college_access - a college staff member's JWT cannot reach this
   no matter what, by construction.
-- NOT registered anywhere in the frontend (no hook, no dashboard card).
+- consumed ONLY by frontend/src/pages/InternalCostDashboard.jsx, an
+  Admiq-staff-only page that is deliberately unregistered from
+  DashboardLayout's nav and sits outside <ProtectedRoute> in App.jsx, so it
+  never becomes reachable from a college-staff login. That page talks to
+  this endpoint with a manually-entered token, not the staff JWT.
 This is your internal margin data. If you ever want a customer-facing
 usage view, build a separate, deliberately-limited endpoint for that -
-don't loosen this one or point the existing dashboard at it.
+don't loosen this one or point the existing college-staff dashboard at it.
 """
 
 import logging
@@ -23,19 +27,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.config import get_settings
 from backend.app.database import get_db
 from backend.app.models.CostEvent import CostEvent
+from backend.app.models.Document import Document
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
 from backend.app.models.Message import Message
 from backend.app.models.Student import Student
 from backend.app.models.StudentSession import StudentSession
-from backend.app.schemas.costs import CostByStage, CostByType, CostStatsResponse, TopCostStudent
+from backend.app.schemas.costs import CostByModel, CostByStage, CostByType, CostEventDetail, CostStatsResponse, DailyCost, TopCostStudent, WhatsAppCostBreakdown
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal/costs", tags=["Internal Cost Reporting"])
 
 TRAILING_WINDOW_DAYS = 7
+TREND_WINDOW_DAYS = 30
 TOP_STUDENTS_LIMIT = 10
 TOP_STAGES_LIMIT = 10
+TOP_MODELS_LIMIT = 10
+STUDENT_EVENTS_LIMIT = 200
 
 
 def _verify_token(x_cost_reporting_token: str | None) -> None:
@@ -164,6 +172,73 @@ async def get_cost_stats(
         )
     ).one()
 
+    # ---------------- Trend: daily spend, trailing 30 days ----------------
+    # Same date_trunc-once-reuse-the-expression pattern as dashboard.py's
+    # messages_last_7_days - binding func.date_trunc("day", ...) separately
+    # in select/group_by/order_by makes Postgres treat them as different
+    # expressions and raise a GroupingError.
+    trend_start = now - timedelta(days=TREND_WINDOW_DAYS - 1)
+    day_trunc = func.date_trunc("day", CostEvent.created_at)
+    daily_cost_rows = (
+        await db.execute(
+            select(day_trunc, func.sum(CostEvent.cost_usd))
+            .where(CostEvent.college_id == college_id, CostEvent.created_at >= trend_start)
+            .group_by(day_trunc)
+            .order_by(day_trunc)
+        )
+    ).all()
+    cost_by_day = {day.date(): float(cost) for day, cost in daily_cost_rows}
+    daily_cost_last_30_days = [DailyCost(date=trend_start.date() + timedelta(days=offset), total_cost_usd=cost_by_day.get(trend_start.date() + timedelta(days=offset), 0.0)) for offset in range(TREND_WINDOW_DAYS)]
+
+    # Quick "if this week repeats" run-rate, not a real forecast - deliberately
+    # simple rather than fitting a trend line, since this is a sanity-check
+    # number, not something to plan budget around.
+    projected_monthly_cost_usd = float(total_last_7_days) / TRAILING_WINDOW_DAYS * 30
+
+    # ---------------- Cost by model ----------------
+
+    cost_by_model_rows = (
+        await db.execute(
+            select(CostEvent.model, func.sum(CostEvent.cost_usd), func.sum(CostEvent.input_tokens + CostEvent.output_tokens))
+            .where(CostEvent.college_id == college_id, CostEvent.model.isnot(None))
+            .group_by(CostEvent.model)
+            .order_by(func.sum(CostEvent.cost_usd).desc())
+            .limit(TOP_MODELS_LIMIT)
+        )
+    ).all()
+    cost_by_model = [CostByModel(model=model, total_cost_usd=float(cost), total_tokens=int(tokens or 0)) for model, cost, tokens in cost_by_model_rows]
+
+    # ---------------- WhatsApp cost breakdown ----------------
+    # stage is "whatsapp_{category}" (see cost_service.record_whatsapp_cost) -
+    # strip the prefix back off to get the plain category name for display.
+
+    whatsapp_rows = (
+        await db.execute(
+            select(CostEvent.stage, func.sum(CostEvent.cost_usd), func.count())
+            .where(CostEvent.college_id == college_id, CostEvent.cost_type == "whatsapp")
+            .group_by(CostEvent.stage)
+            .order_by(func.sum(CostEvent.cost_usd).desc())
+        )
+    ).all()
+    whatsapp_cost_breakdown = [
+        WhatsAppCostBreakdown(category=(stage or "unknown").removeprefix("whatsapp_"), total_cost_usd=float(cost), message_count=int(count))
+        for stage, cost, count in whatsapp_rows
+    ]
+
+    # ---------------- Knowledge base / document ingestion overhead ----------------
+
+    document_ingestion_cost = (
+        await db.execute(select(func.coalesce(func.sum(CostEvent.cost_usd), 0)).where(CostEvent.college_id == college_id, CostEvent.stage == "document_ingestion"))
+    ).scalar_one()
+    document_count = (await db.execute(select(func.count()).select_from(Document).where(Document.college_id == college_id))).scalar_one()
+    avg_cost_per_document = float(document_ingestion_cost) / document_count if document_count else None
+
+    # ---------------- Per-reply unit economics ----------------
+
+    total_llm_cost = (await db.execute(select(func.coalesce(func.sum(CostEvent.cost_usd), 0)).where(CostEvent.college_id == college_id, CostEvent.cost_type == "llm"))).scalar_one()
+    assistant_message_count = (await db.execute(select(func.count()).select_from(Message).where(Message.college_id == college_id, Message.messager_role == "assistant"))).scalar_one()
+    avg_cost_per_assistant_message = float(total_llm_cost) / assistant_message_count if assistant_message_count else None
+
     return CostStatsResponse(
         total_cost_usd_all_time=float(total_all_time),
         total_cost_usd_last_7_days=float(total_last_7_days),
@@ -181,4 +256,52 @@ async def get_cost_stats(
         sessions_with_low_confidence_escalation=sessions_with_escalation or 0,
         avg_cost_per_escalated_session_usd=float(avg_escalated) if avg_escalated is not None else None,
         avg_cost_per_non_escalated_session_usd=float(avg_non_escalated) if avg_non_escalated is not None else None,
+        daily_cost_last_30_days=daily_cost_last_30_days,
+        projected_monthly_cost_usd=projected_monthly_cost_usd,
+        cost_by_model=cost_by_model,
+        whatsapp_cost_breakdown=whatsapp_cost_breakdown,
+        document_ingestion_cost_usd=float(document_ingestion_cost),
+        document_count=document_count or 0,
+        avg_cost_per_document_usd=avg_cost_per_document,
+        avg_cost_per_assistant_message_usd=avg_cost_per_assistant_message,
     )
+
+
+@router.get("/{college_id}/students/{student_id}/events", response_model=list[CostEventDetail])
+async def get_student_cost_events(
+    college_id: int,
+    student_id: int,
+    db: AsyncSession = Depends(get_db),
+    x_cost_reporting_token: str | None = Header(default=None),
+):
+    """Every individual cost_events row for one student, most recent first -
+    lets you check exactly which billed calls (stage/model/tokens) a
+    specific question produced, rather than trusting the aggregated
+    per-student total in /stats on faith. Capped at STUDENT_EVENTS_LIMIT
+    rows; a student with more history than that is chatty enough that the
+    aggregate total is more useful anyway."""
+    _verify_token(x_cost_reporting_token)
+
+    rows = (
+        await db.execute(
+            select(CostEvent)
+            .where(CostEvent.college_id == college_id, CostEvent.student_id == student_id)
+            .order_by(CostEvent.created_at.desc())
+            .limit(STUDENT_EVENTS_LIMIT)
+        )
+    ).scalars().all()
+
+    return [
+        CostEventDetail(
+            cost_event_id=row.cost_event_id,
+            cost_type=row.cost_type,
+            stage=row.stage,
+            model=row.model,
+            input_tokens=row.input_tokens,
+            output_tokens=row.output_tokens,
+            cost_usd=float(row.cost_usd),
+            session_id=row.session_id,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
