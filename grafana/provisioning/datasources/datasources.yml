@@ -5,12 +5,7 @@ datasources:
     uid: admiq-prometheus
     type: prometheus
     access: proxy
-    # PROMETHEUS_INTERNAL_ADDR is "prometheus:9090" locally (the
-    # docker-compose network alias) and Prometheus's Render-internal
-    # host:port in production (see render.yaml / deploy/README.md) - set in
-    # .env either way, since Grafana's own $VAR expansion doesn't support
-    # bash-style ":-default" fallback syntax.
-    url: http://$PROMETHEUS_INTERNAL_ADDR
+    url: http://prometheus:9090
     isDefault: false
     editable: true
 

@@ -157,7 +157,13 @@ CREATE TABLE chunks (
     FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id)
 );
 
-
+-- One row per billable unit of work (an LLM call, a batch of embedding
+-- calls, or a WhatsApp send) so per-student/per-college cost can be
+-- aggregated (sum, avg, median via percentile_cont, p95, etc.) after the
+-- fact instead of only living as Prometheus counters (which can't easily
+-- answer "median cost per student"). student_id/session_id/document_id are
+-- nullable because some costs aren't attributable to one student - document
+-- ingestion embeddings are a college-level/overhead cost, not a student's.
 CREATE TABLE cost_events (
     cost_event_id  SERIAL PRIMARY KEY,
     college_id     INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,

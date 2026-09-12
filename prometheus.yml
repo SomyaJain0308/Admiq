@@ -4,12 +4,14 @@ global:
   external_labels:
     env: "admiq"
 
-# No Alertmanager or alert rules are deployed yet, so the "alerting" and
-# "rule_files" blocks that used to be here were removed - they pointed at
-# an "alertmanager:9093" target with no such service in docker-compose.yml
-# and a nonexistent alert.rules.yml, which would fail Prometheus's config
-# validation on startup. Add both back if/when you actually deploy
-# Alertmanager and write real alerting rules.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+rule_files:
+  - "alert.rules.yml"
 
 scrape_configs:
   - job_name: "prometheus"
