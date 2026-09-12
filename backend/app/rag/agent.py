@@ -11,6 +11,7 @@ from backend.app.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QU
 from backend.app.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
 from backend.app.monitoring.agent_metrics import NEEDS_RETRIEVAL_COUNT, RELEVANT_CHUNKS_COUNT, RETRIEVED_CHUNKS_COUNT, AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, STAGE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED, INVOKE_LATENCY
 from backend.app.services.agent_helpers import extract_token_usage, classify_error
+from backend.app.services.cost_service import record_llm_cost, record_embedding_cost, estimate_tokens_from_text
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ class Agent:
                 needs_retrieval = True
             LLM_INPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="resolve_query", model_used=self.query_llm_name).inc(output_tokens)
+            await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="resolve_query", model=self.query_llm_name, input_tokens=input_tokens, output_tokens=output_tokens)
 
             result_dict = {"pending_queries": search_queries if needs_retrieval else [], "needs_retrieval": needs_retrieval, "resolved_chunks": [], "previous_assistant_message": previous_assistant_message, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens, "retrieval_retry_count": 0}
             if not needs_retrieval:
@@ -91,8 +93,13 @@ class Agent:
                 already_seen_ids = {chunk_id for chunk_id, _, _ in state.get("resolved_chunks", [])}
                 newly_resolved = list(state.get("resolved_chunks", []))
                 still_pending = []
+                embedded_tokens_total = 0
                 for sub_query in pending:
                     scored = await get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
+                    # get_relevant_documents_scored embeds sub_query via the Gemini embeddings API before searching -
+                    # it doesn't return token usage, so this estimates it from text length (see cost_service.estimate_tokens_from_text)
+                    # rather than skipping embedding cost entirely.
+                    embedded_tokens_total += estimate_tokens_from_text(sub_query)
                     RETRIEVED_CHUNKS_COUNT.observe(len(scored))
                     for chunk_id, _, dist in scored:
                         RETRIEVAL_DISTANCE.labels(passed_threshold=str(dist <= self.retrieval_distance_threshold).lower()).observe(dist)
@@ -110,6 +117,9 @@ class Agent:
                 else:
                     relevant_documents = "No relevant documents were found for this query."
                     best_distance = 1.0
+                if embedded_tokens_total > 0:
+                    settings_for_cost = get_settings()
+                    await record_embedding_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="retrieval_embedding", model=settings_for_cost.embedding_model, input_tokens=embedded_tokens_total)
             except Exception as e:
                 state["logger"].warning("Retrieval failed college_id=%s student_id=%s session_id=%s error=%s", state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 newly_resolved, still_pending = state.get("resolved_chunks", []), state.get("pending_queries", [])
@@ -134,6 +144,7 @@ class Agent:
                 new_queries, input_tokens, output_tokens = failed, 0, 0
             LLM_INPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(input_tokens)
             LLM_OUTPUT_TOKENS.labels(stage="re_query", model_used=self.query_llm_name).inc(output_tokens)
+            await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="re_query", model=self.query_llm_name, input_tokens=input_tokens, output_tokens=output_tokens)
             state["logger"].info("Re-querying attempt=%d college_id=%s student_id=%s session_id=%s old=%r new=%r", attempt, state["college_id"], state["student_id"], state["session_id"], failed, new_queries)
             STAGE_LATENCY.labels(stage="re_query", model_used=self.query_llm_name).observe(time.perf_counter() - start)
             return {"pending_queries": new_queries, "retrieval_retry_count": attempt, "input_tokens": state.get("input_tokens", 0) + input_tokens, "output_tokens": state.get("output_tokens", 0) + output_tokens}
@@ -170,6 +181,7 @@ class Agent:
                 total_output = prev_output_tokens + output_tokens
                 LLM_INPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(input_tokens) 
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(output_tokens)
+                await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="primary", model=self.primary_llm_name, input_tokens=input_tokens, output_tokens=output_tokens)
                 STAGE_LATENCY.labels(stage="primary", model_used=self.primary_llm_name).observe(time.perf_counter() - start)
                 state["logger"].info("Primary model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
                 if not parsed_response.response.strip().endswith("?"):
@@ -188,6 +200,7 @@ class Agent:
                 AGENT_RETRIES.labels(stage="primary").inc()
                 LLM_INPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(call_input_tokens)
                 LLM_OUTPUT_TOKENS.labels(stage="primary", model_used=self.primary_llm_name).inc(call_output_tokens)
+                await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="primary", model=self.primary_llm_name, input_tokens=call_input_tokens, output_tokens=call_output_tokens)
                 state["logger"].warning("Primary model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "primary_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
         process_message = traceable(name="primary_llm_call", run_type="llm")(process_message)
@@ -217,6 +230,7 @@ class Agent:
                 total_output = output_tokens + prev_output_tokens
                 LLM_INPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(input_tokens) 
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(output_tokens)
+                await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="fallback", model=self.fallback_llm_name, input_tokens=input_tokens, output_tokens=output_tokens)
                 STAGE_LATENCY.labels(stage="fallback", model_used=self.fallback_llm_name).observe(time.perf_counter() - start)
                 state["logger"].info("Fallback model succeeded attempt=%d elapsed_ms=%.0f college_id=%s student_id=%s session_id=%s", attempt, (time.perf_counter() - start) * 1000, state["college_id"], state["student_id"], state["session_id"])
                 if not parsed_response.response.strip().endswith("?"):
@@ -235,6 +249,7 @@ class Agent:
                 AGENT_RETRIES.labels(stage="fallback").inc()
                 LLM_INPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(call_input_tokens)
                 LLM_OUTPUT_TOKENS.labels(stage="fallback", model_used=self.fallback_llm_name).inc(call_output_tokens)
+                await record_llm_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="fallback", model=self.fallback_llm_name, input_tokens=call_input_tokens, output_tokens=call_output_tokens)
                 state["logger"].warning("Fallback model failed attempt=%d college_id=%s student_id=%s session_id=%s error=%s", attempt, state["college_id"], state["student_id"], state["session_id"], e, exc_info=True)
                 return {"error": str(e), "fallback_retry_count": attempt, "model_used": "", "input_tokens": total_input, "output_tokens": total_output}
         try_fallback = traceable(name="fallback_llm_call", run_type="llm")(try_fallback)    

@@ -11,11 +11,12 @@ from backend.app.config import get_settings
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import ContextLoggerAdapter
 from backend.app.monitoring.timing import RequestTimer
-from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS
+from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS, INPUT_SECURITY_BLOCKS, WEBHOOK_SIGNATURE_INVALID
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
 from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
 from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
+from backend.app.services.cost_service import record_whatsapp_cost
 
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])
@@ -39,6 +40,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
     signature_header = request.headers.get("x-hub-signature-256")
 
     if not verify_meta_signature(raw_body=raw_body, signature_header=signature_header, app_secret=get_settings().meta_app_secret): # Defined in services/whatsapp_service.py
+        WEBHOOK_SIGNATURE_INVALID.inc()
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
     payload = await request.json()
@@ -78,6 +80,7 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             new_session_summary = None
 
             if not is_allowed:
+                INPUT_SECURITY_BLOCKS.labels(channel="whatsapp", reason=(notes[0] if notes else "unknown")).inc()
                 logger.warning("Incoming WhatsApp message blocked by security", extra={"extra_data": {"reason": notes, "college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id,}})
                 response_text = "Sorry, I can't help with that message. It is blocked by our security filter. Maybe try and rephrase it?"
                 model_used = "security_block"
@@ -118,6 +121,10 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             send_result = await send_whatsapp_text_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, message=response_text, access_token=get_settings().whatsapp_access_token) # Defined in service/whatsapp_service.py
             if not send_result["ok"]:
                 logger.error("Failed to send Whatsapp reply", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": send_result}})
+            # This is always a free-form reply inside the 24h customer-service window
+            # (it's a direct response to the inbound message just processed above), so
+            # it's always a "session" conversation for cost purposes.
+            await record_whatsapp_cost(db, college_id=college_id, student_id=student.student_id, session_id=session.session_id, category="session", success=send_result["ok"])
             if security_notes:
                 logger.info("Security notes", extra={"extra_data": {"notes": security_notes, "college_id": college_id, "student_id": student.student_id}})
         processed_count += 1

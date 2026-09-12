@@ -157,6 +157,37 @@ CREATE TABLE chunks (
     FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id)
 );
 
+-- One row per billable unit of work (an LLM call, a batch of embedding
+-- calls, or a WhatsApp send) so per-student/per-college cost can be
+-- aggregated (sum, avg, median via percentile_cont, p95, etc.) after the
+-- fact instead of only living as Prometheus counters (which can't easily
+-- answer "median cost per student"). student_id/session_id/document_id are
+-- nullable because some costs aren't attributable to one student - document
+-- ingestion embeddings are a college-level/overhead cost, not a student's.
+CREATE TABLE cost_events (
+    cost_event_id  SERIAL PRIMARY KEY,
+    college_id     INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    student_id     INT,
+    session_id     INT,
+    document_id    INT,
+    cost_type      TEXT NOT NULL CHECK (cost_type IN ('llm', 'embedding', 'whatsapp')),
+    stage          TEXT,  -- e.g. 'resolve_query', 're_query', 'primary', 'fallback', 'retrieval_embedding', 'document_ingestion', 'whatsapp_session', 'whatsapp_template'
+    model          TEXT,
+    input_tokens   INT NOT NULL DEFAULT 0,
+    output_tokens  INT NOT NULL DEFAULT 0,
+    cost_usd       NUMERIC(12,6) NOT NULL DEFAULT 0,
+    created_at     TIMESTAMP DEFAULT NOW(),
+
+    FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id, session_id) REFERENCES student_sessions(college_id, session_id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id, document_id) REFERENCES documents(college_id, document_id) ON DELETE CASCADE
+);
+
+CREATE INDEX ON cost_events (college_id, student_id);
+CREATE INDEX ON cost_events (college_id, created_at);
+CREATE INDEX ON cost_events (student_id, created_at);
+CREATE INDEX ON cost_events (cost_type);
+
 DO $$
 BEGIN
     PERFORM cron.unschedule('delete-expired-staff-answer-chunks');

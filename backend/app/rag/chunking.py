@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 
 from backend.app.config import get_settings
 from backend.app.models.Chunk import Chunk
+from backend.app.services.cost_service import record_embedding_cost_sync, estimate_tokens_from_text
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -122,6 +123,13 @@ def insert_chunks_to_db(db, document_id: int, college_id: int, chunks: list, vec
         for index, (chunk, vector) in enumerate(zip(chunks, vectors))
     ]
     db.add_all(chunk_rows)
+    # Document-ingestion embedding cost - a college-level knowledge-base
+    # overhead cost, not attributable to one student (see
+    # cost_service.record_embedding_cost_sync). Estimated from chunk text
+    # length since embed_documents() in ingest_markdown() doesn't surface
+    # actual token usage.
+    total_estimated_tokens = sum(estimate_tokens_from_text(chunk.page_content) for chunk in chunks)
+    record_embedding_cost_sync(db, college_id=college_id, document_id=document_id, model=get_settings().embedding_model, input_tokens=total_estimated_tokens)
     db.commit()
     for row in chunk_rows:
         db.refresh(row)

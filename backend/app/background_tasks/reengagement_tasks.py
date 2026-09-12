@@ -14,6 +14,7 @@ from backend.app.models.StudentSession import StudentSession
 from backend.app.models.WhatsappNumber import WhatsAppNumber
 from backend.app.rag.reengagement import generate_reengagement_message
 from backend.app.services.whatsapp_service import send_whatsapp_text_message
+from backend.app.services.cost_service import record_llm_cost, record_whatsapp_cost
 
 
 
@@ -76,7 +77,8 @@ async def _check_and_send_reenagegement_nudges_async():
                             college_result = await db.execute(select(College).where(College.college_id == student.college_id).limit(1))
                             college = college_result.scalars().first()
                             profile_signals = student.profile_signals or {}
-                            nudge = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths if college else None)
+                            nudge, nudge_input_tokens, nudge_output_tokens = await generate_reengagement_message(student_summary=student.summary, session_summary=session.session_summary, concerns=profile_signals.get("concerns"), course_interest=student.course_interest, key_strengths=college.key_strengths if college else None)
+                            await record_llm_cost(db, college_id=student.college_id, student_id=student.student_id, session_id=session.session_id, stage="reengagement", model=get_settings().query_model, input_tokens=nudge_input_tokens, output_tokens=nudge_output_tokens)
                             if not nudge.should_send or not nudge.message:
                                 session.reengagement_nudge_sent = True
                                 REENGAGEMENT_CANDIDATE_OUTCOMES.labels(outcome="llm_declined").inc()
@@ -88,6 +90,10 @@ async def _check_and_send_reenagegement_nudges_async():
                                 logger.warning(f"No Whatsapp number configured for college {student.college_id}. Skipping nudge for student  {student.student_id}.")
                                 continue
                             send_result  = await send_whatsapp_text_message(phone_number_id=whatsapp_number.phone_number_id, to=student.whatsapp_user_id, message=nudge.message, access_token=get_settings().whatsapp_access_token)
+                            # Proactive, staff-initiated-in-spirit outreach after a period of
+                            # silence - closest fit to Meta's "marketing" conversation category
+                            # for cost purposes, distinct from an automated in-window reply.
+                            await record_whatsapp_cost(db, college_id=student.college_id, student_id=student.student_id, session_id=session.session_id, category="marketing", success=send_result["ok"])
                             if send_result["ok"]:
                                 db.add(Message(college_id=student.college_id, student_id=student.student_id, session_id=session.session_id, messager_role="assistant", content=nudge.message, message_type="reengagement_nudge"))
                                 session.reengagement_nudge_sent = True

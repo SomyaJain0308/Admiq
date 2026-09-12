@@ -22,6 +22,8 @@ from fastapi_limiter.depends import RateLimiter as _UpstreamRateLimiter
 from starlette.requests import Request
 from starlette.responses import Response
 
+from backend.app.monitoring.api_metrics import RATE_LIMIT_REJECTIONS
+
 
 class RateLimiter(_UpstreamRateLimiter):
     async def __call__(self, request: Request, response: Response):
@@ -52,4 +54,5 @@ class RateLimiter(_UpstreamRateLimiter):
             FastAPILimiter.lua_sha = await FastAPILimiter.redis.script_load(FastAPILimiter.lua_script)
             pexpire = await self._check(key)
         if pexpire != 0:
+            RATE_LIMIT_REJECTIONS.labels(route=request.scope["path"]).inc()
             return await callback(request, response, pexpire)

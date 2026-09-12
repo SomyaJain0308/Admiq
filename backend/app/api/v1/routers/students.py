@@ -18,6 +18,7 @@ from backend.app.services.auth_services import verify_college_access
 from backend.app.services.csv_export import rows_to_csv_response
 from backend.app.services.tenant_service import save_staff_message
 from backend.app.services.whatsapp_service import send_staff_initiated_message
+from backend.app.services.cost_service import record_whatsapp_cost
 from backend.app.schemas.students import StudentMessageCreate, StudentMessageResponse, StudentNotesUpdate, StudentAssignUpdate
 from backend.app.config import get_settings
 from backend.app.monitoring.logging_utils import get_logger
@@ -210,6 +211,7 @@ async def message_student(
     )
     if not send_result["ok"]:
         logger.error(f"Failed to deliver staff message to student_id={student_id} (channel={send_result.get('channel')})")
+    await record_whatsapp_cost(db, college_id=college_id, student_id=student_id, session_id=None, category="utility" if send_result.get("channel") == "template" else "session", success=send_result["ok"])
 
     # Save it either way, matching the low-confidence reply endpoint's
     # behavior - the message was genuinely sent by staff even if WhatsApp's

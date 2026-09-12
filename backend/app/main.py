@@ -9,6 +9,7 @@ import os
 
 
 from backend.app.config import get_settings
+from backend.app.monitoring.http_metrics_middleware import HTTPMetricsMiddleware
 from backend.app.rag.security import SecurityPipeline
 from backend.app.monitoring.logging_utils import get_logger
 from backend.app.rag.agent import Agent
@@ -23,6 +24,7 @@ from backend.app.api.v1.routers.low_confidence import router as low_confidence_r
 from backend.app.api.v1.routers.students import router as students_router
 from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.dashboard import router as dashboard_router
+from backend.app.api.v1.routers.costs import router as costs_router
 
 
 
@@ -66,6 +68,13 @@ app.add_middleware(
     expose_headers=["Content-Disposition"],
 )
 
+# App-wide HTTP visibility (see monitoring/http_metrics_middleware.py) - the
+# chat endpoint already has its own REQUESTS_TOTAL/REQUEST_LATENCY_MS, but
+# every other router (colleges, staff, students, documents, dashboard,
+# costs, health) had no request counts, latency, or status-code breakdown
+# at all.
+app.add_middleware(HTTPMetricsMiddleware)
+
 
 app.include_router(documents_router)
 app.include_router(whatsapp_router)
@@ -78,6 +87,7 @@ app.include_router(health_router)
 app.include_router(low_confidence_router)
 app.include_router(students_router)
 app.include_router(dashboard_router)
+app.include_router(costs_router)
 
 
 # Without this, an unhandled exception in a route (anything that isn't a

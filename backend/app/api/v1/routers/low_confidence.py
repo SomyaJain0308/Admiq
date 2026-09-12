@@ -11,6 +11,7 @@ from backend.app.monitoring.logging_utils import get_logger
 from backend.app.monitoring.low_confidence import LOW_CONFIDENCE_QUERIES_OPEN, LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS, LOW_CONFIDENCE_QUERIES_RESOLVED
 from backend.app.config import get_settings
 from backend.app.services.whatsapp_service import send_staff_initiated_message
+from backend.app.services.cost_service import record_whatsapp_cost, record_embedding_cost, estimate_tokens_from_text
 from backend.app.database import get_db
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
 from backend.app.models.Message import Message
@@ -126,10 +127,14 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
     )
     if not send_result["ok"]:
         logger.error(f"Failed to deliver staff reply to student_id={query.student_id} (channel={send_result.get('channel')})")
+    # channel="text" means it went out as a free-form reply inside the 24h window ("session" cost);
+    # channel="template" means the window was closed and it fell back to the approved template ("utility" cost).
+    await record_whatsapp_cost(db, college_id=college_id, student_id=query.student_id, session_id=original_question.session_id, category="utility" if send_result.get("channel") == "template" else "session", success=send_result["ok"])
     # Embed + Store as a retrievable chunk
     embedder = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, api_key=settings.gemini_api_key, output_dimensionality=settings.vector_size)
     chunk_text = f"Question: {reconstructed.question}\nAnswer: {reconstructed.answer}"
     vector = embedder.embed_query(chunk_text)
+    await record_embedding_cost(db, college_id=college_id, student_id=query.student_id, session_id=original_question.session_id, stage="staff_answer_embedding", model=settings.embedding_model, input_tokens=estimate_tokens_from_text(chunk_text))
     db.add(Chunk(college_id=college_id, chunk_content=chunk_text, embedding=vector, chunk_index=0, source_type="staff_answer", source_query_id=query_id, expires_at=expires_at))
     query.resolved = True
     query.resolved_by = staff_id

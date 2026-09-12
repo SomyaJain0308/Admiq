@@ -5,7 +5,7 @@ from datetime import datetime
 
 from backend.app.database import get_db
 from backend.app.config import get_settings
-from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS
+from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, INPUT_SECURITY_BLOCKS
 from backend.app.rag.agent import Agent
 from backend.app.rag.security import SecurityPipeline
 from backend.app.services.tenant_service import flag_low_confidence_query, get_or_create_student, save_assistant_message, save_inbound_message
@@ -30,6 +30,7 @@ async def test_chat(request: Request, payload: ChatTestRequest, db: AsyncSession
     new_session_summary = None
 
     if not is_allowed:
+        INPUT_SECURITY_BLOCKS.labels(channel="test_chat", reason=(notes[0] if notes else "unknown")).inc()
         response_text, model_used, sources, wants_human_handoff, best_distance = "Sorry, I can't help with that message. It is blocked by our security filter.", "security_block", [], False, None
     elif is_session_budget_exceeded(session, get_settings().session_token_budget):
         STUDENT_TOKEN_BUDGET_REJECTIONS.inc()

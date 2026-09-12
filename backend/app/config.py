@@ -29,6 +29,32 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     cache_ttl_seconds: str = "600s"
 
 
+    # Cost tracking (backend/app/services/cost_service.py)
+    # $ per 1,000,000 tokens, standard (non-batch) tier. Verify against
+    # https://ai.google.dev/gemini-api/docs/pricing before trusting reports -
+    # these are point-in-time defaults (checked Sep 2026 for gemini-2.5-flash
+    # and gemini-embedding-001) and Google revises them periodically. If
+    # primary/fallback/query_model or embedding_model are changed away from
+    # their current defaults, add/update the matching entry in
+    # cost_service.LLM_PRICING_PER_MILLION_TOKENS / EMBEDDING_PRICING_PER_MILLION_TOKENS
+    # too - an unpriced model silently costs $0 in every report below.
+    #
+    # WhatsApp costs aren't modeled per-message here: Meta's Cloud API pricing
+    # depends on conversation category (marketing/utility/service/authentication)
+    # and destination country, which this codebase doesn't currently track per
+    # send. whatsapp_utility_conversation_cost_usd is a flat per-conversation
+    # placeholder used only for template-triggered sends (staff-initiated
+    # replies outside the 24h window, reengagement nudges) - set it to your
+    # actual rate from Meta Business Manager > WhatsApp Manager > Overview >
+    # pricing for your market. Free-form replies inside the 24h session
+    # window are billed by Meta as "service" conversations, which are free in
+    # most markets as of the 2025 per-message pricing shift - left at 0.0
+    # below; update if that's no longer true for your account.
+    llm_cost_tracking_enabled: bool = True
+    whatsapp_session_message_cost_usd: float = 0.0
+    whatsapp_utility_conversation_cost_usd: float = 0.0
+    whatsapp_marketing_conversation_cost_usd: float = 0.0
+
     # Application
     app_env: str = "development"
     log_level: str = "INFO"
@@ -71,6 +97,15 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
 
     # Internal Schedules Tasks
     internal_task_token: str = ""
+
+    # Cost reporting (backend/app/api/v1/routers/costs.py) - deliberately a
+    # SEPARATE secret from internal_task_token (rather than reusing it) so
+    # rotating one doesn't affect the other, and separate from every
+    # college-staff auth path (verify_college_access / JWTs) on purpose:
+    # this data is your internal margin information, not something any
+    # college's staff account should ever be able to reach, so it must
+    # never be wired into the staff-facing dashboard/frontend.
+    cost_reporting_token: str = ""
 
     frontend_url: str = "https://admiq-v1.vercel.app"
 
