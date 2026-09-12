@@ -1,0 +1,115 @@
+# Render Blueprint for AdmiQ's monitoring stack.
+#
+# This does NOT redefine the backend, celery_worker, or celery_beat
+# services - those already exist as manually-created Render services and
+# keep working exactly as they do today. This Blueprint only adds the three
+# new services needed for the Grafana dashboards: Prometheus, Grafana, and
+# redis-exporter.
+#
+# node-exporter is deliberately left out - see the comment in
+# deploy/prometheus/prometheus.yml.template for why.
+#
+# Before running this (Render Dashboard > New > Blueprint, pointing at this
+# repo), read deploy/README.md - a few placeholder values below
+# (BACKEND_METRICS_TARGET's service name in particular) need to match your
+# actual Render setup, and several env vars are marked sync: false, meaning
+# Render will prompt you for a value the first time you sync this Blueprint.
+
+services:
+  # ------------------------------------------------------------------
+  # Prometheus - private service, no public URL. Only Grafana (and you,
+  # via the Render dashboard/CLI if you ever need to poke at it directly)
+  # can reach it, over Render's private network.
+  # ------------------------------------------------------------------
+  - type: pserv
+    name: admiq-prometheus
+    runtime: docker
+    dockerfilePath: deploy/prometheus/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    autoDeploy: true
+    disk:
+      name: prometheus-data
+      mountPath: /prometheus
+      sizeGB: 5
+    envVars:
+      # Render internal host:port of your EXISTING backend web service.
+      # fromService can reference a service outside this Blueprint as long
+      # as it exists in the same workspace - replace "admiq-backend" below
+      # with your backend service's actual name in the Render dashboard.
+      - key: BACKEND_METRICS_TARGET
+        fromService:
+          name: Admiq
+          type: web
+          property: hostport
+      - key: REDIS_EXPORTER_TARGET
+        fromService:
+          name: admiq-redis-exporter
+          type: pserv
+          property: hostport
+      # Same value as secrets/supabase_metrics_password.txt locally -
+      # Render prompts you for it once when you sync this Blueprint.
+      - key: SUPABASE_METRICS_PASSWORD
+        sync: false
+
+  # ------------------------------------------------------------------
+  # redis-exporter - private service, reads your existing Redis instance
+  # and exposes /metrics for Prometheus to scrape.
+  # ------------------------------------------------------------------
+  - type: pserv
+    name: admiq-redis-exporter
+    runtime: image
+    image:
+      url: docker.io/oliver006/redis_exporter:latest
+    plan: starter
+    region: singapore
+    envVars:
+      # The same Redis connection string your backend service already uses
+      # (its REDIS_URL env var) - copy the value across, Blueprints can't
+      # reference an arbitrary env var on a service outside themselves.
+      - key: REDIS_ADDR
+        sync: false
+
+  # ------------------------------------------------------------------
+  # Grafana - a normal (public) web service, protected by
+  # GF_SECURITY_ADMIN_PASSWORD. This is intentionally the ONLY new service
+  # here with a public URL - see deploy/README.md for how to lock it down
+  # further (Render IP allow list, or converting it to a private service
+  # you reach via `render ssh` port-forwarding instead).
+  # ------------------------------------------------------------------
+  - type: web
+    name: admiq-grafana
+    runtime: docker
+    dockerfilePath: deploy/grafana/Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    autoDeploy: true
+    disk:
+      name: grafana-data
+      mountPath: /var/lib/grafana
+      sizeGB: 1
+    envVars:
+      - key: GF_SECURITY_ADMIN_PASSWORD
+        sync: false
+      - key: PROMETHEUS_INTERNAL_ADDR
+        fromService:
+          name: admiq-prometheus
+          type: pserv
+          property: hostport
+      # Direct Supabase Postgres connection for the cost-economics
+      # dashboard - see grafana/provisioning/datasources/datasources.yml.
+      # Get these from Supabase: Project Settings > Database > Connection
+      # info. Strongly consider a dedicated read-only Postgres role here
+      # rather than your app's own DB user.
+      - key: GRAFANA_PG_HOST
+        sync: false
+      - key: GRAFANA_PG_PORT
+        value: "5432"
+      - key: GRAFANA_PG_DATABASE
+        value: postgres
+      - key: GRAFANA_PG_USER
+        sync: false
+      - key: GRAFANA_PG_PASSWORD
+        sync: false
