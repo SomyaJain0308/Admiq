@@ -14,7 +14,7 @@ from backend.app.monitoring.timing import RequestTimer
 from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
-from backend.app.services.whatsapp_service import send_whatsapp_text_message, verify_meta_signature, extract_whatsapp_message_events
+from backend.app.services.whatsapp_service import send_whatsapp_text_message, send_whatsapp_typing_indicator, verify_meta_signature, extract_whatsapp_message_events
 from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
 from backend.app.services.cost_service import record_whatsapp_cost
 
@@ -70,6 +70,17 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             DUPLICATE_WEBHOOK_DELIVERY.inc()
             logger.info("Duplicate whatsapp redelivery, skipping", extra={"extra_data": {"whatsapp_message_id": event.whatsapp_message_id}})
             continue
+
+        # Show the "..." typing indicator immediately so the student isn't
+        # staring at a static screen while the agent/RAG pipeline (which can
+        # take a few seconds) runs below. WhatsApp clears it automatically
+        # once send_whatsapp_text_message goes out further down, or after
+        # 25s if something goes wrong before we get there - so a failure
+        # here is non-fatal and shouldn't block the actual reply.
+        typing_result = await send_whatsapp_typing_indicator(phone_number_id=event.phone_number_id, message_id=event.whatsapp_message_id, access_token=get_settings().whatsapp_access_token)
+        if not typing_result["ok"]:
+            logger.warning("Failed to send Whatsapp typing indicator", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": typing_result}})
+
         security_notes = []
 
         with RequestTimer() as timer: # Basic Observability

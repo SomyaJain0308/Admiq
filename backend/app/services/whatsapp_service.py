@@ -54,6 +54,23 @@ async def send_whatsapp_text_message(phone_number_id: str, to: str, message: str
     return await _send_whatsapp_payload(phone_number_id, payload, access_token)
 
 
+async def send_whatsapp_typing_indicator(phone_number_id: str, message_id: str, access_token: str) -> dict:
+    """
+    Marks the inbound message as read and shows the "..." typing indicator
+    to the student. WhatsApp dismisses it automatically once we send our
+    actual reply, or after 25 seconds if we never do - so this should be
+    fired as soon as we've accepted the inbound message, before the
+    (potentially slow) RAG/agent call that builds the real response.
+    """
+    payload = {
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": message_id,
+        "typing_indicator": {"type": "text"},
+    }
+    return await _send_whatsapp_payload(phone_number_id, payload, access_token)
+
+
 async def send_whatsapp_template_message(
     phone_number_id: str,
     to: str,
