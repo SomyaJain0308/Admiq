@@ -63,10 +63,20 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
         logger = ContextLoggerAdapter(_module_logger, {"request_id": request_id})
         logger.extra = {**(logger.extra or {}), "college_id": college_id, "student_id": student.student_id, "session_id": session.session_id}
 
-        try: # Sometimes whatsapp resends the message if it does this try/except makes sure there is no duping.
-            inbound = await save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id) # Defined in services/tenant_service.py
+        # Whatsapp resends ("redelivers") a webhook if we don't respond fast
+        # enough - which can happen since the agent/RAG pipeline takes a few
+        # seconds. save_inbound_message tells us via is_duplicate whether
+        # this whatsapp_message_id was already saved (the common case: the
+        # first delivery already finished) so we can skip re-running the
+        # agent and re-sending a reply. The IntegrityError catch below is a
+        # backstop for the rarer case where two deliveries race each other
+        # and both pass the SELECT check before either commits.
+        try:
+            inbound, is_duplicate = await save_inbound_message(db, college_id=college_id, student_id=student.student_id, whatsapp_message_id=event.whatsapp_message_id, content=event.content, whatsapp_timestamp=event.whatsapp_timestamp, message_type=event.message_type, raw_payload=event.raw_payload, session_id=session.session_id) # Defined in services/tenant_service.py
         except IntegrityError: # Error db sends when unique for something is enabled and it gets violated
             await db.rollback()
+            is_duplicate = True
+        if is_duplicate:
             DUPLICATE_WEBHOOK_DELIVERY.inc()
             logger.info("Duplicate whatsapp redelivery, skipping", extra={"extra_data": {"whatsapp_message_id": event.whatsapp_message_id}})
             continue

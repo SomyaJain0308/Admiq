@@ -61,11 +61,18 @@ async def get_or_create_student(db, college_id, student_phone, whatsapp_user_id,
 
 
 
-async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload, session_id: int | None = None) -> Message:
+async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, content, whatsapp_timestamp, message_type, raw_payload, session_id: int | None = None) -> tuple[Message, bool]:
+    # Returns (message, is_duplicate). WhatsApp redelivers a webhook if we
+    # don't respond fast enough (the agent/RAG pipeline can take several
+    # seconds), and by the time the redelivery arrives the first delivery
+    # has usually already finished and committed - so this SELECT finds the
+    # existing row. Callers MUST check is_duplicate and skip re-running the
+    # agent + re-sending a reply when it's True, or every retry produces
+    # another WhatsApp message to the student.
     result = await db.execute(select(Message).where(Message.college_id == college_id, Message.whatsapp_message_id == whatsapp_message_id))
     message = result.scalars().first()
     if message is not None:
-        return message
+        return message, True
     
     new_message = Message(
         college_id=college_id,
@@ -82,7 +89,7 @@ async def save_inbound_message(db, college_id, student_id, whatsapp_message_id, 
     db.add(new_message)
     await db.commit()
     await db.refresh(new_message)
-    return new_message
+    return new_message, False
   
 
 

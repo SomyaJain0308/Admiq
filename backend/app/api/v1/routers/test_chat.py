@@ -25,7 +25,7 @@ async def test_chat(request: Request, payload: ChatTestRequest, db: AsyncSession
     student = await get_or_create_student(db, college_id=payload.college_id, student_phone=payload.student_phone, whatsapp_user_id=payload.student_phone, student_name=payload.student_name)
     session = await get_or_create_active_session(db=db, college_id=payload.college_id, student_id=student.student_id)
 
-    inbound = await save_inbound_message(db, college_id=payload.college_id, student_id=student.student_id, whatsapp_message_id=f"test-{uuid.uuid4()}", content=payload.message, whatsapp_timestamp=datetime.utcnow(), message_type="text", raw_payload={}, session_id=session.session_id)
+    inbound, _ = await save_inbound_message(db, college_id=payload.college_id, student_id=student.student_id, whatsapp_message_id=f"test-{uuid.uuid4()}", content=payload.message, whatsapp_timestamp=datetime.utcnow(), message_type="text", raw_payload={}, session_id=session.session_id)
     is_allowed, message, notes = security.check_input(payload.message)
     new_session_summary = None
 
