@@ -4,15 +4,14 @@ from backend.app.config import get_settings
 from backend.app.schemas.low_confidence import ReconstructedAnswer
 
 RECONSTRUCTED_PROMPT = """
-A student asked a question that the assistant couldn't answer confidently. A staff member has now provided the real answer. Your job is to turn this into a clean, self-contained Q&A pair for a knowledge base — future students may ask similar questions and this should be retrievable on its own, without needing the original conversation.
+Turn a staff member's answer to an unresolved admissions question into a reusable knowledge-base Q&A.
 
-Recent conversation leading up to the flagged question:
+Recent conversation:
 {recent_conversation}
-
-Staff member's reply:
+Staff reply:
 {staff_reply}
 
-Resolve any pronouns or references using the conversation above. Write a single, clear, self-contained question capturing what was actually being asked, and a concise answer based on the staff reply. Do not add information the staff member didn't provide.
+Resolve pronouns/references from the conversation. Write one self-contained question and one concise answer. Use only information in the staff reply; do not infer, embellish, or add facts. The Q&A must stand alone for future retrieval.
 """
 
 def reconstruct_staff_answer(recent_conversation: str, staff_reply: str) -> ReconstructedAnswer:

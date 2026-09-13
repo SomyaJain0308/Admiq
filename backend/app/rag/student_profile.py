@@ -9,30 +9,26 @@ logger = logging.getLogger(__name__)
 
 
 STUDENT_PROFILE_PROMPT = """
-You maintain a long-term profile for a prospective student contacting a college's admissions WhatsApp assistant, across multiple separate conversations over time.
+Maintain a long-term admissions profile across conversations. Update only from the supplied information.
 
-Existing long-term profile (may be empty if this is their first session):
+Existing summary:
 {existing_summary}
-
-Existing concerns/objections (may be empty):
+Existing concerns:
 {existing_concerns}
-
-Exostomg guardian/parent involvement note (may be unknown):
+Existing guardian/parent note:
 {existing_guardian_involvement}
-
-Existing competing colleges mentioned (may be empty):
+Existing competing colleges:
 {existing_competing_colleges}
-
-Summary of what just happened in their most recent conversation:
+Latest session summary:
 {session_summary}
 
-Update the profile:
-1. Merge the new summary (durable admissions context only — course interest, eligibility, scholarship/fee concerns, hostel, parent concerns, documents, deadlines, where they are in the journey — no small talk, no repeated facts).
-2. Separately extract: their current course of interest if explicitly stated, any new academic scores explicitly stated, and an overall interest signal for this session.
-3. Update concerns: return the FULL current list, carrying forward unresolved concerns, dropping any resolved this session, and adding new ones raised. Do not invent concerns.
-4. Update guardian_involvement: only change it if this session revealed new/changed information; otherwise keep the existing note as-is (or null if never mentioned).
-5. Update competing_colleges: return the FULL current list, merging in any newly mentioned colleges and deduplicating.
-6. Set dropoff_reason: only if THIS session ended with the student going quiet / not responding to a follow-up, giving a short inferred reason. Null if the session ended normally, or if a prior drop-off was resolved this session.
+Rules:
+1. Merge durable admissions context only: course interest, eligibility/scores, fees/scholarships, hostel, concerns, parents/guardians, documents, deadlines, application stage, and next steps. Remove repetition and small talk.
+2. Extract current course interest and newly stated academic scores only when explicitly stated. Set interest_signal for this session.
+3. Return the FULL concerns list: keep unresolved concerns, remove ones clearly resolved this session, add newly raised concerns. Never invent.
+4. Keep guardian/parent involvement unless new information changes it.
+5. Return the FULL competing-colleges list, merged and deduplicated.
+6. Set dropoff_reason only when this session actually ended with the student going quiet; infer briefly from available context. Otherwise null.
 """
 
 

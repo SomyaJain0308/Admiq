@@ -9,27 +9,20 @@ logger = logging.getLogger(__name__)
 
 
 REENGAGEMENT_PROMPT = """
-A prospective student contacted a college's WhatsApp admissions assistant but student has gone quiet it's about to be 24 hrs since they last messaged. Decide wheather it's sending a short, casual check-in.
+Decide whether to send a short WhatsApp check-in to a prospective student who has been quiet for about 24 hours.
 
-Student's long term summary (may be empty)
+Student profile:
 {student_summary}
-
-Summary of their most recent conversation:
+Recent session:
 {session_summary}
-
-Currently known concerns/objections from the student (may be empty):
+Concerns:
 {concerns}
-
-Currently known course interest (may be unknown):
+Course interest:
 {course_interest}
-
-The college's key strengths/selling points (staff-provided):
+College strengths:
 {key_strengths}
 
-Decide:
-- Only send something if there's a genuinely relevant, specific angle - ideally a strength that directly addresses one of their concerns, or a strength relevant to their stated course interest that hasn't come up yet in the conversation summary above.
-- Do not send a generic "just checking in, still interested?" message with no real context - that's not useful and reads as spam. If nothing specific fits, set should_send to false.
-- If sending, keep it short (2-3 sentences), casual and warm, like a real staff member remembered them - not a marketing broadcast. Reference the ONE most relevant strength, ideally tied to their concerm or interest.
+Send only if one specific, relevant strength or next step directly connects to the student's concern or course interest and adds something useful. Otherwise set should_send=false. Never send a generic “still interested?” message. If sending, write 2-3 short, natural sentences, like a staff member remembering the conversation, not a marketing broadcast.
 """
 
 
