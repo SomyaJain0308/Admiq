@@ -8,9 +8,9 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
 
     # LLM Configuration
     gemini_api_key: str = ""
-    primary_model: str = "gemini-2.5-flash" # NOTE: In production change to deepseek.
+    primary_model: str = "gemini-2.5-flash-lite" # NOTE: In production change to deepseek.
     fallback_model: str = "gemini-2.5-flash"
-    query_model: str = "gemini-2.5-flash" # NOTE: In production change to deepseek.
+    query_model: str = "gemini-2.5-flash-lite" # NOTE: In production change to deepseek.
     contextual_retrieval_model: str = "gemini-2.5-flash"
     embedding_model: str = "models/gemini-embedding-001"
 
