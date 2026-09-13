@@ -63,12 +63,22 @@ export function ReplyToQueryDialog({ query, collegeId, open, onOpenChange }) {
   async function handleSubmit(e) {
     e.preventDefault()
     try {
-      await resolveMutation.mutateAsync({
+      const result = await resolveMutation.mutateAsync({
         queryId: query.query_id,
         replyMessage,
         expiresAt: hasExpiry ? new Date(expiresAt).toISOString() : null,
       })
-      toast.success("Reply sent to student.")
+      // The reply always sends even if saving it as a reusable answer
+      // fails behind the scenes (e.g. a flaky LLM call) - surface that
+      // distinction so staff know if they need to re-save it, instead of
+      // assuming a generic success toast means both things happened.
+      if (result?.save_error) {
+        toast.warning("Reply sent, but it wasn't saved for future students.", {
+          description: result.save_error,
+        })
+      } else {
+        toast.success("Reply sent to student.")
+      }
       handleOpenChange(false)
     } catch {
       // error is already captured in resolveMutation.error and shown below

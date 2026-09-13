@@ -97,8 +97,16 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
     context_result = await db.execute(select(Message).where(Message.college_id == college_id, Message.student_id == query.student_id, Message.created_at <= original_question.created_at).order_by(Message.created_at.desc()).limit(4))
     recent_messages = list(reversed(context_result.scalars().all())) # If you sorted ASC and took LIMIT 4 instead, you'd get the 4 oldest messages in that student's entire history, not the 4 closest to this question — wrong messages entirely. So DESC is required for correctness of which rows come back. But DESC also means the rows arrive in the wrong order for feeding to an LLM as a conversation — you'd get [newest, ..., oldest]
     recent_conversation = "\n".join(f"{m.messager_role}: {m.content}" for m in recent_messages)
-    reconstructed = reconstruct_staff_answer(recent_conversation, reply_message)
     # save + send the staff reply as a real message
+    # NOTE: reconstruction (the LLM call that turns this into a reusable
+    # Q&A pair) used to happen here, before the reply was even sent. That
+    # meant a flaky/timed-out LLM call (max_retries=0, 15s timeout) killed
+    # the whole request with an unhandled exception - the student never
+    # got the reply, nothing was saved, and the query stayed stuck open.
+    # The reply itself must never depend on the "teach the database" step
+    # succeeding, so sending/saving happens first unconditionally, and
+    # reconstruction+embedding is attempted afterwards as a best-effort
+    # step (see below) that can fail without losing the reply.
     student_result = await db.execute(select(Student).where(Student.college_id == college_id, Student.student_id == query.student_id).limit(1))
     student = student_result.scalars().first()
     staff_message = await save_staff_message(db, college_id=college_id, student_id=query.student_id, staff_id=staff_id, content=reply_message, session_id=original_question.session_id)
@@ -130,12 +138,29 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
     # channel="text" means it went out as a free-form reply inside the 24h window ("session" cost);
     # channel="template" means the window was closed and it fell back to the approved template ("utility" cost).
     await record_whatsapp_cost(db, college_id=college_id, student_id=query.student_id, session_id=original_question.session_id, category="utility" if send_result.get("channel") == "template" else "session", success=send_result["ok"])
-    # Embed + Store as a retrievable chunk
-    embedder = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, api_key=settings.gemini_api_key, output_dimensionality=settings.vector_size)
-    chunk_text = f"Question: {reconstructed.question}\nAnswer: {reconstructed.answer}"
-    vector = embedder.embed_query(chunk_text)
-    await record_embedding_cost(db, college_id=college_id, student_id=query.student_id, session_id=original_question.session_id, stage="staff_answer_embedding", model=settings.embedding_model, input_tokens=estimate_tokens_from_text(chunk_text))
-    db.add(Chunk(college_id=college_id, chunk_content=chunk_text, embedding=vector, chunk_index=0, source_type="staff_answer", source_query_id=query_id, expires_at=expires_at))
+
+    # Teach the database: reconstruct a self-contained Q&A pair and embed
+    # it as a retrievable chunk. Best-effort - if the LLM call or embedding
+    # call fails (timeout, rate limit, parse error), the reply has ALREADY
+    # been sent and saved above, so we log it, surface it in the response,
+    # and still resolve the queue item rather than leaving it stuck open
+    # and stuck un-teachable forever.
+    saved_as_answer = False
+    reconstructed_question = None
+    save_error = None
+    try:
+        reconstructed = reconstruct_staff_answer(recent_conversation, reply_message)
+        embedder = GoogleGenerativeAIEmbeddings(model=settings.embedding_model, api_key=settings.gemini_api_key, output_dimensionality=settings.vector_size)
+        chunk_text = f"Question: {reconstructed.question}\nAnswer: {reconstructed.answer}"
+        vector = await embedder.aembed_query(chunk_text)
+        await record_embedding_cost(db, college_id=college_id, student_id=query.student_id, session_id=original_question.session_id, stage="staff_answer_embedding", model=settings.embedding_model, input_tokens=estimate_tokens_from_text(chunk_text))
+        db.add(Chunk(college_id=college_id, chunk_content=chunk_text, embedding=vector, chunk_index=0, source_type="staff_answer", source_query_id=query_id, expires_at=expires_at))
+        saved_as_answer = True
+        reconstructed_question = reconstructed.question
+    except Exception:
+        logger.error(f"Failed to save staff reply as a reusable answer for query_id={query_id}, college_id={college_id}", exc_info=True)
+        save_error = "Reply was sent, but saving it for future students failed. You can re-save it from the student's conversation."
+
     query.resolved = True
     query.resolved_by = staff_id
     query.resolved_at = datetime.utcnow()
@@ -143,6 +168,11 @@ async def reply_to_low_confidence_query(college_id: int, query_id: int, reply_me
     LOW_CONFIDENCE_RESOLUTION_TIME_SECONDS.observe((query.resolved_at - query.flagged_at).total_seconds())
     await db.commit()
 
-    return {"status": "resolved", "reconstructed_question": reconstructed.question, "expires_at": expires_at, "channel": send_result.get("channel", "text")}
-    
-    
+    return {
+        "status": "resolved",
+        "reconstructed_question": reconstructed_question,
+        "expires_at": expires_at,
+        "channel": send_result.get("channel", "text"),
+        "saved_as_answer": saved_as_answer,
+        "save_error": save_error,
+    }

@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 
 vi.mock("sonner", () => ({
-  toast: { success: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() },
 }))
 
 const mockMutateAsync = vi.fn()
@@ -53,6 +53,7 @@ describe("ReplyToQueryDialog", () => {
     mockReset.mockReset()
     mockMutationState = { isPending: false, isError: false, error: null }
     toast.success.mockReset()
+    toast.warning.mockReset()
   })
 
   it("shows the student's flagged question", () => {
@@ -74,6 +75,29 @@ describe("ReplyToQueryDialog", () => {
       expiresAt: null,
     })
     expect(toast.success).toHaveBeenCalledWith("Reply sent to student.")
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("warns instead of a plain success toast when saving as a reusable answer fails", async () => {
+    // The reply can still succeed (student got their answer) even if the
+    // best-effort "teach the database" step behind it fails - staff need
+    // to see that distinction, not a generic success toast.
+    mockMutateAsync.mockResolvedValue({
+      save_error: "Reply was sent, but saving it for future students failed. You can re-save it from the student's conversation.",
+    })
+    const user = userEvent.setup()
+    const { onOpenChange } = renderDialog()
+
+    await user.type(screen.getByLabelText(/your reply/i), "Yes, every hostel room has AC.")
+    await user.click(screen.getByRole("button", { name: /send reply/i }))
+
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Reply sent, but it wasn't saved for future students.",
+      expect.objectContaining({
+        description: "Reply was sent, but saving it for future students failed. You can re-save it from the student's conversation.",
+      })
+    )
+    expect(toast.success).not.toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
