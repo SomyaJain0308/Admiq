@@ -202,7 +202,7 @@ def _build_event(payload, whatsapp_business_account_id, metadata, contact, messa
             student_name=contact.get("profile", {}).get("name"),
             student_phone=message.get("from"),
             whatsapp_message_id=message.get("id"),
-            whatsapp_timestamp=datetime.fromtimestamp(int(message["timestamp"]), tz=timezone.utc),
+            whatsapp_timestamp=datetime.fromtimestamp(int(message["timestamp"]), tz=timezone.utc).replace(tzinfo=None),
             message_type=message_type,
             content=text_body,
             # Keep the whole webhook payload, not just this message - same
