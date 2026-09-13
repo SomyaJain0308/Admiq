@@ -32,7 +32,7 @@ LLM_INPUT_TOKENS = Counter("agent_llm_input_tokens", "Total input/prompt tokens 
 
 LLM_OUTPUT_TOKENS = Counter("agent_llm_output_tokens", "Total output/response tokens consumed, for cost tracking", ["stage", "model_used"])
 
-AGENT_MISSING_FOLLOWUP = Counter("agent_missing_followup_total", "Total per llm call, labeled by stage and model", ["stage", "model_used"])
+AGENT_MISSING_FOLLOWUP = Counter("agent_missing_followup_total", "Total per llm call, labeled by model", ["model_used"])
 
 AGENT_ERRORS = Counter("agent_error_total", "Total errors by stage and classified error type", ["stage", "error_type"])
 
