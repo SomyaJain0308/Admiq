@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card"
+import { WhatsAppWidgetCard } from "@/components/WhatsAppWidgetCard"
 import { cn } from "@/lib/utils"
 
 const MAX_STRENGTHS = 10
@@ -92,6 +93,7 @@ export default function CollegeSettings() {
           this is React's own recommended pattern for "reset state when a
           prop changes" rather than calling setState from inside an effect. */}
       <CollegeSettingsForm key={college.college_id} college={college} updateMutation={updateMutation} />
+      <WhatsAppWidgetCard collegeId={college.college_id} />
     </div>
   )
 }
