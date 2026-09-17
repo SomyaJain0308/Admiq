@@ -24,6 +24,14 @@ class Document(Base):
     document_status: Mapped[str] = mapped_column(Text, nullable=False, server_default="processing")
     error: Mapped[str | None] = mapped_column(Text)
     uploaded_by: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Free-text label staff pick at upload time (e.g. "Fees", "Hostel") - lets
+    # the documents list be browsed/filtered by topic instead of only by
+    # filename, and gives future retrieval work something to weight on.
+    category: Mapped[str | None] = mapped_column(Text)
+    # sha256 of the uploaded bytes - lets the upload endpoint warn staff
+    # when a file they're about to add looks identical to one that's
+    # already in the knowledge base, before it gets processed a second time.
+    content_hash: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     college: Mapped["College"] = relationship(back_populates="documents")
@@ -33,5 +41,6 @@ class Document(Base):
         CheckConstraint("document_status IN ('processing', 'success', 'failed')", name="documents_document_status_check"),
         ForeignKeyConstraint(["college_id", "uploaded_by"], ["staff_colleges.college_id", "staff_colleges.staff_id"]),
         UniqueConstraint("college_id", "document_id"),
-        Index("ix_documents_college_id", "college_id")
+        Index("ix_documents_college_id", "college_id"),
+        Index("ix_documents_college_content_hash", "college_id", "content_hash")
     )

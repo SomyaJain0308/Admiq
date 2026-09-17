@@ -114,11 +114,15 @@ CREATE TABLE documents (
     document_status   TEXT NOT NULL DEFAULT 'processing' CHECK (document_status IN ('processing', 'success', 'failed')),
     error             TEXT,
     uploaded_by       INT NOT NULL,
+    category          TEXT,  -- staff-picked topic label (e.g. "Fees", "Hostel"), optional
+    content_hash      TEXT,  -- sha256 of the uploaded bytes, used to flag likely duplicate uploads
     created_at        TIMESTAMP DEFAULT NOW(),
 
     UNIQUE (college_id, document_id),
     FOREIGN KEY (college_id, uploaded_by) REFERENCES staff_colleges(college_id, staff_id)
 );
+
+CREATE INDEX ix_documents_college_content_hash ON documents(college_id, content_hash);
 
 CREATE TABLE low_confidence_queries (
     query_id             SERIAL PRIMARY KEY,
@@ -141,21 +145,76 @@ CREATE TABLE low_confidence_queries (
 );
 
 CREATE TABLE chunks (
-    chunk_id         SERIAL PRIMARY KEY,
-    document_id      INT,
-    college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    chunk_content    TEXT NOT NULL,
-    chunk_context    TEXT,
-    embedding        vector(768) NOT NULL,
-    chunk_index      INT NOT NULL,
-    source_type      TEXT NOT NULL CHECK (source_type IN ('document', 'staff_answer')),
-    source_query_id  INT,
-    expires_at       TIMESTAMP DEFAULT NULL,
-    CHECK ((source_type = 'document' AND document_id IS NOT NULL) OR (source_type = 'staff_answer' AND source_query_id IS NOT NULL)),
+    chunk_id          SERIAL PRIMARY KEY,
+    document_id       INT,
+    college_id        INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    chunk_content     TEXT NOT NULL,
+    chunk_context     TEXT,
+    embedding         vector(768) NOT NULL,
+    chunk_index       INT NOT NULL,
+    source_type       TEXT NOT NULL CHECK (source_type IN ('document', 'staff_answer')),
+    source_query_id   INT,
+    expires_at        TIMESTAMP DEFAULT NULL,
+    -- created_by/created_at let the knowledge-base view show who added a
+    -- staff-answer chunk and when, including ones added proactively (no
+    -- source_query_id at all - see below).
+    created_by        INT,
+    created_at        TIMESTAMP DEFAULT NOW(),
+    -- Usage signal for the knowledge-base view: bumped (best-effort, from
+    -- rag/retrieval.py's record_chunk_usage) every time this chunk actually
+    -- gets used in a student-facing answer, so staff can tell a
+    -- well-used answer from a dead one.
+    retrieval_count   INT NOT NULL DEFAULT 0,
+    last_retrieved_at TIMESTAMP,
+    -- A staff_answer chunk no longer has to originate from a flagged
+    -- low-confidence query: staff can add Q&A pairs proactively (source_query_id
+    -- NULL), not just reactively resolve a student's question.
+    CHECK ((source_type = 'document' AND document_id IS NOT NULL) OR (source_type = 'staff_answer' AND document_id IS NULL)),
     CHECK (source_type = 'staff_answer' OR expires_at IS NULL),
+    -- Needed so knowledge_conflicts (below) can FK to a chunk scoped by
+    -- college_id, matching every other composite FK in this schema - chunk_id
+    -- alone is already globally unique (SERIAL PK), this is belt-and-braces
+    -- tenant scoping, not a real uniqueness requirement.
+    UNIQUE (college_id, chunk_id),
     FOREIGN KEY (college_id, document_id) REFERENCES documents(college_id, document_id) ON DELETE CASCADE,
-    FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id)
+    FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id),
+    FOREIGN KEY (college_id, created_by) REFERENCES staff_colleges(college_id, staff_id)
 );
+
+-- A flag raised when a newly-added or newly-edited chunk (a document, a
+-- reactive staff reply, or a proactive knowledge-base entry) appears to
+-- state a different, incompatible fact than something already sitting in
+-- the knowledge base (see backend/app/rag/conflict_detection.py). This
+-- never blocks ingestion - the new/edited chunk is always saved - it just
+-- surfaces the pair for a human to look at on the Conflicts page. Both
+-- chunk FKs cascade so a conflict row disappears on its own once either
+-- side is deleted (document removed, knowledge-base entry deleted, or an
+-- expired staff-answer chunk swept by the delete-expired-staff-answer-chunks
+-- cron job) - a conflict about content that no longer exists isn't useful
+-- to keep around.
+CREATE TABLE knowledge_conflicts (
+    conflict_id          SERIAL PRIMARY KEY,
+    college_id            INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    new_chunk_id          INT NOT NULL,
+    existing_chunk_id     INT NOT NULL,
+    similarity_distance   NUMERIC(5,4),
+    explanation           TEXT NOT NULL,
+    status                TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
+    resolved_by           INT,
+    resolved_at           TIMESTAMP,
+    created_at            TIMESTAMP DEFAULT NOW(),
+
+    UNIQUE (college_id, conflict_id),
+    -- Same new/existing chunk pair shouldn't get flagged twice.
+    UNIQUE (college_id, new_chunk_id, existing_chunk_id),
+    FOREIGN KEY (college_id, new_chunk_id) REFERENCES chunks(college_id, chunk_id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id, existing_chunk_id) REFERENCES chunks(college_id, chunk_id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id, resolved_by) REFERENCES staff_colleges(college_id, staff_id)
+);
+
+CREATE INDEX ON knowledge_conflicts (college_id, status, created_at);
+CREATE INDEX ON knowledge_conflicts (new_chunk_id);
+CREATE INDEX ON knowledge_conflicts (existing_chunk_id);
 
 -- One row per billable unit of work (an LLM call, a batch of embedding
 -- calls, or a WhatsApp send) so per-student/per-college cost can be

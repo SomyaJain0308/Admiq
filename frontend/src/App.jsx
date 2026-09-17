@@ -23,6 +23,8 @@ const StudentsList = lazy(() => import("@/pages/StudentsList"))
 const StudentDetail = lazy(() => import("@/pages/StudentDetail"))
 const CollegeSettings = lazy(() => import("@/pages/CollegeSettings"))
 const DocumentsPage = lazy(() => import("@/pages/DocumentsPage"))
+const KnowledgeBasePage = lazy(() => import("@/pages/KnowledgeBasePage"))
+const ConflictsQueue = lazy(() => import("@/pages/ConflictsQueue"))
 const Support = lazy(() => import("@/pages/Support"))
 const NotFound = lazy(() => import("@/pages/NotFound"))
 // Admiq-staff-only internal cost/margin dashboard. Deliberately route-split
@@ -87,6 +89,8 @@ export default function App() {
                       <Route path="/students" element={<ErrorBoundary fullScreen={false}><StudentsList /></ErrorBoundary>} />
                       <Route path="/students/:studentId" element={<StudentDetailRoute />} />
                       <Route path="/documents" element={<ErrorBoundary fullScreen={false}><DocumentsPage /></ErrorBoundary>} />
+                      <Route path="/knowledge-base" element={<ErrorBoundary fullScreen={false}><KnowledgeBasePage /></ErrorBoundary>} />
+                      <Route path="/conflicts" element={<ErrorBoundary fullScreen={false}><ConflictsQueue /></ErrorBoundary>} />
                       <Route path="/settings" element={<ErrorBoundary fullScreen={false}><CollegeSettings /></ErrorBoundary>} />
                       <Route path="/support" element={<ErrorBoundary fullScreen={false}><Support /></ErrorBoundary>} />
                     </Route>

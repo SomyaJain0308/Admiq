@@ -100,9 +100,21 @@ export const api = {
   // query params by default (only Pydantic-model parameters get read from
   // the request body). This helper is for exactly those endpoints - don't
   // use it for anything that expects real JSON.
+  // Array values are sent as repeated keys (?k=1&k=2), matching how FastAPI
+  // parses a List[...] query param - URLSearchParams' own object constructor
+  // would instead stringify an array into a single "1,2" value, which
+  // FastAPI can't parse as a list.
   postWithQueryParams: (path, params) => {
-    const search = new URLSearchParams(params).toString()
-    return request(`${path}?${search}`, { method: "POST" })
+    const search = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value === undefined || value === null) continue
+      if (Array.isArray(value)) {
+        value.forEach((item) => search.append(key, item))
+      } else {
+        search.append(key, value)
+      }
+    }
+    return request(`${path}?${search.toString()}`, { method: "POST" })
   },
 
   // For multipart/form-data uploads (e.g. document files). Deliberately

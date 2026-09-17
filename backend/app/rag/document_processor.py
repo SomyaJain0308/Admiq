@@ -352,6 +352,92 @@ def convert_single_pdf(pdf_path: str) -> Dict:
 
 
 # ---------------------------------------------------------------------------
+# DOCX / XLSX — these carry a real text/cell layer already (they're never a
+# scan), so there's no "is it actually just an image" question and no OCR
+# escalation ladder needed. Docling's default converter handles both formats
+# natively; we just take its direct conversion.
+# ---------------------------------------------------------------------------
+
+_generic_converter: "DocumentConverter | None" = None
+
+
+def get_generic_converter() -> "DocumentConverter":
+    """Cached default-settings Docling converter, used for non-PDF formats."""
+    global _generic_converter
+    if not _HAS_DOCLING:
+        raise RuntimeError("docling is not installed. Run: pip install docling")
+    if _generic_converter is None:
+        _generic_converter = DocumentConverter()
+    return _generic_converter
+
+
+def convert_single_office_doc(doc_path: str) -> Dict:
+    """Convert one DOCX/XLSX file to markdown. Always returns a result dict — never raises."""
+    path = Path(doc_path)
+    result = {
+        "filename": path.name,
+        "success": False,
+        "markdown": "",
+        "method": None,
+        "quality_score": 0.0,
+        "num_pages": None,
+        "warnings": [],
+        "error": None,
+    }
+
+    if not path.exists():
+        result["error"] = "file not found"
+        return result
+
+    if not _HAS_DOCLING:
+        result["error"] = "docling is not installed — cannot convert this file type. Run: pip install docling"
+        return result
+
+    try:
+        converter = get_generic_converter()
+        doc = converter.convert(str(path)).document
+        text = doc.export_to_markdown()
+        result["num_pages"] = doc.num_pages() if hasattr(doc, "num_pages") else None
+        score = assess_text_quality(text)
+        if text.strip():
+            result.update({"success": True, "markdown": text, "method": "docling_office", "quality_score": score})
+        else:
+            result["error"] = "conversion produced empty output"
+    except Exception as e:
+        result["error"] = str(e)
+        logger.error(f"[{path.name}] office-doc conversion failed: {e}")
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Format dispatcher — routes to the PDF fallback chain or the plain
+# DOCX/XLSX path based on the file's extension.
+# ---------------------------------------------------------------------------
+
+OFFICE_EXTENSIONS = {".docx", ".xlsx"}
+
+
+def convert_single_document(doc_path: str) -> Dict:
+    """Convert one uploaded file to markdown, dispatching by extension. Never raises."""
+    suffix = Path(doc_path).suffix.lower()
+    if suffix == ".pdf":
+        return convert_single_pdf(doc_path)
+    if suffix in OFFICE_EXTENSIONS:
+        return convert_single_office_doc(doc_path)
+    return {
+        "filename": Path(doc_path).name,
+        "success": False,
+        "markdown": "",
+        "method": None,
+        "quality_score": 0.0,
+        "num_pages": None,
+        "warnings": [],
+        "error": f"unsupported file type: {suffix or 'unknown'}",
+    }
+
+
+# ---------------------------------------------------------------------------
 # Batch entry point — this is what you call from main.py
 # ---------------------------------------------------------------------------
 
@@ -365,7 +451,7 @@ def process_uploaded_files(file_paths: List[str]) -> List[Dict]:
     for fp in file_paths:
         logger.info(f"Processing: {fp}")
         try:
-            r = convert_single_pdf(fp)
+            r = convert_single_document(fp)
         except Exception as e:
             # absolute last-resort catch — should basically never hit this
             logger.error(f"Unexpected top-level failure on {fp}: {e}")

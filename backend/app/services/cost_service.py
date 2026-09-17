@@ -112,6 +112,22 @@ def record_embedding_cost_sync(db, *, college_id: int, document_id: int | None, 
     return cost_usd
 
 
+def record_llm_cost_sync(db, *, college_id: int, document_id: int | None, stage: str, model: str, input_tokens: int, output_tokens: int) -> float:
+    """Sync variant for document ingestion (celery_tasks.py's
+    process_document_task, via rag/conflict_detection.py's sync conflict
+    check), which runs on the sync SessionLocal, not the async session used
+    everywhere else. student_id/session_id are omitted - conflict-checking a
+    document's chunks isn't attributable to one student, same reasoning as
+    record_embedding_cost_sync above."""
+    settings = get_settings()
+    if not settings.llm_cost_tracking_enabled or (input_tokens <= 0 and output_tokens <= 0):
+        return 0.0
+    cost_usd = compute_llm_cost_usd(model, input_tokens, output_tokens)
+    db.add(CostEvent(college_id=college_id, student_id=None, session_id=None, document_id=document_id, cost_type="llm", stage=stage, model=model, input_tokens=input_tokens, output_tokens=output_tokens, cost_usd=cost_usd))
+    db.commit()
+    return cost_usd
+
+
 async def record_whatsapp_cost(db, *, college_id: int, student_id: int | None, session_id: int | None, category: str, success: bool) -> float:
     """category is 'session' for a free-form reply inside the 24h customer
     service window, or 'utility'/'marketing' for a template-triggered send

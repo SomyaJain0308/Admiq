@@ -10,3 +10,4 @@ from backend.app.models.Document import Document
 from backend.app.models.Chunk import Chunk
 from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
 from backend.app.models.CostEvent import CostEvent
+from backend.app.models.KnowledgeConflict import KnowledgeConflict

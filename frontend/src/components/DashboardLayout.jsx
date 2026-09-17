@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { NavLink, Outlet, matchPath } from "react-router-dom"
-import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, Settings, LifeBuoy, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
+import { LayoutDashboard, Inbox, Users, GraduationCap, FileText, BookOpen, ShieldAlert, Settings, LifeBuoy, LogOut, Menu, X, Moon, Sun, ChevronsUpDown, Check } from "lucide-react"
 import { useAuth } from "@/context/useAuth"
 import { useCurrentCollege } from "@/context/useCurrentCollege"
 import { useTheme } from "@/hooks/useTheme"
 import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
+import { useKnowledgeConflicts } from "@/hooks/useKnowledgeConflicts"
 import { useIsDesktopViewport } from "@/hooks/useMediaQuery"
 import { useRouteAnnouncer } from "@/hooks/useRouteAnnouncer"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,8 @@ const navItems = [
   { to: "/staff", label: "Staff", icon: Users },
   { to: "/students", label: "Students", icon: GraduationCap },
   { to: "/documents", label: "Documents", icon: FileText },
+  { to: "/knowledge-base", label: "Knowledge base", icon: BookOpen },
+  { to: "/conflicts", label: "Conflicts", icon: ShieldAlert },
   { to: "/settings", label: "College settings", icon: Settings },
   { to: "/support", label: "Support", icon: LifeBuoy },
 ]
@@ -58,6 +61,11 @@ export function DashboardLayout() {
   // at the same interval, so the two stay roughly in sync.
   const { data: queueData } = useLowConfidenceQueries(college?.college_id, false, { page: 1, pageSize: 1 })
   const openQueueCount = queueData?.total ?? 0
+
+  // Same lightweight poll pattern, for the Conflicts sidebar badge - lets
+  // staff notice a new conflict without having that page open.
+  const { data: conflictsData } = useKnowledgeConflicts(college?.college_id, "open", { page: 1, pageSize: 1 })
+  const openConflictsCount = conflictsData?.total ?? 0
 
   // The college switcher is a plain div, not a native <select> or a Radix
   // popover, so nothing closes it automatically - without this it stays
@@ -284,6 +292,14 @@ export function DashboardLayout() {
                   className="h-5 min-w-5 justify-center rounded-full px-1 text-[11px] leading-none"
                 >
                   {openQueueCount > 99 ? "99+" : openQueueCount}
+                </Badge>
+              )}
+              {to === "/conflicts" && openConflictsCount > 0 && (
+                <Badge
+                  variant="destructive"
+                  className="h-5 min-w-5 justify-center rounded-full px-1 text-[11px] leading-none"
+                >
+                  {openConflictsCount > 99 ? "99+" : openConflictsCount}
                 </Badge>
               )}
             </NavLink>

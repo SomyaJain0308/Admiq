@@ -1,10 +1,27 @@
 import { useMemo, useRef, useState } from "react"
-import { FileText, Loader2, CheckCircle2, XCircle, Upload, Trash2, Eye, RotateCw, ChevronDown, ChevronUp, Search, X } from "lucide-react"
+import {
+  FileText,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  Upload,
+  Trash2,
+  Eye,
+  RotateCw,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  X,
+  FileSearch,
+  FileUp,
+} from "lucide-react"
 import { toast } from "sonner"
 import { useCurrentCollege } from "@/context/useCurrentCollege"
+import { ApiError } from "@/lib/api"
 import {
   useDocuments,
   useUploadDocument,
+  useReplaceDocument,
   useDeleteDocument,
   useBulkDeleteDocuments,
   useViewDocument,
@@ -16,9 +33,11 @@ import { PaginationControls } from "@/components/PaginationControls"
 import { TableSkeletonRows } from "@/components/TableSkeleton"
 import { EmptyState, FilteredEmptyState } from "@/components/EmptyState"
 import { ConfirmDialog } from "@/components/ConfirmDialog"
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { timeSince } from "@/lib/formatTime"
@@ -39,42 +58,75 @@ const STATUS_FILTERS = [
   { value: "failed", label: "Failed" },
 ]
 
+// Mirrors backend ALLOWED_CONTENT_TYPES in routers/documents.py.
+const ALLOWED_FILE_TYPES = {
+  "application/pdf": "PDF",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "Word (.docx)",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "Excel (.xlsx)",
+}
+const ACCEPT_ATTR = ".pdf,.docx,.xlsx," + Object.keys(ALLOWED_FILE_TYPES).join(",")
+
+// A starter set of topic labels - purely organizational (filtering/browsing
+// the documents list), doesn't affect retrieval. Staff can leave it unset.
+const CATEGORIES = ["Admissions", "Fees", "Hostel & Facilities", "Courses & Programs", "Scholarships", "General"]
+const SELECT_CLASSES =
+  "border-input h-9 rounded-md border bg-transparent px-2.5 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+
 let uploadIdCounter = 0
 
 export default function DocumentsPage() {
   const { college, hasNoCollege } = useCurrentCollege()
   const { data: documents, isLoading, isError, error } = useDocuments(college?.college_id)
   const uploadMutation = useUploadDocument(college?.college_id)
+  const replaceMutation = useReplaceDocument(college?.college_id)
   const deleteMutation = useDeleteDocument(college?.college_id)
   const bulkDeleteMutation = useBulkDeleteDocuments(college?.college_id)
   const viewMutation = useViewDocument(college?.college_id)
   const retryMutation = useRetryDocument(college?.college_id)
   const fileInputRef = useRef(null)
+  const replaceInputRef = useRef(null)
   const [isDragging, setIsDragging] = useState(false)
 
   // Per-file upload progress. Files upload in parallel (rather than one at a
   // time) so each gets its own live status instead of a single shared
   // "Uploading..." spinner that gives no sense of which file is done.
   const [uploads, setUploads] = useState([])
+  const [uploadCategory, setUploadCategory] = useState("")
 
   const [searchInput, setSearchInput] = useState("")
   const debouncedSearch = useDebouncedValue(searchInput, 250)
   const [statusFilter, setStatusFilter] = useState("all")
+  const [categoryFilter, setCategoryFilter] = useState("all")
   const [selectedIds, setSelectedIds] = useState(() => new Set())
   const [confirmDeleteDoc, setConfirmDeleteDoc] = useState(null)
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [replaceTargetDoc, setReplaceTargetDoc] = useState(null)
+
+  // Every category currently in use, for the filter dropdown - derived from
+  // the data rather than hardcoded, so a category typed in once (or added
+  // to CATEGORIES later) shows up automatically.
+  const usedCategories = useMemo(
+    () => Array.from(new Set((documents || []).map((d) => d.category).filter(Boolean))).sort(),
+    [documents]
+  )
 
   const filteredDocuments = useMemo(() => {
     let list = documents || []
     if (statusFilter !== "all") {
       list = list.filter((d) => d.status === statusFilter)
     }
+    if (categoryFilter === "__uncategorized") {
+      list = list.filter((d) => !d.category)
+    } else if (categoryFilter !== "all") {
+      list = list.filter((d) => d.category === categoryFilter)
+    }
     const q = debouncedSearch.trim().toLowerCase()
     if (q) {
       list = list.filter((d) => d.file_name.toLowerCase().includes(q))
     }
     return list
-  }, [documents, statusFilter, debouncedSearch])
+  }, [documents, statusFilter, categoryFilter, debouncedSearch])
 
   const { page, setPage, totalPages, pageItems } = usePagination(filteredDocuments, 15)
 
@@ -157,13 +209,35 @@ export default function DocumentsPage() {
     setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, ...patch } : u)))
   }
 
+  // One file's upload attempt. Broken out from handleFiles so a duplicate
+  // warning's "Upload anyway" action can re-run the exact same attempt with
+  // force=true, instead of duplicating the upload/toast logic.
+  async function attemptUpload(id, file, name, force) {
+    try {
+      await uploadMutation.mutateAsync({ file, category: uploadCategory || null, force })
+      updateUpload(id, { status: "done" })
+      toast.success(`${name} uploaded - processing now.`)
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        updateUpload(id, { status: "error", errorMessage: "Possible duplicate" })
+        toast.warning(err.message || `${name} looks like a duplicate.`, {
+          duration: 15000,
+          action: { label: "Upload anyway", onClick: () => attemptUpload(id, file, name, true) },
+        })
+        return
+      }
+      updateUpload(id, { status: "error", errorMessage: err?.message })
+      toast.error(err?.message || `Failed to upload ${name}. Please try again.`)
+    }
+  }
+
   async function handleFiles(fileList) {
     const files = Array.from(fileList || [])
     const toUpload = []
 
     for (const file of files) {
-      if (file.type !== "application/pdf") {
-        toast.error(`${file.name} isn't a PDF - only PDF files are supported right now.`)
+      if (!ALLOWED_FILE_TYPES[file.type]) {
+        toast.error(`${file.name} isn't a supported file type - PDF, Word (.docx), or Excel (.xlsx) only.`)
         continue
       }
       if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
@@ -182,21 +256,16 @@ export default function DocumentsPage() {
     // in a sequential await chain.
     await Promise.allSettled(
       toUpload.map(async ({ id, file, name }) => {
-        try {
-          await uploadMutation.mutateAsync(file)
-          updateUpload(id, { status: "done" })
-          toast.success(`${name} uploaded - processing now.`)
-        } catch (err) {
-          updateUpload(id, { status: "error", errorMessage: err?.message })
-          toast.error(err?.message || `Failed to upload ${name}. Please try again.`)
-        } finally {
-          // Clear this file's row out of the progress list a moment after
-          // it settles, so short uploads don't leave stale "Done" entries
-          // sitting around, but the person still gets to see it land.
-          setTimeout(() => {
-            setUploads((prev) => prev.filter((u) => u.id !== id))
-          }, 2500)
-        }
+        await attemptUpload(id, file, name, false)
+        // Clear this file's row out of the progress list a moment after it
+        // settles, so short uploads don't leave stale "Done" entries sitting
+        // around, but the person still gets to see it land. A later "Upload
+        // anyway" click (from the duplicate toast) still goes through even
+        // after this row is gone - it just won't have a progress row of
+        // its own, which is fine since the toast itself covers that.
+        setTimeout(() => {
+          setUploads((prev) => prev.filter((u) => u.id !== id))
+        }, 2500)
       })
     )
   }
@@ -205,6 +274,36 @@ export default function DocumentsPage() {
     e.preventDefault()
     setIsDragging(false)
     handleFiles(e.dataTransfer.files)
+  }
+
+  function requestReplace(doc) {
+    setReplaceTargetDoc(doc)
+    // The hidden input is shared across every row - wait a tick so its
+    // onChange handler below can see the freshly-set target before the
+    // native file picker's change event fires.
+    requestAnimationFrame(() => replaceInputRef.current?.click())
+  }
+
+  async function handleReplaceFileSelected(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    const doc = replaceTargetDoc
+    setReplaceTargetDoc(null)
+    if (!file || !doc) return
+    if (!ALLOWED_FILE_TYPES[file.type]) {
+      toast.error(`${file.name} isn't a supported file type - PDF, Word (.docx), or Excel (.xlsx) only.`)
+      return
+    }
+    if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
+      toast.error(`${file.name} is too large - max ${MAX_FILE_SIZE_MB}MB at a time.`)
+      return
+    }
+    try {
+      await replaceMutation.mutateAsync({ documentId: doc.document_id, file, category: doc.category })
+      toast.success(`${doc.file_name} replaced with ${file.name} - reprocessing now.`)
+    } catch (err) {
+      toast.error(err?.message || `Failed to replace ${doc.file_name}.`)
+    }
   }
 
   if (hasNoCollege) {
@@ -221,8 +320,27 @@ export default function DocumentsPage() {
       <div>
         <h1 className="font-display text-2xl font-semibold tracking-tight">Documents</h1>
         <p className="text-muted-foreground">
-          Upload PDFs for {college.college_name} - the assistant answers student questions from these.
+          Upload files for {college.college_name} - the assistant answers student questions from these.
         </p>
+      </div>
+
+      <div className="flex flex-col gap-1.5 self-start">
+        <Label htmlFor="upload-category" className="text-xs font-medium text-muted-foreground">
+          Category for this batch (optional)
+        </Label>
+        <select
+          id="upload-category"
+          value={uploadCategory}
+          onChange={(e) => setUploadCategory(e.target.value)}
+          className={cn(SELECT_CLASSES, "w-56")}
+        >
+          <option value="">Uncategorized</option>
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div
@@ -239,13 +357,15 @@ export default function DocumentsPage() {
       >
         <Upload className="size-8 text-muted-foreground" />
         <div>
-          <p className="font-medium">Drag and drop PDFs here</p>
-          <p className="text-sm text-muted-foreground">or click below to browse - max {MAX_FILE_SIZE_MB}MB per file</p>
+          <p className="font-medium">Drag and drop files here</p>
+          <p className="text-sm text-muted-foreground">
+            PDF, Word, or Excel - or click below to browse - max {MAX_FILE_SIZE_MB}MB per file
+          </p>
         </div>
         <input
           ref={fileInputRef}
           type="file"
-          accept="application/pdf"
+          accept={ACCEPT_ATTR}
           multiple
           className="hidden"
           onChange={(e) => {
@@ -253,6 +373,9 @@ export default function DocumentsPage() {
             e.target.value = ""
           }}
         />
+        {/* Shared across every row's "Replace" action - which document it targets
+            is tracked in replaceTargetDoc rather than one input per row. */}
+        <input ref={replaceInputRef} type="file" accept={ACCEPT_ATTR} className="hidden" onChange={handleReplaceFileSelected} />
         <Button
           type="button"
           variant="outline"
@@ -333,7 +456,7 @@ export default function DocumentsPage() {
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               {STATUS_FILTERS.map((f) => (
                 <Button
                   key={f.value}
@@ -348,6 +471,25 @@ export default function DocumentsPage() {
                   {f.label}
                 </Button>
               ))}
+              {usedCategories.length > 0 && (
+                <select
+                  aria-label="Filter by category"
+                  value={categoryFilter}
+                  onChange={(e) => {
+                    setCategoryFilter(e.target.value)
+                    setPage(1)
+                  }}
+                  className={cn(SELECT_CLASSES, "w-40")}
+                >
+                  <option value="all">All categories</option>
+                  {usedCategories.map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                  <option value="__uncategorized">Uncategorized</option>
+                </select>
+              )}
             </div>
           </div>
 
@@ -369,16 +511,15 @@ export default function DocumentsPage() {
           {filteredDocuments.length === 0 ? (
             <FilteredEmptyState
               message={
-                debouncedSearch && statusFilter !== "all"
-                  ? `No ${statusFilter} documents match "${debouncedSearch}".`
-                  : debouncedSearch
-                    ? `No documents match "${debouncedSearch}".`
-                    : `No ${statusFilter} documents.`
+                debouncedSearch
+                  ? `No${statusFilter !== "all" ? ` ${statusFilter}` : ""} documents match "${debouncedSearch}"${categoryFilter !== "all" ? " in this category" : ""}.`
+                  : `No ${statusFilter !== "all" ? statusFilter : ""}${categoryFilter !== "all" ? " matching" : ""} documents.`
               }
               clearLabel="Clear filters"
               onClear={() => {
                 setSearchInput("")
                 setStatusFilter("all")
+                setCategoryFilter("all")
               }}
             />
           ) : (
@@ -394,10 +535,11 @@ export default function DocumentsPage() {
                     />
                   </TableHead>
                   <TableHead>File</TableHead>
+                  <TableHead className="w-32">Category</TableHead>
                   <TableHead className="w-28">Status</TableHead>
                   <TableHead className="w-20">Pages</TableHead>
                   <TableHead className="w-24">Uploaded</TableHead>
-                  <TableHead className="w-28"></TableHead>
+                  <TableHead className="w-36"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -413,6 +555,9 @@ export default function DocumentsPage() {
                     isViewing={viewMutation.isPending && viewMutation.variables === doc.document_id}
                     onRetry={handleRetry}
                     isRetrying={retryMutation.isPending && retryMutation.variables === doc.document_id}
+                    onPreview={setPreviewDoc}
+                    onReplace={requestReplace}
+                    isReplacing={replaceTargetDoc?.document_id === doc.document_id && replaceMutation.isPending}
                   />
                 ))}
               </TableBody>
@@ -429,14 +574,15 @@ export default function DocumentsPage() {
             <TableRow>
               <TableHead className="w-10"></TableHead>
               <TableHead>File</TableHead>
+              <TableHead className="w-32">Category</TableHead>
               <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-20">Pages</TableHead>
               <TableHead className="w-24">Uploaded</TableHead>
-              <TableHead className="w-28"></TableHead>
+              <TableHead className="w-36"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            <TableSkeletonRows columns={6} />
+            <TableSkeletonRows columns={7} />
           </TableBody>
         </Table>
         </div>
@@ -461,11 +607,31 @@ export default function DocumentsPage() {
         onConfirm={confirmBulkDeleteAction}
         isConfirming={bulkDeleteMutation.isPending}
       />
+
+      <DocumentPreviewDialog
+        doc={previewDoc}
+        collegeId={college?.college_id}
+        open={!!previewDoc}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+      />
     </div>
   )
 }
 
-function DocumentRow({ doc, isSelected, onToggleSelected, onDelete, isDeleting, onView, isViewing, onRetry, isRetrying }) {
+function DocumentRow({
+  doc,
+  isSelected,
+  onToggleSelected,
+  onDelete,
+  isDeleting,
+  onView,
+  isViewing,
+  onRetry,
+  isRetrying,
+  onPreview,
+  onReplace,
+  isReplacing,
+}) {
   const [errorExpanded, setErrorExpanded] = useState(false)
   const hasDiagnostics = doc.quality_score != null || doc.extraction_method
   const errorIsLong = (doc.error?.length || 0) > 90
@@ -517,6 +683,15 @@ function DocumentRow({ doc, isSelected, onToggleSelected, onDelete, isDeleting, 
         )}
       </TableCell>
       <TableCell>
+        {doc.category ? (
+          <Badge variant="outline" className="font-normal">
+            {doc.category}
+          </Badge>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
+      <TableCell>
         <StatusBadge status={doc.status} />
       </TableCell>
       <TableCell className="text-muted-foreground">{doc.num_pages ?? "-"}</TableCell>
@@ -535,6 +710,29 @@ function DocumentRow({ doc, isSelected, onToggleSelected, onDelete, isDeleting, 
               {isRetrying ? <Loader2 className="size-4 animate-spin" /> : <RotateCw className="size-4 text-muted-foreground" />}
             </Button>
           )}
+          {doc.status === "success" && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Preview extracted content for ${doc.file_name}`}
+              title="Preview what got extracted"
+              onClick={() => onPreview(doc)}
+            >
+              <FileSearch className="size-4 text-muted-foreground" />
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Replace ${doc.file_name} with a new file`}
+            title="Replace with a new file"
+            disabled={isReplacing}
+            onClick={() => onReplace(doc)}
+          >
+            {isReplacing ? <Loader2 className="size-4 animate-spin" /> : <FileUp className="size-4 text-muted-foreground" />}
+          </Button>
           <Button
             type="button"
             variant="ghost"
