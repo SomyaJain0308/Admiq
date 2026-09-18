@@ -112,48 +112,4 @@ describe("useResolveLowConfidenceQuery", () => {
       { reply_message: "No expiry here" }
     )
   })
-
-  it("only sends additional_query_ids when a similar-questions group is being bulk-resolved", async () => {
-    api.postWithQueryParams.mockResolvedValue({})
-    const { Wrapper, queryClient } = createWrapper()
-    seedPages(queryClient)
-
-    const { result } = renderHook(() => useResolveLowConfidenceQuery(COLLEGE_ID), { wrapper: Wrapper })
-
-    await act(async () => {
-      await result.current.mutateAsync({ queryId: 2, replyMessage: "Same answer for all of you", additionalQueryIds: [21] })
-    })
-
-    expect(api.postWithQueryParams).toHaveBeenCalledWith(
-      `/router/low_confidence/${COLLEGE_ID}/query/2/reply`,
-      { reply_message: "Same answer for all of you", additional_query_ids: [21] }
-    )
-  })
-
-  it("removes every bundled query from cache when a similar-questions group resolves together", async () => {
-    let resolveRequest
-    api.postWithQueryParams.mockReturnValue(
-      new Promise((resolve) => {
-        resolveRequest = resolve
-      })
-    )
-    const { Wrapper, queryClient } = createWrapper()
-    seedPages(queryClient)
-
-    const { result } = renderHook(() => useResolveLowConfidenceQuery(COLLEGE_ID), { wrapper: Wrapper })
-
-    act(() => {
-      result.current.mutate({ queryId: 1, replyMessage: "Same answer for all of you", additionalQueryIds: [21] })
-    })
-
-    // query 1 lived on page 1, query 21 lived on page 2 - both should
-    // disappear, and total should drop by 2 everywhere.
-    await waitFor(() => {
-      expect(queryClient.getQueryData(PAGE_1_KEY)).toEqual({ items: [{ query_id: 2 }], total: 3 })
-    })
-    expect(queryClient.getQueryData(PAGE_2_KEY)).toEqual({ items: [], total: 3 })
-
-    resolveRequest({})
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-  })
 })

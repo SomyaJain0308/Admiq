@@ -141,6 +141,63 @@ async def send_staff_initiated_message(
     return result
 
 
+async def send_whatsapp_button_message(phone_number_id: str, to: str, body_text: str, buttons: list[dict], access_token: str) -> dict:
+    """
+    buttons: up to 3 dicts of {"id": str, "title": str} - WhatsApp caps
+    button titles at 20 characters and a message at 3 buttons.
+    """
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "button",
+            "body": {"text": body_text},
+            "action": {"buttons": [{"type": "reply", "reply": {"id": b["id"], "title": b["title"][:20]}} for b in buttons[:3]]},
+        },
+    }
+    return await _send_whatsapp_payload(phone_number_id, payload, access_token)
+
+
+async def send_whatsapp_list_message(phone_number_id: str, to: str, body_text: str, button_label: str, rows: list[dict], access_token: str, section_title: str = "Options") -> dict:
+    """
+    rows: up to 10 dicts of {"id": str, "title": str, "description": str?} -
+    WhatsApp caps a list message at 10 rows total, row titles at 24 chars,
+    and row descriptions at 72 chars.
+    """
+    row_payloads = []
+    for r in rows[:10]:
+        row_payload = {"id": r["id"], "title": r["title"][:24]}
+        if r.get("description"):
+            row_payload["description"] = r["description"][:72]
+        row_payloads.append(row_payload)
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": to,
+        "type": "interactive",
+        "interactive": {
+            "type": "list",
+            "body": {"text": body_text},
+            "action": {"button": button_label[:20], "sections": [{"title": section_title[:24], "rows": row_payloads}]},
+        },
+    }
+    return await _send_whatsapp_payload(phone_number_id, payload, access_token)
+
+
+async def send_whatsapp_interactive_message(phone_number_id: str, to: str, access_token: str, interactive: dict) -> dict:
+    """
+    Dispatches a normalized interactive payload (see
+    eligibility_service.build_rule_prompt and friends, which are the only
+    current producers of this shape) to the right WhatsApp message type.
+    """
+    if interactive["type"] == "button":
+        return await send_whatsapp_button_message(phone_number_id, to, interactive["body"], interactive["buttons"], access_token)
+    if interactive["type"] == "list":
+        return await send_whatsapp_list_message(phone_number_id, to, interactive["body"], interactive.get("button_label", "Choose"), interactive["rows"], access_token, section_title=interactive.get("section_title", "Options"))
+    raise ValueError(f"Unknown interactive payload type: {interactive.get('type')}")
+
+
 def verify_meta_signature(raw_body: bytes, signature_header: str | None, app_secret: str) -> bool:
     if not signature_header:
         return False
@@ -185,10 +242,38 @@ def extract_whatsapp_message_events(payload) -> list[InboundWhatsAppMessage]:
 
             for message in messages:
                 message_type = message.get("type")
+
+                if message_type == "interactive":
+                    # A tap on a button or list message we sent (e.g. from
+                    # the eligibility-checker flow). Normalized to its own
+                    # message_type so downstream routing (whatsapp_chat.py,
+                    # eligibility_service.py) can tell a deliberate button
+                    # tap apart from free-typed text without re-parsing the
+                    # raw payload - and content is the reply's stable id
+                    # (e.g. "course_12"), not its display title.
+                    interactive = message.get("interactive", {})
+                    interactive_type = interactive.get("type")
+                    if interactive_type == "button_reply":
+                        reply_id = interactive.get("button_reply", {}).get("id")
+                        normalized_type = "interactive_button"
+                    elif interactive_type == "list_reply":
+                        reply_id = interactive.get("list_reply", {}).get("id")
+                        normalized_type = "interactive_list"
+                    else:
+                        logger.info("Skipping unsupported interactive reply type=%s message_id=%s", interactive_type, message.get("id"))
+                        continue
+                    if reply_id is None:
+                        logger.warning("Skipping interactive reply with no id message_id=%s", message.get("id"))
+                        continue
+                    event = _build_event(payload, whatsapp_business_account_id, metadata, contact, message, normalized_type, reply_id)
+                    if event is not None:
+                        events.append(event)
+                    continue
+
                 if message_type != "text":
-                    # Non-text messages (images, stickers, reactions, etc.)
-                    # aren't handled yet - skip just this one message rather
-                    # than the whole batch, and say so, instead of silently
+                    # Anything else (images, stickers, reactions, etc.) isn't
+                    # handled yet - skip just this one message rather than
+                    # the whole batch, and say so, instead of silently
                     # discarding it (and anything after it) like before.
                     logger.info(
                         "Skipping non-text WhatsApp message type=%s message_id=%s",

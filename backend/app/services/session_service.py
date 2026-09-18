@@ -29,6 +29,16 @@ async def update_session_summary(db, session, session_summary: str):
     return session
 
 
+async def set_session_active_flow(db, session, flow_state: dict | None):
+    # Persists (or clears, when flow_state is None) the eligibility-checker's
+    # step - see StudentSession.active_flow and services/eligibility_service.py.
+    session.active_flow = flow_state
+    session.last_message_at = func.now()
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
 def is_session_budget_exceeded(session, max_tokens: int) -> bool:
     return session.total_tokens_used >= max_tokens
 

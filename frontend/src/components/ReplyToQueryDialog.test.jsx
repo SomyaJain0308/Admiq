@@ -11,16 +11,12 @@ vi.mock("sonner", () => ({
 const mockMutateAsync = vi.fn()
 const mockReset = vi.fn()
 let mockMutationState = { isPending: false, isError: false, error: null }
-let mockSuggestionsState = { data: { suggestions: [] }, isLoading: false }
-let mockKnowledgeSearchState = { data: { results: [] }, isLoading: false, isFetching: false }
 vi.mock("@/hooks/useLowConfidenceQueue", () => ({
   useResolveLowConfidenceQuery: () => ({
     mutateAsync: mockMutateAsync,
     reset: mockReset,
     ...mockMutationState,
   }),
-  useReplySuggestions: () => mockSuggestionsState,
-  useKnowledgeSearch: () => mockKnowledgeSearchState,
 }))
 
 vi.mock("@/hooks/useStudents", () => ({
@@ -56,8 +52,6 @@ describe("ReplyToQueryDialog", () => {
     mockMutateAsync.mockReset()
     mockReset.mockReset()
     mockMutationState = { isPending: false, isError: false, error: null }
-    mockSuggestionsState = { data: { suggestions: [] }, isLoading: false }
-    mockKnowledgeSearchState = { data: { results: [] }, isLoading: false, isFetching: false }
     toast.success.mockReset()
     toast.warning.mockReset()
   })
@@ -79,7 +73,6 @@ describe("ReplyToQueryDialog", () => {
       queryId: 55,
       replyMessage: "Yes, every hostel room has AC.",
       expiresAt: null,
-      additionalQueryIds: [],
     })
     expect(toast.success).toHaveBeenCalledWith("Reply sent to student.")
     expect(onOpenChange).toHaveBeenCalledWith(false)
@@ -141,46 +134,5 @@ describe("ReplyToQueryDialog", () => {
     mockMutationState = { isPending: true, isError: false, error: null }
     renderDialog()
     expect(screen.getByRole("button", { name: /sending/i })).toBeDisabled()
-  })
-
-  it("fills the reply box from a draft-assist suggestion", async () => {
-    mockSuggestionsState = {
-      isLoading: false,
-      data: {
-        suggestions: [
-          { chunk_id: 1, source_label: "Staff answer", content: "Question: x\nAnswer: Yes, all rooms have AC.", answer_text: "Yes, all rooms have AC.", distance: 0.05 },
-        ],
-      },
-    }
-    const user = userEvent.setup()
-    renderDialog()
-
-    await user.click(screen.getByRole("button", { name: /use this/i }))
-
-    expect(screen.getByLabelText(/your reply/i)).toHaveValue("Yes, all rooms have AC.")
-  })
-
-  it("resolves the whole similar-question group with one reply", async () => {
-    mockMutateAsync.mockResolvedValue({})
-    const user = userEvent.setup()
-    const similarGroup = [
-      QUERY,
-      { query_id: 56, student_id: 102, question_content: "Do hostel rooms come with AC?" },
-      { query_id: 57, student_id: 103, question_content: "Is AC available in the hostel?" },
-    ]
-    renderDialog({ similarGroup })
-
-    expect(screen.getByText(/2 other students asked basically the same thing/i)).toBeInTheDocument()
-
-    await user.type(screen.getByLabelText(/your reply/i), "Yes, every hostel room has AC.")
-    await user.click(screen.getByRole("button", { name: /send reply to 3 students/i }))
-
-    expect(mockMutateAsync).toHaveBeenCalledWith({
-      queryId: 55,
-      replyMessage: "Yes, every hostel room has AC.",
-      expiresAt: null,
-      additionalQueryIds: [56, 57],
-    })
-    expect(toast.success).toHaveBeenCalledWith("Reply sent to 3 students.")
   })
 })

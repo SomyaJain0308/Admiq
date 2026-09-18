@@ -4,7 +4,7 @@ from backend.app.models.College import College
 from backend.app.models.Message import Message
 
 
-from sqlalchemy import select, or_, update
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langsmith import traceable
@@ -154,32 +154,6 @@ async def get_relevant_documents_scored(db, query: str, college_id: int, k: int)
     logger.info("Retrieved %d/%d chunks college_id=%s elapsed_ms=%.0f", len(scored), len(results), college_id, (time.perf_counter() - start) * 1000)
     return scored
 
-
-
-async def record_chunk_usage(db, chunk_ids: list[int]) -> None:
-    """Bump retrieval_count/last_retrieved_at for chunks that actually made
-    it into a student-facing answer this turn (called from agent.py's
-    retrieve() node with the chunk ids that passed the distance threshold
-    and were newly added to the prompt - not just the top-k candidates).
-    This is the "usage" signal the knowledge-base view surfaces so staff can
-    tell a well-used staff answer from one nobody's hit in months.
-    Best-effort and self-contained (commits on its own, like the other
-    per-step writes in this codebase's service layer) - a failure here must
-    never take down the actual answer that's already been generated, so
-    every exception is swallowed after logging.
-    """
-    if not chunk_ids:
-        return
-    try:
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
-        await db.execute(
-            update(Chunk)
-            .where(Chunk.chunk_id.in_(chunk_ids))
-            .values(retrieval_count=Chunk.retrieval_count + 1, last_retrieved_at=now)
-        )
-        await db.commit()
-    except Exception as e:
-        logger.warning("Failed to record chunk usage chunk_ids=%s error=%s", chunk_ids, e, exc_info=True)
 
 
 async def get_previous_assistant_message(db, college_id: int, student_id: int) -> str:

@@ -8,7 +8,7 @@ from backend.app.database import Base
 
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Integer, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, ForeignKey, ForeignKeyConstraint, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,16 +25,6 @@ class Chunk(Base):
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_query_id: Mapped[int | None] = mapped_column(Integer)
     expires_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
-    # Who/when a staff_answer chunk was written - populated for both the
-    # reactive path (resolving a flagged query) and the proactive one
-    # (staff adds a Q&A with no flagged query behind it at all).
-    created_by: Mapped[int | None] = mapped_column(Integer)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
-    # Usage signal (see rag/retrieval.py's record_chunk_usage): how often,
-    # and how recently, this chunk actually made it into a student-facing
-    # answer - lets the knowledge-base view surface well-used vs. dead answers.
-    retrieval_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
-    last_retrieved_at: Mapped[datetime | None] = mapped_column(TIMESTAMP)
 
     college: Mapped["College"] = relationship(back_populates="chunks")
     document: Mapped["Document | None"] = relationship("Document", primaryjoin=("and_(Chunk.college_id == Document.college_id, " "Chunk.document_id == Document.document_id)"), foreign_keys="[Chunk.college_id, Chunk.document_id]", viewonly=True)
@@ -43,23 +33,11 @@ class Chunk(Base):
     __table_args__ = (
         ForeignKeyConstraint(["college_id", "document_id"], ["documents.college_id", "documents.document_id"], ondelete="CASCADE"),
         ForeignKeyConstraint(["college_id", "source_query_id"], ["low_confidence_queries.college_id", "low_confidence_queries.query_id"]),
-        ForeignKeyConstraint(["college_id", "created_by"], ["staff_colleges.college_id", "staff_colleges.staff_id"]),
         CheckConstraint("source_type IN ('document', 'staff_answer')", name="chunks_source_type_check"),
-        # A staff_answer chunk no longer requires a source_query_id - staff
-        # can write a Q&A proactively, with no flagged query behind it at
-        # all. document_id staying NULL for staff_answer is the part that
-        # still needs enforcing (a chunk is never both).
-        CheckConstraint("(source_type = 'document' AND document_id IS NOT NULL) OR" "(source_type = 'staff_answer' AND document_id IS NULL)", name="chunks_source_reference_check"),
+        CheckConstraint("(source_type = 'document' AND document_id IS NOT NULL) OR" "(source_type = 'staff_answer' AND source_query_id IS NOT NULL)", name="chunks_source_reference_check"),
         CheckConstraint("source_type = 'staff_answer' OR expires_at IS NULL", name="chunks_document_no_expiry_check"),
         Index("ix_chunks_embedding_hnsw", "embedding", postgresql_using="hnsw", postgresql_ops={"embedding": "vector_cosine_ops"}),
         Index("ix_chunks_college_id", "college_id"),
         Index("ix_chunks_document_id", "document_id"),
         Index("ix_chunk_content", "chunk_content"),
-        # The knowledge-base view's default listing is staff_answer chunks
-        # ordered newest-first for a given college - this is that query.
-        Index("ix_chunks_college_source_type_created_at", "college_id", "source_type", "created_at"),
-        # Belt-and-braces tenant scoping so knowledge_conflicts.py can FK to a
-        # chunk scoped by college_id like every other composite FK in this
-        # schema - chunk_id alone is already globally unique (SERIAL PK).
-        UniqueConstraint("college_id", "chunk_id"),
     )

@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from backend.app.models.Message import Message
     from backend.app.models.Chunk import Chunk
     from backend.app.models.StudentSession import StudentSession
+    from backend.app.models.Course import Course
 from backend.app.database import Base
 
 from sqlalchemy import Integer, func, Text
@@ -35,3 +36,4 @@ class College(Base):
     messages: Mapped[list["Message"]] = relationship(back_populates="college", cascade="all, delete-orphan")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="college", cascade="all, delete-orphan")
     sessions: Mapped[list["StudentSession"]] = relationship(back_populates="college", cascade="all, delete-orphan")
+    courses: Mapped[list["Course"]] = relationship(back_populates="college", cascade="all, delete-orphan")

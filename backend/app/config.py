@@ -64,28 +64,6 @@ class Settings(BaseSettings): # Defined here used in rag/agent.py, main.py Fetch
     session_token_budget: int = 200000
     retrieval_distance_threshold: float = 0.45
 
-    # Conflict detection (backend/app/rag/conflict_detection.py) - runs
-    # best-effort whenever a chunk is added or edited (document ingestion,
-    # a staff reply, a knowledge-base entry) to flag it against existing
-    # chunks that look close enough in meaning to plausibly be about the
-    # same fact. Never blocks the write itself.
-    conflict_detection_enabled: bool = True
-    conflict_detection_model: str = "gemini-2.5-flash"
-    # How many nearest existing chunks (by cosine distance) are considered
-    # as candidates worth an LLM contradiction check, per new/edited chunk.
-    conflict_candidate_k: int = 5
-    # Only candidates within this cosine distance are even sent to the LLM -
-    # dissimilar chunks aren't about the same fact, so checking them would
-    # just waste calls and risk false positives from a model reaching for a
-    # contradiction that isn't there.
-    conflict_candidate_distance_threshold: float = 0.55
-    # Safety cap on how many of a single document's new chunks get run
-    # through conflict detection - large documents can produce hundreds of
-    # chunks, and checking every single one isn't worth the LLM cost; a
-    # capped, best-effort pass still catches the common case (a handful of
-    # genuinely conflicting sections) without unbounded per-upload cost.
-    conflict_max_chunks_per_document: int = 60
-
     # Whatsapp Webhook
     whatsapp_verify_token: str = ""
     meta_app_secret: str = ""

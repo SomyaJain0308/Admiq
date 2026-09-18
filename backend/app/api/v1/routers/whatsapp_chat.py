@@ -14,9 +14,10 @@ from backend.app.monitoring.timing import RequestTimer
 from backend.app.monitoring.api_metrics import STUDENT_TOKEN_BUDGET_REJECTIONS, DUPLICATE_WEBHOOK_DELIVERY, OUTPUT_SECURITY_WARNINGS
 from backend.app.rag.agent import Agent
 from backend.app.services.tenant_service import get_or_create_student, resolve_college_from_phone_number_id, save_inbound_message, save_assistant_message, flag_low_confidence_query
-from backend.app.services.whatsapp_service import send_whatsapp_text_message, send_whatsapp_typing_indicator, verify_meta_signature, extract_whatsapp_message_events
-from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary
+from backend.app.services.whatsapp_service import send_whatsapp_text_message, send_whatsapp_typing_indicator, send_whatsapp_interactive_message, verify_meta_signature, extract_whatsapp_message_events
+from backend.app.services.session_service import get_or_create_active_session, is_session_budget_exceeded, record_session_tokens, update_session_summary, set_session_active_flow
 from backend.app.services.cost_service import record_whatsapp_cost
+from backend.app.services import eligibility_service
 
 
 router = APIRouter(prefix="/webhooks/whatsapp", tags=["Whatsapp Chat"])
@@ -92,6 +93,14 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
             logger.warning("Failed to send Whatsapp typing indicator", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": typing_result}})
 
         security_notes = []
+        # Reset every iteration (this loop can process several events in one
+        # webhook delivery) - without this, a security-block/budget-exceeded
+        # response, or an agent/eligibility call that raised before
+        # assigning it, would leave `result` holding a *previous* event's
+        # dict (or unbound on the very first event), and the unguarded
+        # `"session_active_flow" in result` check below could then read
+        # stale data belonging to a different student's message entirely.
+        result = {}
 
         with RequestTimer() as timer: # Basic Observability
             # Santize the input and do some basic checking for prompt injection.
@@ -113,19 +122,48 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                 sources = []
 
             else:
-                # On success, pass the request to the rag pipeling which will rewrite the query, retrieve documents, determine wheather they r good, if true then send to llm for generation if not rewrite query and the loop continues
-                try:
-                    result = await agent.invoke(db, message, college_id=college_id, student_id=student.student_id, request_id=request_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary) # defined in rag/agent.py
-                    response_text = result["response"]
-                    model_used = result["model_used"]
-                    sources = result.get("sources", [])
-                    new_session_summary = result.get("updated_session_summary")
-                    await record_session_tokens(db, session, result.get("input_tokens", 0), result.get("output_tokens", 0)) # Defined in services/session_services.py
-                except Exception as e:
-                    logger.error(f"Agent invocation failed {e}", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "error": str(e)}})
-                    response_text = "Sorry, I am having trouble answering right now. Please try again after 2 minutes."
-                    model_used = "error"
-                    sources = []
+                # An eligibility check already in progress (StudentSession.
+                # active_flow set) or a fresh trigger for one takes over
+                # routing here, ahead of the RAG agent - see
+                # services/eligibility_service.py for why this is a
+                # deterministic state machine rather than an LLM call.
+                active_flow_name = (session.active_flow or {}).get("flow")
+                in_eligibility_flow = active_flow_name == eligibility_service.FLOW_NAME or eligibility_service.is_trigger(message, event.message_type)
+
+                if in_eligibility_flow:
+                    try:
+                        # agent is passed through so await_procedure_interest can try a real
+                        # RAG lookup instead of always flagging a human - see eligibility_service.py.
+                        # Every other step ignores it entirely.
+                        result = await eligibility_service.handle_incoming_message(db, college_id=college_id, student=student, session=session, content=message, message_type=event.message_type, agent=agent, request_id=request_id) # Defined in services/eligibility_service.py
+                        response_text = result["response"]
+                        model_used = result["model_used"]
+                        sources = result.get("sources", [])
+                        new_session_summary = result.get("updated_session_summary")
+                        # Almost always 0/0 (the flow is scripted, not LLM-driven) except for
+                        # the RAG-backed procedure-lookup step above, which does spend real
+                        # tokens against the session budget just like the agent.invoke() branch below.
+                        await record_session_tokens(db, session, result.get("input_tokens", 0), result.get("output_tokens", 0))
+                    except Exception as e:
+                        logger.error(f"Eligibility flow failed {e}", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "error": str(e)}})
+                        response_text = "Sorry, something went wrong with the eligibility check. Please try again shortly."
+                        model_used = "error"
+                        sources = []
+                        result = {}
+                else:
+                    # On success, pass the request to the rag pipeling which will rewrite the query, retrieve documents, determine wheather they r good, if true then send to llm for generation if not rewrite query and the loop continues
+                    try:
+                        result = await agent.invoke(db, message, college_id=college_id, student_id=student.student_id, request_id=request_id, student_summary=student.summary, session_id=session.session_id, session_summary=session.session_summary) # defined in rag/agent.py
+                        response_text = result["response"]
+                        model_used = result["model_used"]
+                        sources = result.get("sources", [])
+                        new_session_summary = result.get("updated_session_summary")
+                        await record_session_tokens(db, session, result.get("input_tokens", 0), result.get("output_tokens", 0)) # Defined in services/session_services.py
+                    except Exception as e:
+                        logger.error(f"Agent invocation failed {e}", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "error": str(e)}})
+                        response_text = "Sorry, I am having trouble answering right now. Please try again after 2 minutes."
+                        model_used = "error"
+                        sources = []
             # Now check the output of the llm make sure it's safe to send to the user
             response_text, output_warnings = security.check_output(response_text) # Defined in rag/security.py
             if output_warnings:
@@ -137,7 +175,21 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
                     await flag_low_confidence_query(db, college_id=college_id, student_id=student.student_id, question_message_id=inbound.message_id, answer_message_id=assistant_msg.message_id, similarity_score=result.get("best_distance")) # Defined in rag/agent.py
             if new_session_summary:
                 await update_session_summary(db=db, session=session, session_summary=new_session_summary) # Defined in services/session_service.py
-            send_result = await send_whatsapp_text_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, message=response_text, access_token=get_settings().whatsapp_access_token) # Defined in service/whatsapp_service.py
+            if "session_active_flow" in result:
+                # Only the eligibility flow's result carries this key - persist
+                # its next step (or clear it, if the flow just ended) so the
+                # *next* inbound message routes correctly. Defined in
+                # services/session_service.py.
+                await set_session_active_flow(db, session, result["session_active_flow"])
+
+            interactive = result.get("interactive")
+            if interactive:
+                # response_text above is the flattened version (for the
+                # saved transcript/security check) - the actual send uses the
+                # real buttons/list. Defined in services/whatsapp_service.py.
+                send_result = await send_whatsapp_interactive_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, access_token=get_settings().whatsapp_access_token, interactive=interactive)
+            else:
+                send_result = await send_whatsapp_text_message(phone_number_id=event.phone_number_id, to=event.whatsapp_user_id, message=response_text, access_token=get_settings().whatsapp_access_token) # Defined in service/whatsapp_service.py
             if not send_result["ok"]:
                 logger.error("Failed to send Whatsapp reply", extra={"extra_data": {"college_id": college_id, "student_id": student.student_id, "whatsapp_message_id": event.whatsapp_message_id, "meta_response": send_result}})
             # This is always a free-form reply inside the 24h customer-service window

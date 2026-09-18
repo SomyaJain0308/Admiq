@@ -30,4 +30,3 @@ pytesseract==0.3.13
 easyocr==1.7.2
 pymupdf==1.28.0
 python-multipart==0.0.32
-numpy

@@ -30,49 +30,14 @@ export function useDocuments(collegeId) {
 export function useUploadDocument(collegeId) {
   const queryClient = useQueryClient()
   return useMutation({
-    // category is optional (staff-picked topic label). force=true skips the
-    // backend's duplicate-hash check - set it when staff have already seen
-    // the "looks like a duplicate" warning and chose to upload anyway.
-    mutationFn: ({ file, category, force }) => {
+    mutationFn: (file) => {
       const formData = new FormData()
       formData.append("file", file)
-      if (category) formData.append("category", category)
-      if (force) formData.append("force", "true")
       return api.postFormData(`/router/colleges/${collegeId}/documents`, formData)
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
     },
-  })
-}
-
-// Swaps in a new file for an existing document row (same document_id) -
-// clears the old chunks and re-triggers processing, instead of staff having
-// to delete the row and re-upload as a brand new document.
-export function useReplaceDocument(collegeId) {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ documentId, file, category }) => {
-      const formData = new FormData()
-      formData.append("file", file)
-      if (category) formData.append("category", category)
-      return api.postFormData(`/router/colleges/${collegeId}/documents/${documentId}/replace`, formData)
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["documents", collegeId] })
-    },
-  })
-}
-
-// Extracted chunks for one document - lets staff see exactly what the
-// assistant indexed (not just a pass/fail quality score) before a bad
-// extraction reaches a student. Only fetched when the preview dialog is
-// actually open (enabled), since chunk text can be sizeable.
-export function useDocumentChunks(collegeId, documentId, enabled) {
-  return useQuery({
-    queryKey: ["document-chunks", collegeId, documentId],
-    queryFn: () => api.get(`/router/colleges/${collegeId}/documents/${documentId}/chunks`),
-    enabled: !!collegeId && !!documentId && !!enabled,
   })
 }
 

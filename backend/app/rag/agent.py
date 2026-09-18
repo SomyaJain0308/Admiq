@@ -7,7 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI # NOTE: IN PRODUCTION 
 from langsmith import traceable
 
 from backend.app.config import get_settings
-from backend.app.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message, record_chunk_usage
+from backend.app.rag.retrieval import RE_QUERY_PROMPT, SYSTEM_PROMPT, RESOLVE_QUERY_PROMPT, build_system_prompt, get_relevant_documents_scored, get_previous_assistant_message
 from backend.app.schemas.models import AgentState, AgentTurnOutput, QueryRewrite
 from backend.app.monitoring.agent_metrics import NEEDS_RETRIEVAL_COUNT, RELEVANT_CHUNKS_COUNT, RETRIEVED_CHUNKS_COUNT, AGENT_REQUESTS, AGENT_ERRORS, AGENT_RETRIES, QUERY_DECOMPOSITION_SIZE, STAGE_LATENCY, LLM_INPUT_TOKENS, LLM_OUTPUT_TOKENS, AGENT_MISSING_FOLLOWUP, RETRIEVAL_DISTANCE, SUBQUERIES_UNRESOLVED, INVOKE_LATENCY
 from backend.app.services.agent_helpers import extract_token_usage, classify_error
@@ -94,7 +94,6 @@ class Agent:
                 newly_resolved = list(state.get("resolved_chunks", []))
                 still_pending = []
                 embedded_tokens_total = 0
-                newly_used_chunk_ids = [] # Chunks that actually pass the threshold this turn - see record_chunk_usage below
                 for sub_query in pending:
                     scored = await get_relevant_documents_scored(db=state["db"], query=sub_query, college_id=state["college_id"], k=k) # Defined in rag/retrieval.py
                     # get_relevant_documents_scored embeds sub_query via the Gemini embeddings API before searching -
@@ -110,7 +109,6 @@ class Agent:
                         for chunk_id, _, dist in passing:
                             already_seen_ids.add(chunk_id)
                         newly_resolved.extend(passing)
-                        newly_used_chunk_ids.extend(chunk_id for chunk_id, _, _ in passing)
                     else:
                         still_pending.append(sub_query)
                 if newly_resolved:
@@ -119,12 +117,6 @@ class Agent:
                 else:
                     relevant_documents = "No relevant documents were found for this query."
                     best_distance = 1.0
-                if newly_used_chunk_ids:
-                    # Best-effort usage tracking (see retrieval.py) for the
-                    # knowledge-base "used a lot vs. never retrieved" signal -
-                    # already internally try/excepted, so a failure here
-                    # can't affect the response that's about to be generated.
-                    await record_chunk_usage(state["db"], newly_used_chunk_ids)
                 if embedded_tokens_total > 0:
                     settings_for_cost = get_settings()
                     await record_embedding_cost(state["db"], college_id=state["college_id"], student_id=state["student_id"], session_id=state["session_id"], stage="retrieval_embedding", model=settings_for_cost.embedding_model, input_tokens=embedded_tokens_total)

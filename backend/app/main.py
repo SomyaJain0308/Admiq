@@ -24,8 +24,7 @@ from backend.app.api.v1.routers.students import router as students_router
 from backend.app.api.v1.routers.documents import router as documents_router
 from backend.app.api.v1.routers.dashboard import router as dashboard_router
 from backend.app.api.v1.routers.costs import router as costs_router
-from backend.app.api.v1.routers.knowledge_base import router as knowledge_base_router
-from backend.app.api.v1.routers.knowledge_conflicts import router as knowledge_conflicts_router
+from backend.app.api.v1.routers.eligibility import router as eligibility_router
 
 
 
@@ -82,8 +81,7 @@ app.include_router(low_confidence_router)
 app.include_router(students_router)
 app.include_router(dashboard_router)
 app.include_router(costs_router)
-app.include_router(knowledge_base_router)
-app.include_router(knowledge_conflicts_router)
+app.include_router(eligibility_router)
 
 
 # Without this, an unhandled exception in a route (anything that isn't a

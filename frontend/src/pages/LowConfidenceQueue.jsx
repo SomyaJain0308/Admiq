@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react"
-import { Inbox, ChevronDown, ChevronUp, Users } from "lucide-react"
+import { useState } from "react"
+import { Inbox, ChevronDown, ChevronUp } from "lucide-react"
 import { useCurrentCollege } from "@/context/useCurrentCollege"
-import { useLowConfidenceQueries, useSimilarQueryGroups } from "@/hooks/useLowConfidenceQueue"
+import { useLowConfidenceQueries } from "@/hooks/useLowConfidenceQueue"
 import { useResetPageOnChange } from "@/hooks/useResetPageOnChange"
 import { ReplyToQueryDialog } from "@/components/ReplyToQueryDialog"
 import { StudentSnapshot } from "@/components/StudentSnapshot"
@@ -26,7 +26,6 @@ export default function LowConfidenceQueue() {
   const { college, hasNoCollege } = useCurrentCollege()
   const [view, setView] = useState("open") // "open" | "resolved"
   const [activeQuery, setActiveQuery] = useState(null)
-  const [activeGroup, setActiveGroup] = useState(null)
 
   // Switching between Open/Resolved is effectively a different list -
   // whatever page you were on in one view isn't meaningful in the other.
@@ -36,29 +35,6 @@ export default function LowConfidenceQueue() {
     page,
     pageSize: PAGE_SIZE,
   })
-
-  // Only meaningful for the open queue - resolved questions can't be
-  // bundled into anything anymore.
-  const { data: similarGroupsData } = useSimilarQueryGroups(college?.college_id, { enabled: view === "open" })
-  const similarGroups = similarGroupsData?.groups || []
-
-  // Quick lookup from a query_id to the group it belongs to (if any), so a
-  // row anywhere on the current page can show its "N similar" badge without
-  // re-scanning every group on every render.
-  const groupByQueryId = useMemo(() => {
-    const map = new Map()
-    for (const group of similarGroups) {
-      for (const queryId of group.query_ids) {
-        map.set(queryId, group)
-      }
-    }
-    return map
-  }, [similarGroups])
-
-  function openReply(query, group) {
-    setActiveQuery(query)
-    setActiveGroup(group || null)
-  }
 
   const queries = data?.items || []
   const total = data?.total ?? 0
@@ -130,39 +106,6 @@ export default function LowConfidenceQueue() {
         />
       )}
 
-      {view === "open" && similarGroups.length > 0 && (
-        <div className="flex flex-col gap-2 rounded-xl border border-primary/30 bg-primary/5 p-4">
-          <p className="flex items-center gap-1.5 text-sm font-medium">
-            <Users className="size-4" />
-            {similarGroups.length} group{similarGroups.length === 1 ? "" : "s"} of students asking basically the same thing
-          </p>
-          <p className="text-xs text-muted-foreground">
-            Reply once and it goes out to everyone in the group, instead of answering the same question repeatedly.
-          </p>
-          <div className="flex flex-col gap-2">
-            {similarGroups.map((group) => {
-              const representative = group.members[0]
-              return (
-                <div
-                  key={group.query_ids.join("-")}
-                  className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
-                >
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium">{representative.question_content}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {group.members.length} students asked a version of this question
-                    </span>
-                  </div>
-                  <Button size="sm" variant="outline" onClick={() => openReply(representative, group.members)}>
-                    Reply to all {group.members.length}
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
       {(isLoading || queries.length > 0) && (
         <div className="shadow-elevated overflow-hidden rounded-xl border">
         <Table className={isFetching && !isLoading ? "opacity-60 transition-opacity" : undefined}>
@@ -195,16 +138,9 @@ export default function LowConfidenceQueue() {
                   </TableCell>
                   <TableCell>
                     {view === "open" ? (
-                      <div className="flex flex-col items-start gap-1">
-                        <Button size="sm" onClick={() => openReply(query, groupByQueryId.get(query.query_id)?.members)}>
-                          Reply
-                        </Button>
-                        {groupByQueryId.has(query.query_id) && (
-                          <Badge variant="outline" className="text-[10px]">
-                            +{groupByQueryId.get(query.query_id).members.length - 1} similar
-                          </Badge>
-                        )}
-                      </div>
+                      <Button size="sm" onClick={() => setActiveQuery(query)}>
+                        Reply
+                      </Button>
                     ) : (
                       <Badge variant="secondary">Resolved</Badge>
                     )}
@@ -223,13 +159,7 @@ export default function LowConfidenceQueue() {
         query={activeQuery}
         collegeId={college?.college_id}
         open={!!activeQuery}
-        onOpenChange={(open) => {
-          if (!open) {
-            setActiveQuery(null)
-            setActiveGroup(null)
-          }
-        }}
-        similarGroup={activeGroup}
+        onOpenChange={(open) => !open && setActiveQuery(null)}
       />
     </div>
   )

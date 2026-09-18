@@ -73,6 +73,7 @@ CREATE TABLE student_sessions (
     profile_processed       BOOLEAN NOT NULL DEFAULT FALSE,
     reengagement_nudge_sent BOOLEAN NOT NULL DEFAULT FALSE,
     total_tokens_used       INTEGER NOT NULL DEFAULT 0,
+    active_flow             JSONB, -- generic guided-flow state (e.g. eligibility check); NULL = ordinary free-chat with the agent
 
     UNIQUE (college_id, session_id),
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE
@@ -114,15 +115,75 @@ CREATE TABLE documents (
     document_status   TEXT NOT NULL DEFAULT 'processing' CHECK (document_status IN ('processing', 'success', 'failed')),
     error             TEXT,
     uploaded_by       INT NOT NULL,
-    category          TEXT,  -- staff-picked topic label (e.g. "Fees", "Hostel"), optional
-    content_hash      TEXT,  -- sha256 of the uploaded bytes, used to flag likely duplicate uploads
     created_at        TIMESTAMP DEFAULT NOW(),
 
     UNIQUE (college_id, document_id),
     FOREIGN KEY (college_id, uploaded_by) REFERENCES staff_colleges(college_id, staff_id)
 );
 
-CREATE INDEX ix_documents_college_content_hash ON documents(college_id, content_hash);
+-- A staff-configured course, used by the WhatsApp eligibility-checker flow.
+-- Deliberately structured/queryable rather than another uploaded Document,
+-- since eligibility is a pass/fail decision that shouldn't be left to the
+-- RAG agent inferring from a brochure PDF.
+CREATE TABLE courses (
+    course_id          SERIAL PRIMARY KEY,
+    college_id         INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    course_name        TEXT NOT NULL,
+    is_published       BOOLEAN NOT NULL DEFAULT FALSE,
+    order_index        INT NOT NULL DEFAULT 0,
+    admission_procedure TEXT, -- reserved for a later feature, not populated yet
+    created_at         TIMESTAMP DEFAULT NOW(),
+    -- Self-reference so a "programme type" (e.g. "B.Tech") can group several
+    -- branches (e.g. "Computer Science", "Civil") under it. NULL = a normal
+    -- top-level course/programme-type; set = this row is a branch of another
+    -- course. ON DELETE SET NULL rather than CASCADE: deleting a programme
+    -- type shouldn't take its branches down with it, just orphan them back
+    -- to the top level. See services/eligibility_service.py for how this
+    -- drives the WhatsApp course-picker flow.
+    parent_course_id   INT REFERENCES courses(course_id) ON DELETE SET NULL,
+
+    UNIQUE (college_id, course_id)
+);
+
+-- One configurable, ordered pass/fail rule on a course. `config`'s shape
+-- depends on rule_type (validated in schemas/eligibility.py) rather than a
+-- fixed set of columns, so staff can add new criteria without a migration.
+CREATE TABLE eligibility_rules (
+    rule_id       SERIAL PRIMARY KEY,
+    college_id    INT NOT NULL,
+    course_id     INT NOT NULL,
+    rule_type     TEXT NOT NULL CHECK (rule_type IN ('min_percentage', 'min_subject_marks', 'required_stream', 'entrance_cutoff', 'category_cutoff', 'custom_yesno')),
+    config        JSONB NOT NULL,
+    order_index   INT NOT NULL DEFAULT 0,
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMP DEFAULT NOW(),
+
+    UNIQUE (college_id, rule_id),
+    FOREIGN KEY (college_id, course_id) REFERENCES courses(college_id, course_id) ON DELETE CASCADE
+);
+
+-- One row per exit from the WhatsApp eligibility-checker flow (see
+-- services/eligibility_service.py) - a rule verdict (passed/failed/
+-- borderline) or a drop-off (cancelled/timed_out). Backs the admin
+-- analytics endpoint (pass/fail rate per course, and where students
+-- actually drop off) that Student.profile_signals alone can't answer:
+-- that field only keeps each student's last 10 checks and never records a
+-- drop-off at all. rule_index is the rule's ordered position at event time,
+-- not a foreign key to eligibility_rules, so a later reorder/edit/delete of
+-- that rule doesn't retroactively corrupt historical events.
+CREATE TABLE eligibility_events (
+    event_id      SERIAL PRIMARY KEY,
+    college_id    INT NOT NULL,
+    student_id    INT NOT NULL,
+    course_id     INT,
+    step          TEXT NOT NULL CHECK (step IN ('await_start_confirm', 'await_course', 'await_category', 'await_summary_confirm', 'await_rule', 'await_procedure_interest', 'await_another_course')),
+    rule_index    INT,
+    outcome       TEXT NOT NULL CHECK (outcome IN ('passed', 'failed', 'borderline', 'cancelled', 'timed_out')),
+    created_at    TIMESTAMP DEFAULT NOW(),
+
+    FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE,
+    FOREIGN KEY (college_id, course_id) REFERENCES courses(college_id, course_id) ON DELETE SET NULL
+);
 
 CREATE TABLE low_confidence_queries (
     query_id             SERIAL PRIMARY KEY,
@@ -145,76 +206,21 @@ CREATE TABLE low_confidence_queries (
 );
 
 CREATE TABLE chunks (
-    chunk_id          SERIAL PRIMARY KEY,
-    document_id       INT,
-    college_id        INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    chunk_content     TEXT NOT NULL,
-    chunk_context     TEXT,
-    embedding         vector(768) NOT NULL,
-    chunk_index       INT NOT NULL,
-    source_type       TEXT NOT NULL CHECK (source_type IN ('document', 'staff_answer')),
-    source_query_id   INT,
-    expires_at        TIMESTAMP DEFAULT NULL,
-    -- created_by/created_at let the knowledge-base view show who added a
-    -- staff-answer chunk and when, including ones added proactively (no
-    -- source_query_id at all - see below).
-    created_by        INT,
-    created_at        TIMESTAMP DEFAULT NOW(),
-    -- Usage signal for the knowledge-base view: bumped (best-effort, from
-    -- rag/retrieval.py's record_chunk_usage) every time this chunk actually
-    -- gets used in a student-facing answer, so staff can tell a
-    -- well-used answer from a dead one.
-    retrieval_count   INT NOT NULL DEFAULT 0,
-    last_retrieved_at TIMESTAMP,
-    -- A staff_answer chunk no longer has to originate from a flagged
-    -- low-confidence query: staff can add Q&A pairs proactively (source_query_id
-    -- NULL), not just reactively resolve a student's question.
-    CHECK ((source_type = 'document' AND document_id IS NOT NULL) OR (source_type = 'staff_answer' AND document_id IS NULL)),
+    chunk_id         SERIAL PRIMARY KEY,
+    document_id      INT,
+    college_id       INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
+    chunk_content    TEXT NOT NULL,
+    chunk_context    TEXT,
+    embedding        vector(768) NOT NULL,
+    chunk_index      INT NOT NULL,
+    source_type      TEXT NOT NULL CHECK (source_type IN ('document', 'staff_answer')),
+    source_query_id  INT,
+    expires_at       TIMESTAMP DEFAULT NULL,
+    CHECK ((source_type = 'document' AND document_id IS NOT NULL) OR (source_type = 'staff_answer' AND source_query_id IS NOT NULL)),
     CHECK (source_type = 'staff_answer' OR expires_at IS NULL),
-    -- Needed so knowledge_conflicts (below) can FK to a chunk scoped by
-    -- college_id, matching every other composite FK in this schema - chunk_id
-    -- alone is already globally unique (SERIAL PK), this is belt-and-braces
-    -- tenant scoping, not a real uniqueness requirement.
-    UNIQUE (college_id, chunk_id),
     FOREIGN KEY (college_id, document_id) REFERENCES documents(college_id, document_id) ON DELETE CASCADE,
-    FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id),
-    FOREIGN KEY (college_id, created_by) REFERENCES staff_colleges(college_id, staff_id)
+    FOREIGN KEY (college_id, source_query_id) REFERENCES low_confidence_queries(college_id, query_id)
 );
-
--- A flag raised when a newly-added or newly-edited chunk (a document, a
--- reactive staff reply, or a proactive knowledge-base entry) appears to
--- state a different, incompatible fact than something already sitting in
--- the knowledge base (see backend/app/rag/conflict_detection.py). This
--- never blocks ingestion - the new/edited chunk is always saved - it just
--- surfaces the pair for a human to look at on the Conflicts page. Both
--- chunk FKs cascade so a conflict row disappears on its own once either
--- side is deleted (document removed, knowledge-base entry deleted, or an
--- expired staff-answer chunk swept by the delete-expired-staff-answer-chunks
--- cron job) - a conflict about content that no longer exists isn't useful
--- to keep around.
-CREATE TABLE knowledge_conflicts (
-    conflict_id          SERIAL PRIMARY KEY,
-    college_id            INT REFERENCES colleges(college_id) ON DELETE CASCADE NOT NULL,
-    new_chunk_id          INT NOT NULL,
-    existing_chunk_id     INT NOT NULL,
-    similarity_distance   NUMERIC(5,4),
-    explanation           TEXT NOT NULL,
-    status                TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'resolved', 'dismissed')),
-    resolved_by           INT,
-    resolved_at           TIMESTAMP,
-    created_at            TIMESTAMP DEFAULT NOW(),
-
-    UNIQUE (college_id, conflict_id),
-    -- Same new/existing chunk pair shouldn't get flagged twice.
-    UNIQUE (college_id, new_chunk_id, existing_chunk_id),
-    FOREIGN KEY (college_id, new_chunk_id) REFERENCES chunks(college_id, chunk_id) ON DELETE CASCADE,
-    FOREIGN KEY (college_id, existing_chunk_id) REFERENCES chunks(college_id, chunk_id) ON DELETE CASCADE,
-    FOREIGN KEY (college_id, resolved_by) REFERENCES staff_colleges(college_id, staff_id)
-);
-
-CREATE INDEX ON knowledge_conflicts (college_id, status, created_at);
-CREATE INDEX ON knowledge_conflicts (new_chunk_id);
-CREATE INDEX ON knowledge_conflicts (existing_chunk_id);
 
 -- One row per billable unit of work (an LLM call, a batch of embedding
 -- calls, or a WhatsApp send) so per-student/per-college cost can be
@@ -313,3 +319,9 @@ CREATE INDEX ON low_confidence_queries (student_id);
 CREATE INDEX ON whatsapp_numbers (college_id);
 CREATE INDEX ON staff_colleges (college_id);
 CREATE INDEX ON staff_colleges (staff_id);
+CREATE INDEX ON courses (college_id);
+CREATE INDEX ON courses (parent_course_id);
+CREATE INDEX ON eligibility_rules (college_id, course_id);
+CREATE INDEX ON eligibility_events (college_id, course_id);
+CREATE INDEX ON eligibility_events (college_id, outcome);
+CREATE INDEX ON eligibility_events (college_id, created_at);
