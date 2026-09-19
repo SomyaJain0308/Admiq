@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.app.database import get_db
 from backend.app.models.Course import Course
 from backend.app.models.EligibilityRule import EligibilityRule
+from backend.app.models.EligibilityRuleHistory import EligibilityRuleHistory
 from backend.app.models.EligibilityEvent import EligibilityEvent
 from backend.app.models.CollegeStaff_StaffCollege import CollegeStaff
 from backend.app.services.auth_services import verify_college_access
@@ -21,6 +22,7 @@ from backend.app.schemas.eligibility import (
     EligibilityRuleResponse,
     RuleReorderRequest,
     CourseEligibilityStats,
+    CategoryEligibilityStats,
     DropOffPoint,
     EligibilityAnalyticsResponse,
     RuleConflict,
@@ -202,10 +204,17 @@ async def _get_rule_or_404(db, college_id: int, course_id: int, rule_id: int) ->
 @router.patch("/router/colleges/{college_id}/courses/{course_id}/rules/{rule_id}", response_model=EligibilityRuleResponse)
 async def update_rule(college_id: int, course_id: int, rule_id: int, payload: EligibilityRuleUpdate, db: AsyncSession = Depends(get_db), membership: CollegeStaff = Depends(verify_college_access)):
     rule = await _get_rule_or_404(db, college_id, course_id, rule_id)
+    changed = payload.config is not None or payload.is_active is not None
     if payload.config is not None:
         rule.config = _validate_rule_config(rule.rule_type, payload.config)
     if payload.is_active is not None:
         rule.is_active = payload.is_active
+    if changed:
+        # Append-only audit row - see models/EligibilityRuleHistory.py. Only
+        # written when something actually changed (not a bare PATCH with
+        # neither field set), and after the fields above are set so the
+        # snapshot reflects the post-change state.
+        db.add(EligibilityRuleHistory(college_id=college_id, course_id=course_id, rule_id=rule.rule_id, rule_type=rule.rule_type, config=rule.config, is_active=rule.is_active, changed_by_staff_id=membership.staff_id))
     await db.commit()
     await db.refresh(rule)
     return _to_rule_response(rule)
@@ -257,15 +266,27 @@ async def preview_course_flow(college_id: int, course_id: int, db: AsyncSession 
     course = await _get_course_or_404(db, college_id, course_id)
     rules = await eligibility_service.get_effective_rules(db, college_id, course)
 
+    no_rules_configured = len(rules) == 0
     steps = [f"1. Ask which course - the student would see \"{course.course_name}\" in the list."]
-    if eligibility_service.requires_category(rules):
-        steps.append("2. Ask reservation category (General / OBC / SC / ST / EWS / Other).")
-    for i, rule in enumerate(rules, start=1):
-        inherited_note = " (inherited from a parent programme)" if rule.course_id != course.course_id else ""
-        steps.append(f"{i + 1}. {eligibility_service.describe_rule(rule)}{inherited_note}")
+    if no_rules_configured:
+        # Matches _handle_await_summary_confirm's actual behavior (see
+        # eligibility_service.py): a course with zero rules - own or
+        # inherited - goes straight to "eligible", no questions asked at
+        # all. That's a reasonable default for a course that genuinely has
+        # no criteria, but it's also exactly what an accidentally-published
+        # course with rules not yet added looks like, so flag it plainly
+        # here rather than leaving staff to notice a suspiciously short
+        # preview on their own.
+        steps.append("2. No eligibility rules are configured for this course (none of its own, and none inherited) - every student who picks it is immediately marked eligible. If that's not intended, add rules before publishing.")
+    else:
+        if eligibility_service.requires_category(rules):
+            steps.append("2. Ask reservation category (General / OBC / SC / ST / EWS / Other).")
+        for i, rule in enumerate(rules, start=1):
+            inherited_note = " (inherited from a parent programme)" if rule.course_id != course.course_id else ""
+            steps.append(f"{i + 1}. {eligibility_service.describe_rule(rule)}{inherited_note}")
     steps.append(f"{len(steps) + 1}. If all pass: congratulate the student and offer to flag them for admission-procedure info.")
 
-    return {"course_name": course.course_name, "is_published": course.is_published, "steps": steps}
+    return {"course_name": course.course_name, "is_published": course.is_published, "no_rules_configured": no_rules_configured, "steps": steps}
 
 
 # --- Rule conflicts -----------------------------------------------------
@@ -320,6 +341,33 @@ async def get_eligibility_analytics(college_id: int, db: AsyncSession = Depends(
         course_stats.append(CourseEligibilityStats(course_id=entry["course_id"], course_name=entry["course_name"], passed=entry["passed"], failed=entry["failed"], borderline=entry["borderline"], total_completed=total, pass_rate=(entry["passed"] / total) if total else 0.0))
     course_stats.sort(key=lambda c: c.total_completed, reverse=True)
 
+    # Same idea as course_stats above, split further by category (see
+    # models/EligibilityEvent.category) so a category-specific cutoff's
+    # pass rate doesn't hide inside one blended per-course number. Only
+    # events with a non-NULL category contribute - a course that never
+    # asks for one, or an event recorded before this column existed,
+    # simply doesn't show up here.
+    category_rows = (
+        await db.execute(
+            select(EligibilityEvent.course_id, Course.course_name, EligibilityEvent.category, EligibilityEvent.outcome, func.count())
+            .join(Course, and_(Course.college_id == EligibilityEvent.college_id, Course.course_id == EligibilityEvent.course_id))
+            .where(EligibilityEvent.college_id == college_id, EligibilityEvent.outcome.in_(("passed", "failed", "borderline")), EligibilityEvent.category.isnot(None))
+            .group_by(EligibilityEvent.course_id, Course.course_name, EligibilityEvent.category, EligibilityEvent.outcome)
+        )
+    ).all()
+
+    stats_by_course_category: dict[tuple[int, str], dict] = {}
+    for course_id, course_name, category, outcome, count in category_rows:
+        key = (course_id, category)
+        entry = stats_by_course_category.setdefault(key, {"course_id": course_id, "course_name": course_name, "category": category, "passed": 0, "failed": 0, "borderline": 0})
+        entry[outcome] = count
+
+    category_stats = []
+    for entry in stats_by_course_category.values():
+        total = entry["passed"] + entry["failed"] + entry["borderline"]
+        category_stats.append(CategoryEligibilityStats(course_id=entry["course_id"], course_name=entry["course_name"], category=entry["category"], passed=entry["passed"], failed=entry["failed"], borderline=entry["borderline"], total_completed=total, pass_rate=(entry["passed"] / total) if total else 0.0))
+    category_stats.sort(key=lambda c: c.total_completed, reverse=True)
+
     dropoff_rows = (
         await db.execute(
             select(EligibilityEvent.course_id, EligibilityEvent.step, EligibilityEvent.rule_index, func.count())
@@ -362,4 +410,4 @@ async def get_eligibility_analytics(college_id: int, db: AsyncSession = Depends(
         drop_off_points.append(DropOffPoint(course_id=course_id, course_name=course.course_name if course else None, step=step, rule_index=rule_index, rule_description=await _rule_description(course_id, rule_index), drop_offs=count))
     drop_off_points.sort(key=lambda d: d.drop_offs, reverse=True)
 
-    return EligibilityAnalyticsResponse(course_stats=course_stats, drop_off_points=drop_off_points)
+    return EligibilityAnalyticsResponse(course_stats=course_stats, category_stats=category_stats, drop_off_points=drop_off_points)

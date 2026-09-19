@@ -49,6 +49,13 @@ class EligibilityEvent(Base):
     step: Mapped[str] = mapped_column(Text, nullable=False)
     rule_index: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(Text, nullable=False)
+    # The student's reservation category at event time, when the course
+    # asked for one (see eligibility_service.requires_category) - NULL for
+    # a course/step that never asked. Lets analytics split pass rate by
+    # category (see api/v1/routers/eligibility.py's /eligibility-analytics)
+    # instead of one blended number that can hide a category-specific
+    # cutoff disproportionately failing one group of students.
+    category: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
 
     student: Mapped["Student"] = relationship("Student", primaryjoin=("and_(EligibilityEvent.college_id == Student.college_id, " "EligibilityEvent.student_id == Student.student_id)"), foreign_keys="[EligibilityEvent.college_id, EligibilityEvent.student_id]", viewonly=True)
@@ -57,6 +64,7 @@ class EligibilityEvent(Base):
     __table_args__ = (
         CheckConstraint("step IN ('await_start_confirm','await_course','await_category','await_summary_confirm','await_rule','await_procedure_interest','await_another_course')", name="eligibility_events_step_check"),
         CheckConstraint("outcome IN ('passed','failed','borderline','cancelled','timed_out')", name="eligibility_events_outcome_check"),
+        CheckConstraint("category IS NULL OR category IN ('general','obc','sc','st','ews','other')", name="eligibility_events_category_check"),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),
         ForeignKeyConstraint(["college_id", "course_id"], ["courses.college_id", "courses.course_id"], ondelete="SET NULL"),
         Index("ix_eligibility_events_college_id_course_id", "college_id", "course_id"),

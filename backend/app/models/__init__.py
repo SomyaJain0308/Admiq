@@ -12,4 +12,5 @@ from backend.app.models.LowConfidenceQuery import LowConfidenceQuery
 from backend.app.models.CostEvent import CostEvent
 from backend.app.models.Course import Course
 from backend.app.models.EligibilityRule import EligibilityRule
+from backend.app.models.EligibilityRuleHistory import EligibilityRuleHistory
 from backend.app.models.EligibilityEvent import EligibilityEvent

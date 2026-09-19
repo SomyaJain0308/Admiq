@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal
 
 
@@ -25,11 +25,33 @@ class RequiredStreamConfig(BaseModel):
     allowed_streams: list[str] = Field(min_length=1)
 
 
-class EntranceCutoffConfig(BaseModel):
-    """An entrance-exam percentile or rank cutoff."""
+class EntranceExamOption(BaseModel):
+    """One exam this rule accepts, as part of the OR'd list on EntranceCutoffConfig."""
     exam_name: str
     metric: Literal["percentile", "rank"] = "percentile"
     threshold: float = Field(gt=0)
+
+
+class EntranceCutoffConfig(BaseModel):
+    """
+    One or more entrance-exam cutoffs, OR'd together: a student passes this
+    rule by clearing ANY ONE of the listed exams (e.g. a college that takes
+    JEE Main *or* a state CET no longer needs two separate rules, and a
+    student who only sat one of them isn't forced through a question about
+    the other). `exams` is the canonical shape; a config saved before this
+    changed still has the old flat exam_name/metric/threshold keys instead
+    - the validator below normalizes that into a one-item `exams` list on
+    read, so nothing already saved (or submitted by a stale frontend build)
+    breaks.
+    """
+    exams: list[EntranceExamOption] = Field(min_length=1)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_legacy_single_exam(cls, data):
+        if isinstance(data, dict) and "exams" not in data and "exam_name" in data:
+            return {"exams": [{"exam_name": data["exam_name"], "metric": data.get("metric", "percentile"), "threshold": data["threshold"]}]}
+        return data
 
 
 class CategoryCutoffConfig(BaseModel):
@@ -49,6 +71,62 @@ class CustomYesNoConfig(BaseModel):
     pass_answer: Literal["yes", "no"] = "yes"
 
 
+class BestOfNSubjectsConfig(BaseModel):
+    """
+    A best-N-of-M-subjects percentage cutoff - how most boards (CBSE
+    included) actually compute an admission percentage, rather than a flat
+    aggregate across every subject. `subjects` is the full list the board
+    offers to pick from; `count` is how many of those get counted (the
+    student's own best `count` scores, not staff-picked ones). No numbers
+    are captured (same policy as every other numeric rule type here - see
+    the module docstring) - this still resolves to a single yes/no(/close)
+    WhatsApp question asking whether the student's own best-N average
+    clears `min_value`.
+    """
+    subjects: list[str] = Field(min_length=2, description="Every subject the board offers, e.g. ['Physics','Chemistry','Maths','English','Computer Science']")
+    count: int = Field(gt=0, description="How many of the subjects above count toward the average, e.g. 4")
+    min_value: float = Field(ge=0, le=100, description="Minimum average of the student's best `count` subjects")
+
+    @model_validator(mode="after")
+    def _count_within_subjects(self):
+        if self.count > len(self.subjects):
+            raise ValueError(f"count ({self.count}) can't exceed the number of subjects listed ({len(self.subjects)})")
+        return self
+
+
+class DomicileQuotaConfig(BaseModel):
+    """
+    Student must be domiciled in one of a set of states/UTs (shown as a
+    list message, same mechanics as RequiredStreamConfig) - a common
+    gating criterion for a state quota that previously had no rule type of
+    its own and had to be jammed into custom_yesno, losing per-rule
+    structure and the known_facts short-circuit (see
+    eligibility_service._rule_answer_from_known_facts).
+    """
+    allowed_states: list[str] = Field(min_length=1)
+
+
+class AgeLimitConfig(BaseModel):
+    """
+    A maximum-age cutoff as of a fixed date (e.g. "must not have turned 25
+    before the admission cycle's cutoff date") - the "numeric-date" rule
+    type the eligibility checker previously had no way to express, so an
+    age or gap-year limit had to be hand-written as a custom_yesno question
+    with no structured comparison behind it.
+    """
+    max_age: int = Field(gt=0, description="Maximum age, in whole years, allowed as of as_of_date")
+    as_of_date: str = Field(description="ISO date (YYYY-MM-DD) the age is measured against - typically the admission cycle's own cutoff date, e.g. '2027-10-01'")
+
+    @model_validator(mode="after")
+    def _valid_iso_date(self):
+        from datetime import date
+        try:
+            date.fromisoformat(self.as_of_date)
+        except ValueError:
+            raise ValueError("as_of_date must be an ISO date (YYYY-MM-DD)")
+        return self
+
+
 RULE_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "min_percentage": MinPercentageConfig,
     "min_subject_marks": MinSubjectMarksConfig,
@@ -56,6 +134,9 @@ RULE_CONFIG_MODELS: dict[str, type[BaseModel]] = {
     "entrance_cutoff": EntranceCutoffConfig,
     "category_cutoff": CategoryCutoffConfig,
     "custom_yesno": CustomYesNoConfig,
+    "best_of_n_subjects": BestOfNSubjectsConfig,
+    "domicile_quota": DomicileQuotaConfig,
+    "age_limit": AgeLimitConfig,
 }
 
 RULE_TYPE_LABELS: dict[str, str] = {
@@ -65,13 +146,16 @@ RULE_TYPE_LABELS: dict[str, str] = {
     "entrance_cutoff": "Entrance exam cutoff",
     "category_cutoff": "Category-specific cutoff",
     "custom_yesno": "Custom yes/no requirement",
+    "best_of_n_subjects": "Best-of-N subjects percentage",
+    "domicile_quota": "Domicile / state quota",
+    "age_limit": "Age or gap-year limit",
 }
 
 
 # --- CRUD schemas --------------------------------------------------------
 
 class EligibilityRuleCreate(BaseModel):
-    rule_type: Literal["min_percentage", "min_subject_marks", "required_stream", "entrance_cutoff", "category_cutoff", "custom_yesno"]
+    rule_type: Literal["min_percentage", "min_subject_marks", "required_stream", "entrance_cutoff", "category_cutoff", "custom_yesno", "best_of_n_subjects", "domicile_quota", "age_limit"]
     config: dict
     is_active: bool = True
 
@@ -157,6 +241,25 @@ class CourseEligibilityStats(BaseModel):
     pass_rate: float = Field(description="passed / total_completed, 0.0 if nobody's finished this course's check yet.")
 
 
+class CategoryEligibilityStats(BaseModel):
+    """
+    Same shape as CourseEligibilityStats, one row per (course, category)
+    instead of one blended row per course - so a category_cutoff rule's
+    general-vs-reserved-category pass rate doesn't hide inside a single
+    averaged number (see EligibilityEvent.category and the /eligibility-
+    analytics endpoint). Only courses that actually ask for a category
+    (see eligibility_service.requires_category) produce any rows here.
+    """
+    course_id: int
+    course_name: str
+    category: str
+    passed: int
+    failed: int
+    borderline: int
+    total_completed: int
+    pass_rate: float
+
+
 class DropOffPoint(BaseModel):
     course_id: int | None = Field(description="None if the drop-off happened before a course was even picked (e.g. at the initial trigger-confirmation step).")
     course_name: str | None = None
@@ -168,6 +271,7 @@ class DropOffPoint(BaseModel):
 
 class EligibilityAnalyticsResponse(BaseModel):
     course_stats: list[CourseEligibilityStats] = Field(description="One entry per course that's had at least one completed (passed/failed/borderline) check, sorted by total_completed descending.")
+    category_stats: list[CategoryEligibilityStats] = Field(default=[], description="One entry per (course, category) that's had at least one completed check with a known category, sorted by total_completed descending. Empty for a college whose courses never ask for a category, or for events recorded before this field existed (category is NULL on those rows).")
     drop_off_points: list[DropOffPoint] = Field(description="Every distinct (course, step, rule_index) combination that's seen a cancel or timeout, sorted by drop_offs descending - the top entry is literally 'where students give up most'.")
 
 

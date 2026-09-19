@@ -34,7 +34,13 @@ const RULE_TYPES = [
   { value: "entrance_cutoff", label: "Entrance exam cutoff" },
   { value: "category_cutoff", label: "Category-specific cutoff" },
   { value: "custom_yesno", label: "Custom yes/no requirement" },
+  { value: "best_of_n_subjects", label: "Best-of-N subjects percentage" },
+  { value: "domicile_quota", label: "Domicile / state quota" },
+  { value: "age_limit", label: "Age or gap-year limit" },
 ]
+
+// Keep in sync with backend/app/services/eligibility_service.py's CATEGORY_LABELS.
+const CATEGORY_LABELS = { general: "General", obc: "OBC", sc: "SC", st: "ST", ews: "EWS", pwd: "PwD", other: "Other / not sure" }
 
 const selectClass = "border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
@@ -215,6 +221,7 @@ function EligibilityAnalyticsPanel({ collegeId }) {
   }
 
   const courseStats = data?.course_stats || []
+  const categoryStats = data?.category_stats || []
   const dropOffPoints = data?.drop_off_points || []
 
   return (
@@ -239,6 +246,26 @@ function EligibilityAnalyticsPanel({ collegeId }) {
           </div>
         )}
       </Card>
+
+      {categoryStats.length > 0 && (
+        <Card className="flex flex-col gap-3 p-4">
+          <h3 className="text-sm font-semibold">Pass rate by category</h3>
+          <p className="text-xs text-muted-foreground -mt-2">Only courses that ask for a reservation category - splits out what the blended course number above can hide.</p>
+          <div className="flex flex-col gap-2">
+            {categoryStats.map((c) => (
+              <div key={`${c.course_id}-${c.category}`} className="flex flex-col gap-1 rounded-md bg-muted/40 px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-medium">{c.course_name} - {CATEGORY_LABELS[c.category] || c.category}</span>
+                  <span className="text-sm font-semibold">{Math.round(c.pass_rate * 100)}%</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {c.passed} passed - {c.failed} failed - {c.borderline} borderline ({c.total_completed} total)
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card className="flex flex-col gap-3 p-4">
         <h3 className="text-sm font-semibold">Where students drop off</h3>
@@ -414,6 +441,13 @@ function CourseEditor({ collegeId, courseId, rootCourses, onDeleteCourse }) {
         </p>
       )}
 
+      {course.is_published && course.rules.length === 0 && (course.inherited_rules || []).length === 0 && (
+        <p className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+          This course is published with no eligibility rules - own or inherited. Every student who selects it is immediately marked eligible with no questions asked. Add a rule below, or unpublish it if that's not intended.
+        </p>
+      )}
+
       {conflictData?.conflicts?.length > 0 && (
         <div className="flex flex-col gap-2">
           {conflictData.conflicts.map((c, i) => (
@@ -534,19 +568,25 @@ function AddRuleDialog({ collegeId, courseId, onClose }) {
   const [minValue, setMinValue] = useState("")
   const [subject, setSubject] = useState("")
   const [streams, setStreams] = useState(["Science (PCM)"])
-  const [examName, setExamName] = useState("")
-  const [metric, setMetric] = useState("percentile")
-  const [threshold, setThreshold] = useState("")
+  const [exams, setExams] = useState([{ exam_name: "", metric: "percentile", threshold: "" }])
   const [metricLabel, setMetricLabel] = useState("12th percentage")
-  const [categoryThresholds, setCategoryThresholds] = useState({ general: "", obc: "", sc: "", st: "", ews: "" })
+  const [categoryThresholds, setCategoryThresholds] = useState({ general: "", obc: "", sc: "", st: "", ews: "", pwd: "" })
   const [customQuestion, setCustomQuestion] = useState("")
   const [passAnswer, setPassAnswer] = useState("yes")
+  const [bestOfSubjects, setBestOfSubjects] = useState(["", "", "", "", ""])
+  const [bestOfCount, setBestOfCount] = useState("4")
+  const [bestOfMinValue, setBestOfMinValue] = useState("")
+  const [allowedStates, setAllowedStates] = useState(["Uttar Pradesh"])
+  const [maxAge, setMaxAge] = useState("")
+  const [asOfDate, setAsOfDate] = useState("")
 
   function buildConfig() {
     if (ruleType === "min_percentage") return { label, min_value: Number(minValue) }
     if (ruleType === "min_subject_marks") return { subject, min_value: Number(minValue) }
     if (ruleType === "required_stream") return { allowed_streams: streams.filter(Boolean) }
-    if (ruleType === "entrance_cutoff") return { exam_name: examName, metric, threshold: Number(threshold) }
+    if (ruleType === "entrance_cutoff") {
+      return { exams: exams.filter((e) => e.exam_name.trim() && e.threshold !== "").map((e) => ({ exam_name: e.exam_name.trim(), metric: e.metric, threshold: Number(e.threshold) })) }
+    }
     if (ruleType === "category_cutoff") {
       const thresholds = {}
       for (const [k, v] of Object.entries(categoryThresholds)) {
@@ -555,6 +595,9 @@ function AddRuleDialog({ collegeId, courseId, onClose }) {
       return { metric_label: metricLabel, thresholds, higher_is_better: true }
     }
     if (ruleType === "custom_yesno") return { question: customQuestion, pass_answer: passAnswer }
+    if (ruleType === "best_of_n_subjects") return { subjects: bestOfSubjects.filter(Boolean), count: Number(bestOfCount), min_value: Number(bestOfMinValue) }
+    if (ruleType === "domicile_quota") return { allowed_states: allowedStates.filter(Boolean) }
+    if (ruleType === "age_limit") return { max_age: Number(maxAge), as_of_date: asOfDate }
     return {}
   }
 
@@ -562,9 +605,12 @@ function AddRuleDialog({ collegeId, courseId, onClose }) {
     if (ruleType === "min_percentage") return label.trim() && minValue !== ""
     if (ruleType === "min_subject_marks") return subject.trim() && minValue !== ""
     if (ruleType === "required_stream") return streams.filter(Boolean).length > 0
-    if (ruleType === "entrance_cutoff") return examName.trim() && threshold !== ""
+    if (ruleType === "entrance_cutoff") return exams.some((e) => e.exam_name.trim() && e.threshold !== "")
     if (ruleType === "category_cutoff") return metricLabel.trim() && Object.values(categoryThresholds).some((v) => v !== "")
     if (ruleType === "custom_yesno") return customQuestion.trim()
+    if (ruleType === "best_of_n_subjects") return bestOfSubjects.filter(Boolean).length >= 2 && Number(bestOfCount) > 0 && Number(bestOfCount) <= bestOfSubjects.filter(Boolean).length && bestOfMinValue !== ""
+    if (ruleType === "domicile_quota") return allowedStates.filter(Boolean).length > 0
+    if (ruleType === "age_limit") return maxAge !== "" && asOfDate.trim()
     return false
   }
 
@@ -625,20 +671,10 @@ function AddRuleDialog({ collegeId, courseId, onClose }) {
           )}
 
           {ruleType === "entrance_cutoff" && (
-            <>
-              <Field label="Exam name">
-                <Input value={examName} onChange={(e) => setExamName(e.target.value)} placeholder="JEE Main" />
-              </Field>
-              <Field label="Measured as">
-                <select className={selectClass} value={metric} onChange={(e) => setMetric(e.target.value)}>
-                  <option value="percentile">Percentile (higher is better)</option>
-                  <option value="rank">Rank (lower is better)</option>
-                </select>
-              </Field>
-              <Field label="Threshold">
-                <Input type="number" value={threshold} onChange={(e) => setThreshold(e.target.value)} placeholder={metric === "rank" ? "50000" : "90"} />
-              </Field>
-            </>
+            <Field label="Accepted exams">
+              <ExamListEditor exams={exams} setExams={setExams} />
+              <p className="text-xs text-muted-foreground">Add more than one if this course accepts several exams (e.g. JEE Main OR a state CET) - a student clearing any one of them passes.</p>
+            </Field>
           )}
 
           {ruleType === "category_cutoff" && (
@@ -676,6 +712,39 @@ function AddRuleDialog({ collegeId, courseId, onClose }) {
             </>
           )}
 
+          {ruleType === "best_of_n_subjects" && (
+            <>
+              <Field label="All subjects to pick from">
+                <StreamListEditor streams={bestOfSubjects} setStreams={setBestOfSubjects} />
+              </Field>
+              <Field label="How many of those count (best N)">
+                <Input type="number" min="1" value={bestOfCount} onChange={(e) => setBestOfCount(e.target.value)} placeholder="4" />
+              </Field>
+              <Field label="Minimum average of the best N (%)">
+                <Input type="number" min="0" max="100" value={bestOfMinValue} onChange={(e) => setBestOfMinValue(e.target.value)} placeholder="75" />
+              </Field>
+              <p className="text-xs text-muted-foreground">e.g. CBSE's own admission percentage: best 4 of 5 subjects.</p>
+            </>
+          )}
+
+          {ruleType === "domicile_quota" && (
+            <Field label="Allowed states / UTs">
+              <StreamListEditor streams={allowedStates} setStreams={setAllowedStates} />
+            </Field>
+          )}
+
+          {ruleType === "age_limit" && (
+            <>
+              <Field label="Maximum age (years)">
+                <Input type="number" min="1" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} placeholder="25" />
+              </Field>
+              <Field label="As of date">
+                <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
+              </Field>
+              <p className="text-xs text-muted-foreground">Usually the admission cycle's own cutoff date.</p>
+            </>
+          )}
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
             <Button type="submit" disabled={!isValid() || createRule.isPending}>
@@ -694,6 +763,42 @@ function Field({ label, children }) {
     <div className="flex flex-col gap-1.5">
       <Label>{label}</Label>
       {children}
+    </div>
+  )
+}
+
+function ExamListEditor({ exams, setExams }) {
+  function update(i, patch) {
+    setExams((prev) => prev.map((e, idx) => (idx === i ? { ...e, ...patch } : e)))
+  }
+  function remove(i) {
+    setExams((prev) => prev.filter((_, idx) => idx !== i))
+  }
+  return (
+    <div className="flex flex-col gap-3">
+      {exams.map((exam, i) => (
+        <div key={i} className="flex flex-col gap-2 rounded-md border p-3">
+          <div className="flex items-center gap-2">
+            <Input value={exam.exam_name} onChange={(e) => update(i, { exam_name: e.target.value })} placeholder="JEE Main" className="flex-1" />
+            {exams.length > 1 && (
+              <Button type="button" variant="ghost" size="icon" onClick={() => remove(i)} aria-label="Remove exam">
+                <X className="size-4" />
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <select className={selectClass} value={exam.metric} onChange={(e) => update(i, { metric: e.target.value })}>
+              <option value="percentile">Percentile (higher is better)</option>
+              <option value="rank">Rank (lower is better)</option>
+            </select>
+            <Input type="number" value={exam.threshold} onChange={(e) => update(i, { threshold: e.target.value })} placeholder={exam.metric === "rank" ? "50000" : "90"} />
+          </div>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" className="w-fit" onClick={() => setExams((prev) => [...prev, { exam_name: "", metric: "percentile", threshold: "" }])}>
+        <Plus className="size-4" />
+        Add another accepted exam
+      </Button>
     </div>
   )
 }

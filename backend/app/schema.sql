@@ -152,14 +152,33 @@ CREATE TABLE eligibility_rules (
     rule_id       SERIAL PRIMARY KEY,
     college_id    INT NOT NULL,
     course_id     INT NOT NULL,
-    rule_type     TEXT NOT NULL CHECK (rule_type IN ('min_percentage', 'min_subject_marks', 'required_stream', 'entrance_cutoff', 'category_cutoff', 'custom_yesno')),
+    rule_type     TEXT NOT NULL CHECK (rule_type IN ('min_percentage', 'min_subject_marks', 'required_stream', 'entrance_cutoff', 'category_cutoff', 'custom_yesno', 'best_of_n_subjects', 'domicile_quota', 'age_limit')),
     config        JSONB NOT NULL,
     order_index   INT NOT NULL DEFAULT 0,
     is_active     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMP DEFAULT NOW(),
+    updated_at    TIMESTAMP DEFAULT NOW(), -- bumped on every PATCH (config or is_active) - see eligibility_rule_history below for the actual before/after trail
 
     UNIQUE (college_id, rule_id),
     FOREIGN KEY (college_id, course_id) REFERENCES courses(college_id, course_id) ON DELETE CASCADE
+);
+
+-- Append-only snapshot taken on every staff edit to an eligibility_rules
+-- row (see api/v1/routers/eligibility.py's update_rule) - answers "when did
+-- this cutoff change, and to what" directly, which eligibility_events alone
+-- can't (it only knows about the student-facing flow, not staff edits).
+-- Deliberately has no FK/cascade back to eligibility_rules/courses: history
+-- should outlive a later rule or course deletion, not disappear with it.
+CREATE TABLE eligibility_rule_history (
+    history_id           SERIAL PRIMARY KEY,
+    college_id            INT NOT NULL,
+    course_id             INT NOT NULL,
+    rule_id               INT NOT NULL,
+    rule_type             TEXT NOT NULL,
+    config                JSONB NOT NULL,
+    is_active             BOOLEAN NOT NULL,
+    changed_by_staff_id   INT REFERENCES college_staff(staff_id) ON DELETE SET NULL,
+    created_at            TIMESTAMP DEFAULT NOW()
 );
 
 -- One row per exit from the WhatsApp eligibility-checker flow (see
@@ -179,6 +198,11 @@ CREATE TABLE eligibility_events (
     step          TEXT NOT NULL CHECK (step IN ('await_start_confirm', 'await_course', 'await_category', 'await_summary_confirm', 'await_rule', 'await_procedure_interest', 'await_another_course')),
     rule_index    INT,
     outcome       TEXT NOT NULL CHECK (outcome IN ('passed', 'failed', 'borderline', 'cancelled', 'timed_out')),
+    -- Student's reservation category at event time, when the course asked
+    -- for one - NULL for a course/step that never asked. Lets analytics
+    -- split pass rate by category instead of one blended number that can
+    -- hide a category-specific cutoff disproportionately failing one group.
+    category      TEXT CHECK (category IS NULL OR category IN ('general', 'obc', 'sc', 'st', 'ews', 'pwd', 'other')),
     created_at    TIMESTAMP DEFAULT NOW(),
 
     FOREIGN KEY (college_id, student_id) REFERENCES students(college_id, student_id) ON DELETE CASCADE,
@@ -325,3 +349,5 @@ CREATE INDEX ON eligibility_rules (college_id, course_id);
 CREATE INDEX ON eligibility_events (college_id, course_id);
 CREATE INDEX ON eligibility_events (college_id, outcome);
 CREATE INDEX ON eligibility_events (college_id, created_at);
+CREATE INDEX ON eligibility_rule_history (college_id, rule_id);
+CREATE INDEX ON eligibility_rule_history (college_id, created_at);
