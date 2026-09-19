@@ -12,7 +12,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 # Every step name the WhatsApp eligibility flow's state machine uses (see
 # services/eligibility_service.py's module docstring) - kept in sync with
 # that file's step names, not with EligibilityRule.rule_type.
-FLOW_STEPS = ("await_start_confirm", "await_course", "await_category", "await_summary_confirm", "await_rule", "await_procedure_interest", "await_another_course")
+FLOW_STEPS = ("await_start_confirm", "await_course", "await_category", "await_summary_confirm", "await_rule", "await_learn_more_interest", "await_info_topic", "await_custom_question", "await_another_course")
 
 # 'passed'/'failed'/'borderline' only ever occur with step='await_rule' (the
 # only step with a pass/fail verdict); 'cancelled'/'timed_out' can happen at
@@ -62,7 +62,7 @@ class EligibilityEvent(Base):
     course: Mapped["Course | None"] = relationship("Course", primaryjoin=("and_(EligibilityEvent.college_id == Course.college_id, " "EligibilityEvent.course_id == Course.course_id)"), foreign_keys="[EligibilityEvent.college_id, EligibilityEvent.course_id]", viewonly=True)
 
     __table_args__ = (
-        CheckConstraint("step IN ('await_start_confirm','await_course','await_category','await_summary_confirm','await_rule','await_procedure_interest','await_another_course')", name="eligibility_events_step_check"),
+        CheckConstraint("step IN ('await_start_confirm','await_course','await_category','await_summary_confirm','await_rule','await_learn_more_interest','await_info_topic','await_custom_question','await_another_course')", name="eligibility_events_step_check"),
         CheckConstraint("outcome IN ('passed','failed','borderline','cancelled','timed_out')", name="eligibility_events_outcome_check"),
         CheckConstraint("category IS NULL OR category IN ('general','obc','sc','st','ews','other')", name="eligibility_events_category_check"),
         ForeignKeyConstraint(["college_id", "student_id"], ["students.college_id", "students.student_id"], ondelete="CASCADE"),

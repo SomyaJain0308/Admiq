@@ -40,6 +40,14 @@ const RULE_TYPES = [
 ]
 
 // Keep in sync with backend/app/services/eligibility_service.py's CATEGORY_LABELS.
+// Keep in sync with backend's send_whatsapp_list_message: list row titles
+// are cut to 24 chars there, with anything longer falling back onto the
+// row's description (72-char cap) instead of just disappearing. Shown live
+// under the "New course name" input below so staff see the WhatsApp-visible
+// name before saving, not after.
+const WHATSAPP_LIST_TITLE_LIMIT = 24
+const WHATSAPP_LIST_DESCRIPTION_LIMIT = 72
+
 const CATEGORY_LABELS = { general: "General", obc: "OBC", sc: "SC", st: "ST", ews: "EWS", pwd: "PwD", other: "Other / not sure" }
 
 const selectClass = "border-input flex h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px]"
@@ -53,8 +61,9 @@ const STEP_LABELS = {
   await_category: "Picking their reservation category",
   await_summary_confirm: "Confirming course/category before rules run",
   await_rule: "Answering a rule question",
-  await_procedure_interest: "Asked about the admission procedure",
-  await_another_course: "Asked to check another course",
+  await_learn_more_interest: "Asked if they want to know more about the course",
+  await_info_topic: "Choosing a topic to ask about",
+  await_custom_question: "Typing their own question",
 }
 
 export default function EligibilityPage() {
@@ -153,6 +162,15 @@ export default function EligibilityPage() {
             Add course
           </Button>
         </div>
+        {newCourseName.trim().length > WHATSAPP_LIST_TITLE_LIMIT && (
+          <p className="text-xs text-amber-600">
+            On WhatsApp's course list this shows as "{newCourseName.trim().slice(0, WHATSAPP_LIST_TITLE_LIMIT)}"
+            {newCourseName.trim().length <= WHATSAPP_LIST_DESCRIPTION_LIMIT
+              ? ` with the rest ("${newCourseName.trim()}") as a smaller line underneath`
+              : " - the full name is too long even for that second line, so consider shortening it"}
+            . The full name still appears everywhere else (confirmation messages, your dashboard).
+          </p>
+        )}
         {rootCourses.length > 0 && (
           <p className="text-xs text-muted-foreground">
             More than 10 courses at a college? Create a grouping course first (e.g. "B.Tech"), then add each branch (e.g. "Computer Science") under it - students will pick the group, then the branch, instead of hitting WhatsApp's 10-item list limit.

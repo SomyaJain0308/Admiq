@@ -8,13 +8,15 @@ state machine, not an LLM inferring an answer from a brochure PDF. It's
 routed to from whatsapp_chat.py *before* the agent is ever invoked, whenever
 a student triggers it or already has an active flow in progress.
 
-The one exception is await_procedure_interest: once eligibility itself is
-already decided, asking the RAG agent what a college's own brochure/RAG
-index says about its admission procedure (see _ask_rag_about_procedure) is
-just an ordinary Q&A lookup, not a new pass/fail call - so that one step
-optionally takes an `agent` (threaded through handle_incoming_message) and
-falls back to the old "not available yet" + human flag if it isn't passed
-in, errors, or comes back empty.
+The one exception is the "learn more" sub-flow (await_learn_more_interest ->
+await_info_topic -> optionally await_custom_question): once eligibility
+itself is already decided, asking the RAG agent what a college's own
+brochure/RAG index says about one of a few common topics - or literally
+whatever the student types - is just an ordinary Q&A lookup, not a new
+pass/fail call (see _ask_rag_about_topic). Those steps optionally take an
+`agent` (threaded through handle_incoming_message) and fall back to a
+static "not available yet" + human flag if it isn't passed in, errors, or
+comes back empty.
 
 Flow state lives in StudentSession.active_flow (JSONB) so one process can
 answer a message using nothing but the DB row - no separate session cache.
@@ -25,8 +27,9 @@ State machine (flow == "eligibility_check"):
   await_category           -> course needs a reservation category first
   await_summary_confirm    -> course (+ category) chosen; confirming before rules are scored
   await_rule                -> student is mid-way through the ordered rule list
-  await_procedure_interest -> eligible; asking if they want admission-procedure info
-  await_another_course     -> asking whether to check a different course
+  await_learn_more_interest -> eligible; asking if they want to know more about the course
+  await_info_topic          -> which topic (a preset, or "type your own question")
+  await_custom_question     -> capturing a freely-typed question after "type your own question"
   await_cross_sell_offer   -> after a rule fail; offering to check other courses by rank
   await_cross_sell_rank    -> capturing the rank/percentile for that cross-sell
 (No row / flow is None -> ordinary free-chat, handled by the RAG agent.)
@@ -44,7 +47,7 @@ endpoint's "where do students give up" question is really about.
 
 Known facts (stream, domicile state, reservation category) survive across
 courses in the same conversation via flow_state["known_facts"], threaded
-through _handle_await_another_course -> _start and merged in as they're
+through _start and merged in as they're
 learned (see _merge_known_facts). A required_stream or domicile_quota rule
 for a later course is auto-answered from an already-known stream/state
 instead of asking again (see _rule_answer_from_known_facts / _advance_
@@ -711,7 +714,16 @@ def parse_course_reply(content: str, message_type: str, courses: list[Course]) -
 # --------------------------------------------------------------------------
 
 def _course_list_prompt(courses: list[Course], parent_name: str | None = None) -> dict:
-    rows = [{"id": f"course_{c.course_id}", "title": c.course_name[:24]} for c in courses[:MAX_LIST_ROWS]]
+    rows = []
+    for c in courses[:MAX_LIST_ROWS]:
+        row = {"id": f"course_{c.course_id}", "title": c.course_name[:24]}
+        if len(c.course_name) > 24:
+            # WhatsApp list row titles are capped at 24 chars (see
+            # send_whatsapp_list_message) - the description field goes up
+            # to 72, so a name too long for the title still shows in full
+            # just below it instead of silently disappearing.
+            row["description"] = c.course_name[:72]
+        rows.append(row)
     if len(courses) > MAX_LIST_ROWS:
         # A programme type (e.g. a huge "B.Tech" with 15 specializations)
         # can still exceed WhatsApp's 10-row cap even after grouping - the
@@ -747,12 +759,32 @@ def _summary_prompt(course_name: str, category: str | None, programme_path: str 
     }
 
 
-def _procedure_interest_prompt(course_name: str) -> dict:
-    return {"type": "button", "body": f"Good news - you meet the eligibility criteria for {course_name}! Would you like to know the admission procedure?", "buttons": [{"id": "proc_yes", "title": "Yes"}, {"id": "proc_no", "title": "No"}]}
+def _learn_more_prompt(course_name: str) -> dict:
+    return {"type": "button", "body": f"Good news - you meet the eligibility criteria for {course_name}! Would you like to know more about this course?", "buttons": [{"id": "learn_more_yes", "title": "Yes"}, {"id": "learn_more_no", "title": "No"}]}
 
 
-def _another_course_prompt() -> dict:
-    return {"type": "button", "body": "Would you like to check eligibility for another course?", "buttons": [{"id": "another_yes", "title": "Yes"}, {"id": "another_no", "title": "No"}]}
+# Preset topics offered on the topic list (_topic_list_prompt) after a
+# student says they want to know more - each maps to a canned question
+# handed to the RAG agent (see _ask_rag_about_topic), so a tap gets the
+# same real-content answer a student typing the same thing out would.
+# "topic_custom" isn't in here - it has no canned question, it's the row
+# that hands off to _handle_await_custom_question instead (see
+# _handle_await_info_topic).
+TOPIC_QUESTIONS = {
+    "topic_procedure": "What is the admission procedure for {course_name}?",
+    "topic_fees": "What are the fees for {course_name}?",
+    "topic_documents": "What documents are required for admission to {course_name}?",
+}
+
+
+def _topic_list_prompt(course_name: str) -> dict:
+    rows = [
+        {"id": "topic_procedure", "title": "Admission procedure"},
+        {"id": "topic_fees", "title": "Fees"},
+        {"id": "topic_documents", "title": "Documents required"},
+        {"id": "topic_custom", "title": "Something else", "description": "Type your own question"},
+    ]
+    return {"type": "list", "body": f"What would you like to know about {course_name}?", "button_label": "Choose", "section_title": "Topics", "rows": rows}
 
 
 def render_interactive_as_text(interactive: dict) -> str:
@@ -885,9 +917,9 @@ def _base_result(intro_text: str, interactive: dict | None, flow_state: dict | N
 
     sources/input_tokens/output_tokens/model_used default to the flow's own
     "no LLM involved" values, but a step that borrows the RAG agent (see
-    _handle_await_procedure_interest) passes its real ones through here
-    instead, so citations and cost/model attribution downstream aren't
-    silently overwritten with the eligibility-flow defaults.
+    _handle_await_info_topic/_handle_await_custom_question) passes its real
+    ones through here instead, so citations and cost/model attribution
+    downstream aren't silently overwritten with the eligibility-flow defaults.
     """
     if interactive:
         rendered = render_interactive_as_text(interactive)
@@ -1030,10 +1062,12 @@ async def _render_step(db, college_id: int, flow_state: dict) -> dict:
             return _base_result("That course isn't available anymore - let's start over.", None, None)
         question_number, total_visible = _visible_rule_progress(rules, rule_index, known_facts)
         return _base_result("", _with_rule_progress(build_rule_prompt(rules[rule_index], category), question_number - 1, total_visible), flow_state)
-    if step == "await_procedure_interest":
-        return _base_result("", _procedure_interest_prompt(flow_state.get("course_name", "this course")), flow_state)
-    if step == "await_another_course":
-        return _base_result("", _another_course_prompt(), flow_state)
+    if step == "await_learn_more_interest":
+        return _base_result("", _learn_more_prompt(flow_state.get("course_name", "this course")), flow_state)
+    if step == "await_info_topic":
+        return _base_result("", _topic_list_prompt(flow_state.get("course_name", "this course")), flow_state)
+    if step == "await_custom_question":
+        return _base_result(f"Sure - what would you like to know about {flow_state.get('course_name', 'this course')}?", None, flow_state)
     if step == "await_cross_sell_offer":
         return _base_result("", _cross_sell_offer_prompt(), flow_state)
     if step == "await_cross_sell_rank":
@@ -1111,11 +1145,14 @@ async def handle_incoming_message(db, college_id: int, student, session, content
     if step == "await_rule":
         return await _handle_await_rule(db, college_id, student, flow, content, message_type)
 
-    if step == "await_procedure_interest":
-        return await _handle_await_procedure_interest(db, college_id, student, session, flow, content, message_type, agent=agent, request_id=request_id)
+    if step == "await_learn_more_interest":
+        return await _handle_await_learn_more_interest(db, college_id, flow, content, message_type)
 
-    if step == "await_another_course":
-        return await _handle_await_another_course(db, college_id, flow, content, message_type)
+    if step == "await_info_topic":
+        return await _handle_await_info_topic(db, college_id, student, session, flow, content, message_type, agent=agent, request_id=request_id)
+
+    if step == "await_custom_question":
+        return await _handle_await_custom_question(db, college_id, student, session, flow, content, message_type, agent=agent, request_id=request_id)
 
     if step == "await_cross_sell_offer":
         return await _handle_await_cross_sell_offer(db, college_id, flow, content, message_type)
@@ -1157,7 +1194,7 @@ async def _start(db, college_id: int, known_facts: dict | None = None) -> dict:
     """
     known_facts carries over stream/category answers a student already gave
     while checking an earlier course in this same conversation (see
-    _merge_known_facts and _handle_await_another_course) - a brand new
+    _merge_known_facts) - a brand new
     trigger from free chat has none yet, so it's None there. Stashed on
     flow_state so _handle_await_course/_handle_await_category can skip
     re-asking anything already known instead of starting the next course
@@ -1275,7 +1312,7 @@ def _merge_known_facts(known_facts: dict | None, **updates) -> dict:
     Fold newly-learned facts (currently just stream and category - see
     module docstring item #3) into the running known_facts dict, dropping
     falsy values so a not-yet-known fact never overwrites an earlier one
-    with None. This dict is what survives _handle_await_another_course ->
+    with None. This dict is what survives
     _start, so it's the one place a fact "graduates" from living inside a
     single course's own flow_state (category, known_stream) to something
     reusable for the *next* course check in the same conversation.
@@ -1530,13 +1567,7 @@ async def _finish_cross_sell(db, college_id: int, exclude_course_id: int | None,
         text = "I couldn't find another course that clearly matches based on what you shared - but our admissions team can help you look at other options."
     else:
         text = "No problem!"
-    prompt = _another_course_prompt()
-    flow_state = {"flow": FLOW_NAME, "step": "await_another_course"}
-    if history is not None:
-        flow_state["history"] = history
-    if known_facts:
-        flow_state["known_facts"] = known_facts
-    return _base_result(text, prompt, flow_state)
+    return _base_result(text, None, None)
 
 
 async def _handle_await_cross_sell_offer(db, college_id: int, flow: dict, content: str, message_type: str) -> dict:
@@ -1707,11 +1738,7 @@ async def _handle_await_rule(db, college_id: int, student, flow: dict, content: 
                 f"{reason_line}"
                 "I've let our admissions team know so they can take a closer look, rather than giving you a flat no."
             )
-        prompt = _another_course_prompt()
-        flow_state = {"flow": FLOW_NAME, "step": "await_another_course", "history": history_with_this_rule}
-        if known_facts:
-            flow_state["known_facts"] = known_facts
-        return _base_result(text, prompt, flow_state, wants_human_handoff=True)
+        return _base_result(text, None, None, wants_human_handoff=True)
 
     if not passed:
         return await _fail_course(db, college_id, student, course_id, course.course_name, rule, category, rule_index, known_facts, history_with_this_rule)
@@ -1723,8 +1750,8 @@ async def _finish_eligible(db, college_id: int, student, course_id: int, course_
     _record_outcome(student, course_name, eligible=True)
     await _record_eligibility_event(db, college_id, student.student_id, "await_rule", "passed", course_id=course_id, category=category)
     await db.commit()
-    prompt = _procedure_interest_prompt(course_name)
-    flow_state = {"flow": FLOW_NAME, "step": "await_procedure_interest", "course_id": course_id, "course_name": course_name}
+    prompt = _learn_more_prompt(course_name)
+    flow_state = {"flow": FLOW_NAME, "step": "await_learn_more_interest", "course_id": course_id, "course_name": course_name}
     if known_facts:
         flow_state["known_facts"] = known_facts
     # A student clearing every rule is the highest-intent moment in this
@@ -1735,10 +1762,12 @@ async def _finish_eligible(db, college_id: int, student, course_id: int, course_
     return _base_result("", prompt, flow_state, wants_human_handoff=True)
 
 
-async def _ask_rag_about_procedure(agent, db, college_id: int, student, session, course_name: str, request_id: str | None) -> dict | None:
+async def _ask_rag_about_topic(agent, db, college_id: int, student, session, question: str, request_id: str | None) -> dict | None:
     """
     Best-effort lookup against the college's own RAG index (e.g. a
-    brochure PDF - see rag/agent.py) for the admission procedure, so a
+    brochure PDF - see rag/agent.py) for whatever `question` is - a canned
+    one built from a preset topic (see TOPIC_QUESTIONS) or a student's own
+    freely-typed question (see _handle_await_custom_question) - so a
     confirmed-eligible student doesn't automatically hit a "not available"
     dead end when the college's own materials might already cover it.
 
@@ -1755,16 +1784,16 @@ async def _ask_rag_about_procedure(agent, db, college_id: int, student, session,
     try:
         result = await agent.invoke(
             db,
-            f"What is the admission procedure for {course_name}?",
+            question,
             college_id=college_id,
             student_id=student.student_id,
-            request_id=request_id or "eligibility_procedure",
+            request_id=request_id or "eligibility_learn_more",
             student_summary=student.summary,
             session_id=session.session_id,
             session_summary=session.session_summary,
         )
     except Exception:
-        logger.warning("RAG lookup for admission procedure failed course_name=%r college_id=%s", course_name, college_id, exc_info=True)
+        logger.warning("RAG lookup for eligibility 'learn more' question=%r failed college_id=%s", question, college_id, exc_info=True)
         return None
     if result.get("error") is not None or not (result.get("response") or "").strip():
         return None
@@ -1776,50 +1805,85 @@ async def _ask_rag_about_procedure(agent, db, college_id: int, student, session,
     return result
 
 
-async def _handle_await_procedure_interest(db, college_id: int, student, session, flow: dict, content: str, message_type: str, agent=None, request_id: str | None = None) -> dict:
-    wants_procedure = (message_type == "interactive_button" and content == "proc_yes") or (content or "").strip().lower() in ("yes", "y")
-    declines = (message_type == "interactive_button" and content == "proc_no") or (content or "").strip().lower() in ("no", "n")
-
-    if not wants_procedure and not declines:
-        return _base_result("Please tap Yes or No above.", _procedure_interest_prompt(flow.get("course_name", "this course")), flow)
-
-    prompt = _another_course_prompt()
-    flow_state = {"flow": FLOW_NAME, "step": "await_another_course"}
-    if flow.get("known_facts"):
-        flow_state["known_facts"] = flow["known_facts"]
-
-    if wants_procedure:
-        course_name = flow.get("course_name", "this course")
-        rag_result = await _ask_rag_about_procedure(agent, db, college_id, student, session, course_name, request_id)
-
-        if rag_result is not None:
-            # A confirmed-eligible student asking about next steps is still
-            # the highest-intent moment in this flow (same as
-            # _finish_eligible) - notify staff regardless, since a
-            # confident RAG answer here is a bonus for the student, not a
-            # reason to skip the human follow-up.
-            return _base_result(rag_result["response"], prompt, flow_state, wants_human_handoff=True, sources=rag_result.get("sources"), input_tokens=rag_result.get("input_tokens", 0), output_tokens=rag_result.get("output_tokens", 0), model_used=rag_result.get("model_used", "rag_fallback"))
-
-        # No agent wired up, or RAG genuinely came up empty/errored - flag
-        # for a human follow-up instead of guessing, same as before.
-        text = "Thanks! The full admission procedure isn't available here yet, so I've let our admissions team know you're interested - they'll reach out with the details."
-        return _base_result(text, prompt, flow_state, wants_human_handoff=True)
-
-    return _base_result("", prompt, flow_state)
+def _fallback_no_answer_text() -> str:
+    return "Thanks! I don't have that specific info available here yet, so I've let our admissions team know you're interested - they'll reach out with the details."
 
 
-async def _handle_await_another_course(db, college_id: int, flow: dict, content: str, message_type: str) -> dict:
-    wants_another = (message_type == "interactive_button" and content == "another_yes") or (content or "").strip().lower() in ("yes", "y")
-    declines = (message_type == "interactive_button" and content == "another_no") or (content or "").strip().lower() in ("no", "n")
+async def _answer_learn_more_question(db, college_id: int, student, session, question: str, request_id: str | None, agent) -> dict:
+    """
+    Shared tail for both ways a student can end up asking a "learn more"
+    question - picking a preset topic (_handle_await_info_topic) or typing
+    their own (_handle_await_custom_question). Both need the exact same
+    RAG-then-fallback handling and the same "highest-intent moment" human
+    handoff, so it's factored out here rather than duplicated.
+    """
+    rag_result = await _ask_rag_about_topic(agent, db, college_id, student, session, question, request_id)
+    if rag_result is not None:
+        # A confirmed-eligible student asking about next steps is still the
+        # highest-intent moment in this whole flow (same as
+        # _finish_eligible) - notify staff regardless, since a confident RAG
+        # answer here is a bonus for the student, not a reason to skip the
+        # human follow-up.
+        return _base_result(rag_result["response"], None, None, wants_human_handoff=True, sources=rag_result.get("sources"), input_tokens=rag_result.get("input_tokens", 0), output_tokens=rag_result.get("output_tokens", 0), model_used=rag_result.get("model_used", "rag_fallback"))
+    return _base_result(_fallback_no_answer_text(), None, None, wants_human_handoff=True)
 
-    if wants_another:
-        # Carry forward whatever stream/category we already learned this
-        # conversation (see module docstring, item #3) so the next course
-        # doesn't re-ask questions this student already answered.
-        return await _start(db, college_id, known_facts=flow.get("known_facts"))
-    if declines:
-        return _base_result("Glad I could help! Feel free to ask me anything else about admissions.", None, None)
-    retry_flow = {"flow": FLOW_NAME, "step": "await_another_course"}
-    if flow.get("known_facts"):
-        retry_flow["known_facts"] = flow["known_facts"]
-    return _base_result("Please tap Yes or No above.", _another_course_prompt(), retry_flow)
+
+async def _handle_await_learn_more_interest(db, college_id: int, flow: dict, content: str, message_type: str) -> dict:
+    course_name = flow.get("course_name", "this course")
+    wants_more = (message_type == "interactive_button" and content == "learn_more_yes") or (content or "").strip().lower() in ("yes", "y")
+    declines = (message_type == "interactive_button" and content == "learn_more_no") or (content or "").strip().lower() in ("no", "n")
+
+    if not wants_more and not declines:
+        return _base_result("Please tap Yes or No above.", _learn_more_prompt(course_name), flow)
+
+    known_facts = flow.get("known_facts")
+    if wants_more:
+        flow_state = {"flow": FLOW_NAME, "step": "await_info_topic", "course_id": flow.get("course_id"), "course_name": course_name}
+        if known_facts:
+            flow_state["known_facts"] = known_facts
+        return _base_result("", _topic_list_prompt(course_name), flow_state)
+
+    return _base_result("Glad I could help! Feel free to ask me anything else about admissions.", None, None)
+
+
+async def _handle_await_info_topic(db, college_id: int, student, session, flow: dict, content: str, message_type: str, agent=None, request_id: str | None = None) -> dict:
+    course_name = flow.get("course_name", "this course")
+    known_facts = flow.get("known_facts")
+
+    if message_type == "interactive_list" and content in TOPIC_QUESTIONS:
+        question = TOPIC_QUESTIONS[content].format(course_name=course_name)
+        return await _answer_learn_more_question(db, college_id, student, session, question, request_id, agent)
+
+    if message_type == "interactive_list" and content == "topic_custom":
+        flow_state = {"flow": FLOW_NAME, "step": "await_custom_question", "course_id": flow.get("course_id"), "course_name": course_name}
+        if known_facts:
+            flow_state["known_facts"] = known_facts
+        return _base_result(f"Sure - what would you like to know about {course_name}?", None, flow_state)
+
+    # Not a recognized list tap - if it's substantive typed text, treat it
+    # as the student's actual question directly rather than making them
+    # tap "Something else" first just to be allowed to type it. A stray
+    # one-word "hi" or similar isn't substantive enough to guess at, so
+    # that still falls through to the re-prompt below.
+    typed = (content or "").strip()
+    if message_type != "interactive_list" and len(typed) >= 4:
+        return await _answer_learn_more_question(db, college_id, student, session, typed, request_id, agent)
+
+    flow_state = {"flow": FLOW_NAME, "step": "await_info_topic", "course_id": flow.get("course_id"), "course_name": course_name}
+    if known_facts:
+        flow_state["known_facts"] = known_facts
+    return _base_result("Please choose one of the options above, or just type your question.", _topic_list_prompt(course_name), flow_state)
+
+
+async def _handle_await_custom_question(db, college_id: int, student, session, flow: dict, content: str, message_type: str, agent=None, request_id: str | None = None) -> dict:
+    course_name = flow.get("course_name", "this course")
+    known_facts = flow.get("known_facts")
+    typed = (content or "").strip()
+
+    if not typed:
+        flow_state = {"flow": FLOW_NAME, "step": "await_custom_question", "course_id": flow.get("course_id"), "course_name": course_name}
+        if known_facts:
+            flow_state["known_facts"] = known_facts
+        return _base_result(f"Go ahead and type your question about {course_name} whenever you're ready.", None, flow_state)
+
+    return await _answer_learn_more_question(db, college_id, student, session, typed, request_id, agent)

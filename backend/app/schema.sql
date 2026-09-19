@@ -195,7 +195,7 @@ CREATE TABLE eligibility_events (
     college_id    INT NOT NULL,
     student_id    INT NOT NULL,
     course_id     INT,
-    step          TEXT NOT NULL CHECK (step IN ('await_start_confirm', 'await_course', 'await_category', 'await_summary_confirm', 'await_rule', 'await_procedure_interest', 'await_another_course')),
+    step          TEXT NOT NULL CHECK (step IN ('await_start_confirm', 'await_course', 'await_category', 'await_summary_confirm', 'await_rule', 'await_learn_more_interest', 'await_info_topic', 'await_custom_question', 'await_another_course')),
     rule_index    INT,
     outcome       TEXT NOT NULL CHECK (outcome IN ('passed', 'failed', 'borderline', 'cancelled', 'timed_out')),
     -- Student's reservation category at event time, when the course asked

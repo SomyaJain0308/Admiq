@@ -132,9 +132,9 @@ async def whatsapp_webhook(request: Request, db: AsyncSession = Depends(get_db))
 
                 if in_eligibility_flow:
                     try:
-                        # agent is passed through so await_procedure_interest can try a real
-                        # RAG lookup instead of always flagging a human - see eligibility_service.py.
-                        # Every other step ignores it entirely.
+                        # agent is passed through so the "learn more" topic/custom-question
+                        # steps can try a real RAG lookup instead of always flagging a human -
+                        # see eligibility_service.py. Every other step ignores it entirely.
                         result = await eligibility_service.handle_incoming_message(db, college_id=college_id, student=student, session=session, content=message, message_type=event.message_type, agent=agent, request_id=request_id) # Defined in services/eligibility_service.py
                         response_text = result["response"]
                         model_used = result["model_used"]
